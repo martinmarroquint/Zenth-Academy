@@ -1,0 +1,112 @@
+// front/src/services/storageService.js
+// VERSION COMPLETA - CLAVES CONSISTENTES
+
+export const storageService = {
+  // =============================================
+  // MÉTODOS BASE
+  // =============================================
+  
+  get: (key) => {
+    try {
+      const data = localStorage.getItem(key);
+      return data ? JSON.parse(data) : null;
+    } catch (error) {
+      console.error(`Error reading ${key}:`, error);
+      return null;
+    }
+  },
+  
+  set: (key, value) => {
+    try {
+      localStorage.setItem(key, JSON.stringify(value));
+    } catch (error) {
+      console.error(`Error saving ${key}:`, error);
+    }
+  },
+  
+  remove: (key) => {
+    try {
+      localStorage.removeItem(key);
+    } catch (error) {
+      console.error(`Error removing ${key}:`, error);
+    }
+  },
+  
+  clear: () => {
+    try {
+      localStorage.clear();
+    } catch (error) {
+      console.error('Error clearing storage:', error);
+    }
+  },
+
+  // =============================================
+  // MÉTODOS ESPECÍFICOS - CLAVES CONSISTENTES
+  // =============================================
+  
+  // GRUPOS
+  getGrupos: () => storageService.get('grupos') || [],
+  setGrupos: (grupos) => storageService.set('grupos', grupos),
+  getGrupo: (id) => {
+    const grupos = storageService.getGrupos();
+    return grupos.find(g => g.id === id) || null;
+  },
+  setGrupo: (grupo) => {
+    const grupos = storageService.getGrupos();
+    const index = grupos.findIndex(g => g.id === grupo.id);
+    if (index >= 0) {
+      grupos[index] = grupo;
+    } else {
+      grupos.push(grupo);
+    }
+    storageService.setGrupos(grupos);
+    return grupo;
+  },
+  
+  // ALUMNOS
+  getAlumnos: () => storageService.get('alumnos') || [],
+  setAlumnos: (alumnos) => storageService.set('alumnos', alumnos),
+  getAlumnosPorGrupo: (grupoId) => {
+    const alumnos = storageService.getAlumnos();
+    return alumnos.filter(a => a.grupoId === grupoId || a.grupo_id === grupoId);
+  },
+  
+  // EXAMENES
+  getExamenes: () => storageService.get('examenes') || [],
+  setExamenes: (examenes) => storageService.set('examenes', examenes),
+  getExamen: (id) => {
+    const examenes = storageService.getExamenes();
+    return examenes.find(e => e.id === id) || null;
+  },
+  
+  // RESULTADOS
+  getResultados: () => storageService.get('resultados') || [],
+  setResultados: (resultados) => storageService.set('resultados', resultados),
+  getResultadosPorExamen: (examenId) => {
+    const resultados = storageService.getResultados();
+    return resultados.filter(r => r.examen_id === examenId || r.examenId === examenId);
+  },
+  getResultadoAlumno: (examenId, alumnoId) => {
+    const resultados = storageService.getResultados();
+    return resultados.find(r => 
+      (r.examen_id === examenId || r.examenId === examenId) &&
+      (r.alumno_id === alumnoId || r.alumnoId === alumnoId)
+    ) || null;
+  },
+
+  // VIOLACIONES
+  getViolaciones: () => storageService.get('violaciones') || [],
+  setViolaciones: (violaciones) => storageService.set('violaciones', violaciones),
+  
+  // PREGUNTAS MARCADAS
+  getPreguntasMarcadas: (examenId, alumnoId) => {
+    const key = `marcadas_${examenId}_${alumnoId}`;
+    return storageService.get(key) || [];
+  },
+  setPreguntasMarcadas: (examenId, alumnoId, marcadas) => {
+    const key = `marcadas_${examenId}_${alumnoId}`;
+    storageService.set(key, marcadas);
+  }
+};
+
+export default storageService;

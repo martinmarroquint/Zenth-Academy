@@ -1,0 +1,54 @@
+# Dependencias
+node_modules/
+.pnp/
+.pnp.js
+
+# Variables de entorno
+.env
+.env.local
+.env.*.local
+.env.production
+
+# Archivos de construcción
+dist/
+build/
+.next/
+out/
+
+# Archivos de sistema
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Logs
+logs/
+*.log
+npm-debug.log*
+
+# Editor
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Configuraciones locales
+.config/
+.cache/
+
+# Uploads y archivos subidos
+uploads/
+*.tmp
+
+# Supabase local (solo si usas Docker)
+supabase/.temp/
+supabase/volumes/
+
+# Firebase (si usas)
+firebase.json
+.firebase/
+
+# Otros
+*.pem
+*.p12
+*.key
+*.crt

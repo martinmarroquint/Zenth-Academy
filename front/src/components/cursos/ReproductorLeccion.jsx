@@ -1,14 +1,13 @@
 // front/src/components/cursos/ReproductorLeccion.jsx
-// REPRODUCTOR DE LECCIONES EN MODAL - CON INTEGRACIÓN DE EXÁMENES (ExamenActivo)
-// CORREGIDO: onProgress memoizado, integración con cursos
+// ADAPTADO PARA BLOQUES - CON NAVEGACIÓN ENTRE BLOQUES
 
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
   X, Play, Pause, ChevronLeft, ChevronRight,
   CheckCircle, Circle, Clock, FileText, Video,
   Loader2, Maximize2, Minimize2, Volume2, VolumeX,
-  Settings, Eye, EyeOff, Award, BookOpen, Link as LinkIcon,
-  Download, ExternalLink, Check, AlertCircle
+  Award, BookOpen, Link as LinkIcon,
+  Download, Check, AlertCircle, Layout
 } from 'lucide-react';
 import cursosService from '../../services/cursosService';
 import examenesService from '../../services/examenesService';
@@ -16,7 +15,7 @@ import { authService } from '../../services/authService';
 import ExamenActivo from '../examenes/ExamenActivo';
 
 // =============================================
-// COMPONENTE REPRODUCTOR DE VIDEO (YouTube)
+// VIDEO PLAYER
 // =============================================
 const VideoPlayer = ({ videoId, onComplete, onProgress, onTimeUpdate }) => {
   const [player, setPlayer] = useState(null);
@@ -353,7 +352,7 @@ const VideoPlayer = ({ videoId, onComplete, onProgress, onTimeUpdate }) => {
 };
 
 // =============================================
-// COMPONENTE DE TEXTO ENRIQUECIDO (SOLO LECTURA)
+// RICH TEXT DISPLAY
 // =============================================
 const RichTextDisplay = ({ content }) => {
   if (!content) {
@@ -363,7 +362,6 @@ const RichTextDisplay = ({ content }) => {
       </div>
     );
   }
-
   return (
     <div className="prose prose-slate max-w-none p-6 overflow-y-auto h-full">
       <div dangerouslySetInnerHTML={{ __html: content }} />
@@ -372,7 +370,7 @@ const RichTextDisplay = ({ content }) => {
 };
 
 // =============================================
-// COMPONENTE DE RECURSOS
+// RECURSOS DISPLAY
 // =============================================
 const RecursosDisplay = ({ recursos }) => {
   if (!recursos || recursos.length === 0) {
@@ -383,10 +381,9 @@ const RecursosDisplay = ({ recursos }) => {
       </div>
     );
   }
-
   return (
     <div className="p-6 space-y-3 overflow-y-auto h-full">
-      <h3 className="text-sm font-medium text-gray-700 mb-4">Recursos de la leccion</h3>
+      <h3 className="text-sm font-medium text-gray-700 mb-4">Recursos de la lección</h3>
       {recursos.map((recurso, index) => (
         <a
           key={index}
@@ -396,13 +393,11 @@ const RecursosDisplay = ({ recursos }) => {
           className="flex items-center gap-3 p-3 bg-gray-50 rounded-lg hover:bg-gray-100 transition-colors border border-gray-200"
         >
           <div className="w-10 h-10 rounded-lg bg-white border border-gray-200 flex items-center justify-center flex-shrink-0">
-            {recurso.tipo === 'video' ? <Video className="w-5 h-5 text-blue-500" /> :
-             recurso.tipo === 'pdf' ? <FileText className="w-5 h-5 text-red-500" /> :
+            {recurso.tipo === 'pdf' ? <FileText className="w-5 h-5 text-red-500" /> :
              <LinkIcon className="w-5 h-5 text-gray-400" />}
           </div>
           <div className="flex-1 min-w-0">
-            <p className="text-sm font-medium text-gray-800 truncate">{recurso.nombre || recurso.titulo || 'Recurso'}</p>
-            <p className="text-xs text-gray-400">{recurso.tipo || 'link'}</p>
+            <p className="text-sm font-medium text-gray-800 truncate">{recurso.nombre || 'Recurso'}</p>
           </div>
           <Download className="w-4 h-4 text-gray-400 flex-shrink-0" />
         </a>
@@ -412,7 +407,7 @@ const RecursosDisplay = ({ recursos }) => {
 };
 
 // =============================================
-// COMPONENTE DE EXAMEN (WRAPPER) - USA ExamenActivo
+// EXAMEN WRAPPER
 // =============================================
 const ExamenActivoWrapper = ({ contenido, leccion, curso, onComplete, onClose, usuarioId }) => {
   const [examen, setExamen] = useState(null);
@@ -422,7 +417,6 @@ const ExamenActivoWrapper = ({ contenido, leccion, curso, onComplete, onClose, u
 
   const usuario = authService.getCurrentUser();
 
-  // Cargar el examen completo (con preguntas y configuración)
   useEffect(() => {
     let activo = true;
     const cargarExamen = async () => {
@@ -441,21 +435,14 @@ const ExamenActivoWrapper = ({ contenido, leccion, curso, onComplete, onClose, u
 
   const handleFinalizar = useCallback(async (resultado) => {
     setCompletado(true);
-
-    // ✅ Actualizar progreso del curso al completar el examen
     if (curso?.id && leccion?.id && usuarioId) {
       try {
         await cursosService.completarLeccion(curso.id, leccion.id, usuarioId);
-        console.log('✅ Progreso del curso actualizado después del examen');
       } catch (error) {
-        console.warn('No se pudo actualizar progreso del curso:', error);
+        console.warn('No se pudo actualizar progreso:', error);
       }
     }
-
-    onComplete?.({
-      ...resultado,
-      tipo: 'examen'
-    });
+    onComplete?.({ ...resultado, tipo: 'examen' });
   }, [curso?.id, leccion?.id, usuarioId, onComplete]);
 
   if (cargando) {
@@ -471,11 +458,8 @@ const ExamenActivoWrapper = ({ contenido, leccion, curso, onComplete, onClose, u
       <div className="flex flex-col items-center justify-center h-full p-6 text-center">
         <AlertCircle className="w-12 h-12 text-red-400 mb-4" />
         <p className="text-gray-600">{error || 'No se pudo cargar el examen'}</p>
-        <button
-          onClick={onClose}
-          className="mt-4 px-4 py-2 bg-gray-900 text-white rounded-lg hover:bg-gray-800 transition-colors"
-        >
-          Volver al curso
+        <button onClick={onClose} className="mt-4 px-4 py-2 bg-gray-900 text-white rounded-lg">
+          Volver
         </button>
       </div>
     );
@@ -486,29 +470,18 @@ const ExamenActivoWrapper = ({ contenido, leccion, curso, onComplete, onClose, u
       <div className="flex flex-col items-center justify-center h-full p-8 text-center">
         <CheckCircle className="w-16 h-16 text-emerald-500 mb-4" />
         <h3 className="text-2xl font-bold text-gray-900 mb-2">¡Examen entregado!</h3>
-        <button
-          onClick={onClose}
-          className="mt-4 px-6 py-2 bg-gray-900 text-white rounded-lg hover:bg-gray-800 transition-colors"
-        >
-          Volver al curso
+        <button onClick={onClose} className="mt-4 px-6 py-2 bg-gray-900 text-white rounded-lg">
+          Volver
         </button>
       </div>
     );
   }
 
-  const alumno = {
-    id: usuario?.id || usuarioId,
-    apellidos: usuario?.apellidos || '',
-    nombres: usuario?.nombres || '',
-    grado: usuario?.grado || '',
-    dni: usuario?.dni || ''
-  };
-
   return (
     <div className="h-full overflow-y-auto">
       <ExamenActivo
         examen={examen}
-        alumno={alumno}
+        alumno={{ id: usuario?.id || usuarioId }}
         onFinalizar={handleFinalizar}
         onAbandonar={onClose}
       />
@@ -517,34 +490,67 @@ const ExamenActivoWrapper = ({ contenido, leccion, curso, onComplete, onClose, u
 };
 
 // =============================================
-// COMPONENTE DE CUESTIONARIO EMBED (WRAPPER)
+// RENDERIZADOR DE BLOQUE
 // =============================================
-const CuestionarioEmbedWrapper = ({ contenido }) => {
-  return (
-    <div className="h-full flex items-center justify-center p-6">
-      <div className="text-center">
-        <div className="w-20 h-20 rounded-full bg-indigo-50 border border-indigo-200 flex items-center justify-center mx-auto mb-4">
-          <BookOpen className="w-10 h-10 text-indigo-500" />
+const RenderBloque = ({ 
+  bloque, 
+  leccion, 
+  curso, 
+  onComplete, 
+  onClose, 
+  usuarioId 
+}) => {
+  const contenido = bloque.contenido || {};
+
+  switch (bloque.tipo) {
+    case 'video':
+      return (
+        <div className="h-full w-full flex items-center justify-center bg-black p-3 sm:p-6">
+          <div className="w-full max-w-5xl aspect-video relative">
+            <VideoPlayer
+              videoId={contenido.video_url}
+              onComplete={onComplete}
+            />
+          </div>
         </div>
-        <h3 className="text-lg font-semibold text-gray-900 mb-2">Cuestionario</h3>
-        <p className="text-gray-500 mb-4">Esta leccion contiene un cuestionario</p>
-        <button
-          onClick={() => {
-            const url = `/cuestionario/${contenido.cuestionario_id}`;
-            window.open(url, '_blank');
-          }}
-          className="px-6 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors flex items-center gap-2 mx-auto"
-        >
-          <ExternalLink className="w-4 h-4" />
-          Abrir cuestionario
-        </button>
-      </div>
-    </div>
-  );
+      );
+
+    case 'texto':
+      return (
+        <div className="h-full overflow-y-auto">
+          <RichTextDisplay content={contenido.texto || ''} />
+        </div>
+      );
+
+    case 'examen':
+      return (
+        <ExamenActivoWrapper
+          contenido={contenido}
+          leccion={leccion}
+          curso={curso}
+          usuarioId={usuarioId}
+          onComplete={onComplete}
+          onClose={onClose}
+        />
+      );
+
+    case 'recurso':
+      return <RecursosDisplay recursos={contenido.archivos || []} />;
+
+    default:
+      return (
+        <div className="h-full flex items-center justify-center p-6">
+          <div className="text-center text-gray-400">
+            <FileText className="w-16 h-16 mx-auto mb-3 text-gray-300" />
+            <p>Tipo de bloque no soportado: {bloque.tipo}</p>
+          </div>
+        </div>
+      );
+  }
 };
 
 // =============================================
-// COMPONENTE PRINCIPAL: REPRODUCTOR DE LECCIONES
+// COMPONENTE PRINCIPAL
 // =============================================
 const ReproductorLeccion = ({
   isOpen,
@@ -561,26 +567,28 @@ const ReproductorLeccion = ({
   tieneAcceso,
   esDocente
 }) => {
-  const [videoCompletado, setVideoCompletado] = useState(false);
+  const [bloqueActualIndex, setBloqueActualIndex] = useState(0);
+  const [bloqueCompletado, setBloqueCompletado] = useState(false);
   const [marcando, setMarcando] = useState(false);
-  const [mostrarConfirmacion, setMostrarConfirmacion] = useState(false);
 
-  const handleVideoProgress = useCallback(() => {}, []);
-
+  // Resetear al abrir
   useEffect(() => {
-    setVideoCompletado(false);
-    setMostrarConfirmacion(false);
+    setBloqueActualIndex(0);
+    setBloqueCompletado(false);
   }, [leccion?.id]);
 
-  const indexActual = leccionesDelModulo?.findIndex(l => l.id === leccion?.id) ?? -1;
-  const leccionAnterior = indexActual > 0 ? leccionesDelModulo[indexActual - 1] : null;
-  const leccionSiguiente = indexActual < leccionesDelModulo?.length - 1 ? leccionesDelModulo[indexActual + 1] : null;
+  const bloques = leccion?.bloques || [];
+  const bloqueActual = bloques[bloqueActualIndex] || null;
+  const totalBloques = bloques.length;
 
-  const handleVideoComplete = useCallback(() => {
-    if (videoCompletado) return;
-    setVideoCompletado(true);
-    setMostrarConfirmacion(true);
-  }, [videoCompletado]);
+  const handleBloqueComplete = useCallback(() => {
+    setBloqueCompletado(true);
+    
+    // Si es el último bloque, marcar la lección como completada
+    if (bloqueActualIndex === totalBloques - 1) {
+      handleMarcarCompletada();
+    }
+  }, [bloqueActualIndex, totalBloques]);
 
   const handleMarcarCompletada = useCallback(async () => {
     if (!usuarioId || !curso?.id || !leccion?.id) return;
@@ -589,111 +597,30 @@ const ReproductorLeccion = ({
     setMarcando(true);
     try {
       await cursosService.completarLeccion(curso.id, leccion.id, usuarioId);
-      setVideoCompletado(true);
-      setMostrarConfirmacion(false);
       onLeccionCompletada?.();
     } catch (error) {
-      console.error('Error completando leccion:', error);
-      alert('No se pudo marcar la leccion como completada');
+      console.error('Error completando lección:', error);
     } finally {
       setMarcando(false);
     }
   }, [usuarioId, curso?.id, leccion?.id, isCompletada, onLeccionCompletada]);
 
-  const handleEmbedComplete = useCallback((resultado) => {
-    setMostrarConfirmacion(true);
-    setVideoCompletado(true);
-    // Auto-marcar como completada si fue aprobado
-    if (resultado?.aprobado) {
-      setTimeout(() => {
-        handleMarcarCompletada();
-      }, 500);
-    }
-  }, [handleMarcarCompletada]);
-
-  const renderContenido = () => {
-    if (!leccion) return null;
-
-    const tipo = leccion.tipo || 'video';
-    const contenido = leccion.contenido || {};
-
-    // Verificar si el usuario tiene acceso (para cursos pagos)
-    const estaBloqueado = curso?.precio_tipo === 'pago' && !tieneAcceso && !esDocente;
-
-    if (estaBloqueado) {
-      return (
-        <div className="h-full flex items-center justify-center p-6">
-          <div className="text-center text-gray-400">
-            <Lock className="w-16 h-16 mx-auto mb-3 text-gray-300" />
-            <p className="text-gray-500 font-medium">Contenido bloqueado</p>
-            <p className="text-sm text-gray-400 mt-1">Este curso requiere pago para acceder al contenido</p>
-          </div>
-        </div>
-      );
-    }
-
-    switch (tipo) {
-      case 'video':
-        return (
-          <div className="h-full w-full flex items-center justify-center bg-black p-3 sm:p-6">
-            <div className="w-full max-w-5xl aspect-video relative">
-              <VideoPlayer
-                videoId={contenido.video_url}
-                onComplete={handleVideoComplete}
-                onProgress={handleVideoProgress}
-                onTimeUpdate={handleVideoProgress}
-              />
-            </div>
-          </div>
-        );
-
-      case 'texto':
-        return (
-          <div className="h-full overflow-y-auto">
-            <RichTextDisplay content={contenido.texto || ''} />
-          </div>
-        );
-
-      case 'examen':
-        return (
-          <ExamenActivoWrapper
-            contenido={contenido}
-            leccion={leccion}
-            curso={curso}
-            usuarioId={usuarioId}
-            onComplete={handleEmbedComplete}
-            onClose={onClose}
-          />
-        );
-
-      case 'quiz':
-        return (
-          <CuestionarioEmbedWrapper
-            contenido={contenido}
-            leccion={leccion}
-            curso={curso}
-            onComplete={handleEmbedComplete}
-          />
-        );
-
-      case 'recurso':
-        return <RecursosDisplay recursos={contenido.archivos || contenido.links || []} />;
-
-      default:
-        return (
-          <div className="h-full flex items-center justify-center p-6">
-            <div className="text-center text-gray-400">
-              <FileText className="w-16 h-16 mx-auto mb-3 text-gray-300" />
-              <p>Tipo de leccion no soportado: {tipo}</p>
-            </div>
-          </div>
-        );
+  const handleNavegarBloque = (direccion) => {
+    const nuevoIndex = bloqueActualIndex + direccion;
+    if (nuevoIndex >= 0 && nuevoIndex < totalBloques) {
+      setBloqueActualIndex(nuevoIndex);
+      setBloqueCompletado(false);
     }
   };
 
+  const indexActual = leccionesDelModulo?.findIndex(l => l.id === leccion?.id) ?? -1;
+  const leccionAnterior = indexActual > 0 ? leccionesDelModulo[indexActual - 1] : null;
+  const leccionSiguiente = indexActual < leccionesDelModulo?.length - 1 ? leccionesDelModulo[indexActual + 1] : null;
+
   if (!isOpen || !leccion) return null;
 
-  const isCompletadaEstado = isCompletada || videoCompletado;
+  const estaCompletada = isCompletada || (bloqueCompletado && bloqueActualIndex === totalBloques - 1);
+  const estaBloqueado = curso?.precio_tipo === 'pago' && !tieneAcceso && !esDocente;
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-3 sm:p-0">
@@ -708,24 +635,19 @@ const ReproductorLeccion = ({
               <X className="w-5 h-5" />
             </button>
             <div className="min-w-0">
-              <h2 className="text-sm font-semibold text-gray-900 truncate">{leccion.titulo || 'Leccion'}</h2>
+              <h2 className="text-sm font-semibold text-gray-900 truncate">{leccion.titulo}</h2>
               <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs text-gray-400">
-                <span>{moduloId ? `Modulo ${moduloId}` : ''}</span>
-                <span>•</span>
-                <span className="flex items-center gap-1">
-                  <Clock className="w-3 h-3" />
-                  {leccion.duracion || 'Sin duracion'}
-                </span>
-                {isCompletadaEstado && (
+                <span>{moduloId ? `Módulo ${moduloId}` : ''}</span>
+                {totalBloques > 0 && (
+                  <>
+                    <span>•</span>
+                    <span>{bloqueActualIndex + 1} de {totalBloques} bloques</span>
+                  </>
+                )}
+                {estaCompletada && (
                   <span className="text-emerald-500 flex items-center gap-1">
                     <Check className="w-3 h-3" />
                     Completada
-                  </span>
-                )}
-                {leccion.tipo === 'examen' && (
-                  <span className="text-amber-500 flex items-center gap-1">
-                    <Award className="w-3 h-3" />
-                    Examen
                   </span>
                 )}
               </div>
@@ -738,55 +660,106 @@ const ReproductorLeccion = ({
                 <span className="font-medium text-gray-700">{progresoActual}%</span>
               </div>
             )}
-            {leccion.tipo !== 'examen' && leccion.tipo !== 'quiz' && (
-              <button
-                onClick={handleMarcarCompletada}
-                disabled={marcando || isCompletadaEstado}
-                className={`px-3 py-2 text-xs font-medium rounded-lg transition-colors flex items-center gap-1.5 ${
-                  isCompletadaEstado
-                    ? 'bg-emerald-50 text-emerald-600'
-                    : 'bg-gray-900 text-white hover:bg-gray-800'
-                } disabled:opacity-50`}
-              >
-                {marcando ? (
-                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                ) : isCompletadaEstado ? (
-                  <>
-                    <Check className="w-3.5 h-3.5" />
-                    Completada
-                  </>
-                ) : (
-                  <>
-                    <Check className="w-3.5 h-3.5" />
-                    Completar
-                  </>
-                )}
-              </button>
-            )}
           </div>
         </div>
 
+        {/* Navegación entre bloques */}
+        {totalBloques > 1 && !estaBloqueado && (
+          <div className="flex items-center justify-between px-4 py-2 bg-gray-50 border-b border-gray-100 flex-shrink-0">
+            <div className="flex items-center gap-1 text-xs text-gray-500">
+              <Layout className="w-3.5 h-3.5" />
+              <span>Bloque {bloqueActualIndex + 1}:</span>
+              <span className="font-medium text-gray-700 truncate max-w-[150px]">
+                {bloqueActual?.titulo || `Bloque ${bloqueActualIndex + 1}`}
+              </span>
+            </div>
+            <div className="flex items-center gap-1">
+              <button
+                onClick={() => handleNavegarBloque(-1)}
+                disabled={bloqueActualIndex === 0}
+                className={`p-1 rounded hover:bg-gray-200 transition-colors ${
+                  bloqueActualIndex === 0 ? 'text-gray-300 cursor-not-allowed' : 'text-gray-600'
+                }`}
+              >
+                <ChevronLeft className="w-4 h-4" />
+              </button>
+              <span className="text-xs text-gray-400 px-2">
+                {bloqueActualIndex + 1}/{totalBloques}
+              </span>
+              <button
+                onClick={() => handleNavegarBloque(1)}
+                disabled={bloqueActualIndex === totalBloques - 1}
+                className={`p-1 rounded hover:bg-gray-200 transition-colors ${
+                  bloqueActualIndex === totalBloques - 1 ? 'text-gray-300 cursor-not-allowed' : 'text-gray-600'
+                }`}
+              >
+                <ChevronRight className="w-4 h-4" />
+              </button>
+            </div>
+          </div>
+        )}
+
         {/* Contenido */}
         <div className="flex-1 overflow-hidden relative">
-          {renderContenido()}
+          {estaBloqueado ? (
+            <div className="h-full flex items-center justify-center p-6">
+              <div className="text-center text-gray-400">
+                <Lock className="w-16 h-16 mx-auto mb-3 text-gray-300" />
+                <p className="text-gray-500 font-medium">Contenido bloqueado</p>
+                <p className="text-sm text-gray-400 mt-1">Este curso requiere pago para acceder</p>
+              </div>
+            </div>
+          ) : bloqueActual ? (
+            <RenderBloque
+              bloque={bloqueActual}
+              leccion={leccion}
+              curso={curso}
+              usuarioId={usuarioId}
+              onComplete={handleBloqueComplete}
+              onClose={onClose}
+            />
+          ) : (
+            <div className="h-full flex items-center justify-center p-6">
+              <div className="text-center text-gray-400">
+                <FileText className="w-16 h-16 mx-auto mb-3 text-gray-300" />
+                <p>Esta lección no tiene contenido</p>
+              </div>
+            </div>
+          )}
 
-          {mostrarConfirmacion && !isCompletada && leccion.tipo !== 'examen' && (
-            <div className="absolute bottom-20 left-1/2 -translate-x-1/2 bg-emerald-500 text-white px-6 py-3 rounded-xl shadow-lg flex flex-wrap items-center justify-center gap-3 animate-fadeIn max-w-[calc(100%-2rem)] text-center">
+          {/* Indicador de bloque completado */}
+          {bloqueCompletado && bloqueActualIndex < totalBloques - 1 && !estaBloqueado && (
+            <div className="absolute bottom-6 left-1/2 -translate-x-1/2 bg-emerald-500 text-white px-4 py-2 rounded-lg shadow-lg flex items-center gap-2 animate-fadeIn">
+              <CheckCircle className="w-4 h-4" />
+              <span className="text-sm font-medium">¡Bloque completado!</span>
+              <button
+                onClick={() => handleNavegarBloque(1)}
+                className="ml-2 px-3 py-1 bg-white/20 hover:bg-white/30 rounded text-sm"
+              >
+                Siguiente bloque →
+              </button>
+            </div>
+          )}
+
+          {/* Confirmación de lección completada */}
+          {bloqueCompletado && bloqueActualIndex === totalBloques - 1 && !estaCompletada && !estaBloqueado && (
+            <div className="absolute bottom-6 left-1/2 -translate-x-1/2 bg-emerald-500 text-white px-6 py-3 rounded-xl shadow-lg flex flex-wrap items-center justify-center gap-3 animate-fadeIn">
               <span className="flex items-center gap-3">
                 <CheckCircle className="w-5 h-5" />
-                <span className="text-sm font-medium">¡Completado!</span>
+                <span className="text-sm font-medium">¡Lección completada!</span>
               </span>
               <button
                 onClick={handleMarcarCompletada}
+                disabled={marcando}
                 className="px-3 py-1.5 bg-white/20 hover:bg-white/30 rounded-lg text-sm font-medium transition-colors"
               >
-                Marcar como completada
+                {marcando ? 'Guardando...' : 'Guardar progreso'}
               </button>
             </div>
           )}
         </div>
 
-        {/* Footer - Navegación */}
+        {/* Footer - Navegación entre lecciones */}
         <div className="flex items-center justify-between px-6 py-3 border-t border-gray-200 flex-shrink-0">
           <button
             onClick={() => onNavegarLeccion?.('anterior')}

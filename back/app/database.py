@@ -1,6 +1,4 @@
-# app/database.py
-# VERSION COMPLETA PARA SUPABASE
-
+# app/database.py - VERSIÓN CORREGIDA
 from sqlalchemy import create_engine, text
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker, Session
@@ -8,6 +6,7 @@ from typing import Generator, Tuple, Dict, Any
 import logging
 import time
 from app.config import settings
+import re
 
 # Configurar logger
 logger = logging.getLogger(__name__)
@@ -20,30 +19,57 @@ def create_database_engine():
     """
     Crea el engine de base de datos con configuración optimizada para Supabase
     """
-    # Configuración base del engine
+    # Obtener la URL
+    database_url = settings.SUPABASE_DATABASE_URL
+    
+    # Detectar si es pooler y necesita el project_id en connect_args
+    is_pooler = "pooler" in database_url.lower()
+    
+    # Configuración base de connect_args
+    connect_args = {
+        "connect_timeout": 10,
+        "keepalives": 1,
+        "keepalives_idle": 30,
+        "keepalives_interval": 10,
+        "keepalives_count": 5,
+        "sslmode": "require",
+    }
+    
+    # ✅ Si es pooler, agregar el project_id en options
+    if is_pooler:
+        # Extraer el project_id de la URL o usar el de settings
+        project_id = "rpphjdgalniijuktnorf"  # Tu project ID
+        
+        # Verificar si ya tiene options en la URL
+        if "options=" not in database_url:
+            # Agregar options a la URL
+            if "?" in database_url:
+                database_url += f"&options=project%3D{project_id}"
+            else:
+                database_url += f"?options=project%3D{project_id}"
+        
+        # También agregar en connect_args como respaldo
+        connect_args["options"] = f"-c project={project_id}"
+        
+        logger.info(f"🔧 Configuración para pooler: project_id={project_id}")
+    
+    # Configuración del engine
     engine_config = {
-        "pool_pre_ping": True,           # Verificar conexiones antes de usarlas
-        "pool_recycle": 3600,            # Reciclar conexiones cada hora
-        "pool_size": 5,                  # Tamaño del pool
-        "max_overflow": 10,              # Conexiones adicionales permitidas
-        "echo": settings.DEBUG,          # Log de SQL solo en desarrollo
-        "echo_pool": settings.DEBUG,     # Log del pool solo en desarrollo
-        "connect_args": {
-            "connect_timeout": 10,       # Timeout de conexión en segundos
-            "keepalives": 1,             # Habilitar keepalives
-            "keepalives_idle": 30,       # Enviar keepalive cada 30 segundos
-            "keepalives_interval": 10,   # Intervalo entre keepalives
-            "keepalives_count": 5,       # Número de keepalives antes de cerrar
-            "sslmode": "require",        # Requerir SSL para Supabase
-        }
+        "pool_pre_ping": True,
+        "pool_recycle": 3600,
+        "pool_size": 5,
+        "max_overflow": 10,
+        "echo": settings.DEBUG,
+        "echo_pool": settings.DEBUG,
+        "connect_args": connect_args,
     }
     
     try:
-        engine = create_engine(
-            settings.SUPABASE_DATABASE_URL,
-            **engine_config
-        )
-        logger.info("✅ Engine de base de datos creado correctamente")
+        engine = create_engine(database_url, **engine_config)
+        logger.info(f"✅ Engine de base de datos creado correctamente")
+        logger.info(f"📡 Host: {settings.SUPABASE_DB_HOST}")
+        logger.info(f"🔌 Puerto: {settings.SUPABASE_DB_PORT}")
+        logger.info(f"💾 Base: {settings.SUPABASE_DB_NAME}")
         return engine
     except Exception as e:
         logger.error(f"❌ Error creando engine de base de datos: {e}")

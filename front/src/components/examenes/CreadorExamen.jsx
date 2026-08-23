@@ -1,12 +1,13 @@
 // src/components/examenes/CreadorExamen.jsx
-// VERSION CORREGIDA - PRESERVA IDs Y VALIDACION COMPLETA
+// VERSIÓN COMPLETA ACTUALIZADA - SOPORTE PARA MODAL Y STANDALONE
+
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { 
   ArrowLeft, Save, Plus, Copy, AlertTriangle,
   ListChecks, ToggleLeft, ArrowLeftRight, ArrowUpDown,
   PenLine, Type, AlignLeft, Shuffle, Eye, Shield, Monitor,
   RotateCcw, CheckCircle2, ChevronDown, Lock,
-  Clock, Target, Hash, Calendar, Menu
+  Clock, Target, Hash, Calendar, Menu, X
 } from 'lucide-react';
 import { COLOR_PRIMARIO, TIPOS_PREGUNTA_CONFIG, CONFIGURACION_EXAMEN_DEFAULT, validarExamen } from './constantes';
 import PreguntaItem from './PreguntaItem';
@@ -121,7 +122,6 @@ const DateRangePicker = ({ inicio, fin, onInicio, onFin }) => {
 // =============================================
 const normalizarPregunta = (pregunta, index) => {
   const base = {
-    // ✅ PRESERVAR ID EXISTENTE
     id: pregunta.id || (Date.now().toString() + index),
     tipo: pregunta.tipo || 'opcion_multiple',
     enunciado: pregunta.enunciado || '',
@@ -155,7 +155,14 @@ const normalizarPregunta = (pregunta, index) => {
 // =============================================
 // COMPONENTE PRINCIPAL
 // =============================================
-const CreadorExamen = ({ examen: examenInicial = null, onVolver, onGuardar, grupoId = null }) => {
+const CreadorExamen = ({ 
+  examen: examenInicial = null, 
+  onVolver, 
+  onGuardar, 
+  grupoId = null,
+  esModal = false,
+  onCerrarModal = null
+}) => {
   
   const [datos, setDatos] = useState({
     titulo: examenInicial?.titulo || '',
@@ -175,7 +182,6 @@ const CreadorExamen = ({ examen: examenInicial = null, onVolver, onGuardar, grup
   
   const [errores, setErrores] = useState({});
   const [mostrarSeguridad, setMostrarSeguridad] = useState(false);
-  const [mostrarConfiguracion, setMostrarConfiguracion] = useState(false);
   const [fabAbierto, setFabAbierto] = useState(null);
   
   const puntosTotales = preguntas.reduce((s, p) => s + (p.puntos || 1), 0);
@@ -204,14 +210,15 @@ const CreadorExamen = ({ examen: examenInicial = null, onVolver, onGuardar, grup
     const idx = preguntas.findIndex(x => x.id === id);
     const nuevas = [...preguntas];
     nuevas.splice(idx + 1, 0, {
-      ...p, id: Date.now().toString() + '_dup', orden: preguntas.length,
+      ...p, 
+      id: Date.now().toString() + '_dup', 
+      orden: preguntas.length,
       afirmaciones: (p.afirmaciones || []).map(a => ({ ...a, id: 'vf' + Math.random() })),
       frases: (p.frases || []).map(f => ({ ...f, id: 'fr' + Math.random(), segmentos: (f.segmentos || []).map(s => ({ ...s, id: 'sg' + Math.random() })) }))
     });
     setPreguntas(nuevas);
   };
 
-  // ✅ CORREGIDO: agregarPregunta con posición
   const agregarPregunta = (tipo = 'opcion_multiple', posicion = null) => {
     const nueva = {
       id: Date.now().toString() + '_' + Math.random().toString(36).substr(2, 6),
@@ -234,13 +241,11 @@ const CreadorExamen = ({ examen: examenInicial = null, onVolver, onGuardar, grup
     setFabAbierto(null);
   };
 
-  // ✅ VALIDACION COMPLETA
   const validar = () => {
     const err = {};
     if (!datos.titulo.trim()) err.titulo = 'Titulo requerido';
     if (preguntas.length === 0) err.preguntas = 'Agregue al menos una pregunta';
     
-    // Validar cada pregunta
     preguntas.forEach((p, idx) => {
       if (!p.enunciado || !p.enunciado.trim()) {
         err[`pregunta_${idx}`] = `Pregunta ${idx + 1}: enunciado requerido`;
@@ -260,18 +265,19 @@ const CreadorExamen = ({ examen: examenInicial = null, onVolver, onGuardar, grup
     return Object.keys(err).length === 0;
   };
 
-  // ✅ PRESERVAR IDs AL GUARDAR
   const handleGuardar = () => {
     if (!validar()) return;
-    onGuardar({
+    
+    const examenData = {
       ...datos,
       grupoId,
       preguntas: preguntas.map(p => {
-        // Preservar id y todos los campos
         const { ...resto } = p;
         return resto;
       })
-    });
+    };
+    
+    onGuardar(examenData);
   };
 
   const chips = [
@@ -281,7 +287,7 @@ const CreadorExamen = ({ examen: examenInicial = null, onVolver, onGuardar, grup
     { campo: 'mostrar_resultados', icon: CheckCircle2, label: 'Mostrar resultados' },
     { campo: 'mostrar_respuestas', icon: Eye, label: 'Mostrar respuestas' },
     { campo: 'detectar_copy_paste', icon: Copy, label: 'Detectar copia' },
-    { campo: 'detectar_tab_change', icon: Monitor, label: 'Detectar cambio de pestana' },
+    { campo: 'detectar_tab_change', icon: Monitor, label: 'Detectar cambio de pestaña' },
     { campo: 'mostrar_mejor_nota', icon: RotateCcw, label: 'Mostrar mejor nota' },
   ];
 
@@ -311,91 +317,198 @@ const CreadorExamen = ({ examen: examenInicial = null, onVolver, onGuardar, grup
   ];
   
   const opcionesAccionViolaciones = [
-    { value: 'anular', label: 'Anular examen' }, { value: 'cerrar', label: 'Cerrar y enviar' }, { value: 'advertir', label: 'Solo advertir' },
+    { value: 'anular', label: 'Anular examen' }, 
+    { value: 'cerrar', label: 'Cerrar y enviar' }, 
+    { value: 'advertir', label: 'Solo advertir' },
   ];
 
   return (
-    <div className="min-h-screen bg-[#fbfbfa] pb-20 sm:pb-6">
+    <div className={`min-h-screen ${esModal ? 'bg-transparent' : 'bg-[#fbfbfa]'} pb-20 sm:pb-6`}>
       
-      <header className="sticky top-0 z-30 bg-white border-b border-gray-200">
-        <div className="max-w-4xl mx-auto px-6 h-14 flex items-center justify-between">
-          <div className="flex items-center gap-3 min-w-0 flex-1">
-            <button onClick={onVolver} className="p-2 hover:bg-gray-100 rounded-lg flex-shrink-0 transition-colors" style={{ WebkitTapHighlightColor: 'transparent' }}>
-              <ArrowLeft className="w-4 h-4 text-gray-500"/>
-            </button>
+      {/* Header - Adaptado para modal y standalone */}
+      <header className={`sticky top-0 z-30 bg-white border-b border-gray-200 ${esModal ? 'shadow-sm' : ''}`}>
+        <div className={`${esModal ? 'max-w-full px-4' : 'max-w-4xl mx-auto px-6'} h-12 sm:h-14 flex items-center justify-between`}>
+          <div className="flex items-center gap-2 sm:gap-3 min-w-0 flex-1">
+            {!esModal && (
+              <button onClick={onVolver} className="p-2 hover:bg-gray-100 rounded-lg flex-shrink-0 transition-colors">
+                <ArrowLeft className="w-4 h-4 text-gray-500"/>
+              </button>
+            )}
+            {esModal && onCerrarModal && (
+              <button onClick={onCerrarModal} className="p-2 hover:bg-gray-100 rounded-lg flex-shrink-0 transition-colors">
+                <X className="w-4 h-4 text-gray-500"/>
+              </button>
+            )}
             <h1 className="text-sm font-semibold text-gray-900 truncate">
               {examenInicial ? 'Editar Examen' : 'Nuevo Examen'}
             </h1>
+            {esModal && (
+              <span className="text-[10px] font-medium text-gray-400 bg-gray-100 px-2 py-0.5 rounded-full flex-shrink-0">
+                Modal
+              </span>
+            )}
           </div>
-          <button onClick={handleGuardar} className="px-4 py-2 text-sm font-medium text-white bg-gray-900 rounded-lg hover:bg-gray-800 transition-colors flex items-center gap-2 flex-shrink-0" style={{ WebkitTapHighlightColor: 'transparent' }}>
-            <Save className="w-4 h-4"/> Guardar
+          <button 
+            onClick={handleGuardar} 
+            className="px-3 sm:px-4 py-1.5 sm:py-2 text-xs sm:text-sm font-medium text-white rounded-lg transition-colors flex items-center gap-1.5 sm:gap-2 flex-shrink-0"
+            style={{ backgroundColor: '#0f766e' }}
+            onMouseEnter={(e) => e.target.style.backgroundColor = '#0d5e57'}
+            onMouseLeave={(e) => e.target.style.backgroundColor = '#0f766e'}
+          >
+            <Save className="w-3.5 h-3.5 sm:w-4 sm:h-4"/> Guardar
           </button>
         </div>
       </header>
 
-      <div className="max-w-4xl mx-auto px-6 py-6 space-y-6">
+      <div className={`${esModal ? 'max-w-full px-4' : 'max-w-4xl mx-auto px-6'} py-4 sm:py-6 space-y-4 sm:space-y-6`}>
 
+        {/* Información básica del examen */}
         <div className="bg-white rounded-lg border border-gray-200">
-          <div className="px-6 pt-5 pb-3">
-            <input type="text" value={datos.titulo} onChange={e => setDatos(p => ({ ...p, titulo: e.target.value }))}
-              className={`w-full text-lg font-semibold text-gray-900 bg-transparent border-0 border-b-2 pb-2 transition-colors placeholder:text-gray-300 ${errores.titulo ? 'border-red-300' : 'border-gray-100 focus:border-gray-300'}`}
-              style={{ outline: 'none', WebkitTapHighlightColor: 'transparent' }} placeholder="Titulo del examen *"/>
+          <div className="px-4 sm:px-6 pt-4 sm:pt-5 pb-3">
+            <input 
+              type="text" 
+              value={datos.titulo} 
+              onChange={e => setDatos(p => ({ ...p, titulo: e.target.value }))}
+              className={`w-full text-base sm:text-lg font-semibold text-gray-900 bg-transparent border-0 border-b-2 pb-2 transition-colors placeholder:text-gray-300 ${errores.titulo ? 'border-red-300' : 'border-gray-100 focus:border-gray-300'}`}
+              style={{ outline: 'none' }} 
+              placeholder="Título del examen *"
+            />
             {errores.titulo && <p className="text-xs text-red-500 mt-1">{errores.titulo}</p>}
           </div>
-          <div className="px-6 pb-3">
-            <textarea value={datos.descripcion} onChange={e => setDatos(p => ({ ...p, descripcion: e.target.value }))} rows={1}
+          <div className="px-4 sm:px-6 pb-3">
+            <textarea 
+              value={datos.descripcion} 
+              onChange={e => setDatos(p => ({ ...p, descripcion: e.target.value }))} 
+              rows={1}
               className="w-full text-sm text-gray-500 bg-transparent border-0 border-b-2 pb-2 resize-none transition-colors border-gray-100 focus:border-gray-300 placeholder:text-gray-300"
-              style={{ outline: 'none', WebkitTapHighlightColor: 'transparent' }} placeholder="Descripcion opcional..."/>
+              style={{ outline: 'none' }} 
+              placeholder="Descripción opcional..."
+            />
           </div>
 
-          <div className="px-6 py-2.5 bg-gray-50/50 border-t border-gray-100">
-            <div className="flex items-center gap-4 flex-wrap">
+          {/* Configuración rápida */}
+          <div className="px-4 sm:px-6 py-2.5 bg-gray-50/50 border-t border-gray-100">
+            <div className="flex flex-wrap items-center gap-3 sm:gap-4">
               <div className="flex items-center gap-1">
                 <Clock className="w-3.5 h-3.5 text-gray-400"/>
-                <input type="number" value={datos.tiempo_limite} onChange={e => setDatos(p => ({ ...p, tiempo_limite: parseInt(e.target.value) || 60 }))} min={1} max={480} className="w-14 text-xs font-medium text-gray-700 bg-transparent border-0 rounded px-1 py-0.5 text-center" style={{ outline: 'none' }}/>
+                <input 
+                  type="number" 
+                  value={datos.tiempo_limite} 
+                  onChange={e => setDatos(p => ({ ...p, tiempo_limite: parseInt(e.target.value) || 60 }))} 
+                  min={1} max={480} 
+                  className="w-12 sm:w-14 text-xs font-medium text-gray-700 bg-transparent border-0 rounded px-1 py-0.5 text-center" 
+                  style={{ outline: 'none' }}
+                />
                 <span className="text-[10px] text-gray-400">min</span>
               </div>
               <div className="flex items-center gap-1">
                 <Target className="w-3.5 h-3.5 text-gray-400"/>
-                <input type="number" value={datos.puntaje_aprobacion} onChange={e => setDatos(p => ({ ...p, puntaje_aprobacion: parseInt(e.target.value) || 60 }))} min={0} max={100} className="w-14 text-xs font-medium text-gray-700 bg-transparent border-0 rounded px-1 py-0.5 text-center" style={{ outline: 'none' }}/>
+                <input 
+                  type="number" 
+                  value={datos.puntaje_aprobacion} 
+                  onChange={e => setDatos(p => ({ ...p, puntaje_aprobacion: parseInt(e.target.value) || 60 }))} 
+                  min={0} max={100} 
+                  className="w-12 sm:w-14 text-xs font-medium text-gray-700 bg-transparent border-0 rounded px-1 py-0.5 text-center" 
+                  style={{ outline: 'none' }}
+                />
                 <span className="text-[10px] text-gray-400">%</span>
               </div>
-              <SelectPersonalizado value={datos.intentos_permitidos} options={opcionesIntentos} onChange={(v) => setDatos(p => ({ ...p, intentos_permitidos: v }))} icon={Hash}/>
+              <SelectPersonalizado 
+                value={datos.intentos_permitidos} 
+                options={opcionesIntentos} 
+                onChange={(v) => setDatos(p => ({ ...p, intentos_permitidos: v }))} 
+                icon={Hash}
+              />
               <span className="text-xs font-medium text-gray-400">{puntosTotales} pts</span>
-              <DateRangePicker inicio={datos.configuracion.fecha_inicio} fin={datos.configuracion.fecha_fin} onInicio={(v) => updateConfig('fecha_inicio', v)} onFin={(v) => updateConfig('fecha_fin', v)}/>
+              <DateRangePicker 
+                inicio={datos.configuracion.fecha_inicio} 
+                fin={datos.configuracion.fecha_fin} 
+                onInicio={(v) => updateConfig('fecha_inicio', v)} 
+                onFin={(v) => updateConfig('fecha_fin', v)}
+              />
             </div>
           </div>
 
-          <div className="px-6 py-2 border-t border-gray-100">
-            <div className="flex items-center gap-1 overflow-x-auto">
+          {/* Chips de configuración */}
+          <div className="px-4 sm:px-6 py-2 border-t border-gray-100">
+            <div className="flex flex-wrap items-center gap-1 overflow-x-auto">
               <span className="text-[10px] font-medium text-gray-400 mr-1 hidden sm:inline flex-shrink-0">Config:</span>
               {chips.map(({ campo, icon: Icon }) => (
-                <button key={campo} onClick={() => toggle(campo)} className={`w-8 h-8 rounded-lg flex items-center justify-center transition-colors flex-shrink-0 ${on(campo) ? 'bg-gray-900 text-white' : 'text-gray-400 hover:bg-gray-100 hover:text-gray-600'}`} style={{ WebkitTapHighlightColor: 'transparent' }}>
-                  <Icon className="w-4 h-4"/>
+                <button 
+                  key={campo} 
+                  onClick={() => toggle(campo)} 
+                  className={`w-7 h-7 sm:w-8 sm:h-8 rounded-lg flex items-center justify-center transition-colors flex-shrink-0 ${on(campo) ? 'bg-gray-900 text-white' : 'text-gray-400 hover:bg-gray-100 hover:text-gray-600'}`}
+                  title={campo}
+                >
+                  <Icon className="w-3.5 h-3.5 sm:w-4 sm:h-4"/>
                 </button>
               ))}
             </div>
           </div>
 
-          <div className="px-6 py-2 border-t border-gray-100">
-            <button onClick={() => setMostrarSeguridad(!mostrarSeguridad)} className="flex items-center gap-2 text-xs font-medium text-gray-400 hover:text-gray-600 transition-colors" style={{ WebkitTapHighlightColor: 'transparent' }}>
-              <Shield className="w-3 h-3"/> Seguridad y restricciones <ChevronDown className={`w-3 h-3 transition-transform ${mostrarSeguridad ? 'rotate-180' : ''}`}/>
+          {/* Seguridad y restricciones */}
+          <div className="px-4 sm:px-6 py-2 border-t border-gray-100">
+            <button 
+              onClick={() => setMostrarSeguridad(!mostrarSeguridad)} 
+              className="flex items-center gap-2 text-xs font-medium text-gray-400 hover:text-gray-600 transition-colors"
+            >
+              <Shield className="w-3 h-3"/> Seguridad y restricciones 
+              <ChevronDown className={`w-3 h-3 transition-transform ${mostrarSeguridad ? 'rotate-180' : ''}`}/>
             </button>
             {mostrarSeguridad && (
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 mt-3 pb-3">
-                <div><label className="block text-[10px] font-medium text-gray-400 mb-1">Limite violaciones</label><input type="number" value={datos.configuracion.limite_violaciones || 3} onChange={e => updateConfig('limite_violaciones', parseInt(e.target.value) || 3)} min={1} max={10} className="w-full px-2.5 py-2 text-xs border border-gray-200 rounded-lg text-center outline-none focus:border-gray-300 transition-colors"/></div>
-                <div><label className="block text-[10px] font-medium text-gray-400 mb-1">Al exceder</label><SelectPersonalizado value={datos.configuracion.accion_violaciones || 'anular'} options={opcionesAccionViolaciones} onChange={(v) => updateConfig('accion_violaciones', v)} className="w-full"/></div>
-                <div><label className="block text-[10px] font-medium text-gray-400 mb-1">Pregs por examen</label><input type="number" value={datos.configuracion.preguntasPorExamen || 0} onChange={e => updateConfig('preguntasPorExamen', parseInt(e.target.value) || 0)} min={0} max={preguntas.length || 50} className="w-full px-2.5 py-2 text-xs border border-gray-200 rounded-lg text-center outline-none focus:border-gray-300 transition-colors"/></div>
-                <div><label className="block text-[10px] font-medium text-gray-400 mb-1"><Lock className="w-3 h-3 inline mr-1"/>Contrasena</label><input type="text" value={datos.configuracion.password_examen || ''} onChange={e => updateConfig('password_examen', e.target.value || null)} className="w-full px-2.5 py-2 text-xs border border-gray-200 rounded-lg outline-none focus:border-gray-300 transition-colors" placeholder="Opcional"/></div>
+                <div>
+                  <label className="block text-[10px] font-medium text-gray-400 mb-1">Límite violaciones</label>
+                  <input 
+                    type="number" 
+                    value={datos.configuracion.limite_violaciones || 3} 
+                    onChange={e => updateConfig('limite_violaciones', parseInt(e.target.value) || 3)} 
+                    min={1} max={10} 
+                    className="w-full px-2.5 py-2 text-xs border border-gray-200 rounded-lg text-center outline-none focus:border-gray-300 transition-colors"
+                  />
+                </div>
+                <div>
+                  <label className="block text-[10px] font-medium text-gray-400 mb-1">Al exceder</label>
+                  <SelectPersonalizado 
+                    value={datos.configuracion.accion_violaciones || 'anular'} 
+                    options={opcionesAccionViolaciones} 
+                    onChange={(v) => updateConfig('accion_violaciones', v)} 
+                    className="w-full"
+                  />
+                </div>
+                <div>
+                  <label className="block text-[10px] font-medium text-gray-400 mb-1">Pregs por examen</label>
+                  <input 
+                    type="number" 
+                    value={datos.configuracion.preguntasPorExamen || 0} 
+                    onChange={e => updateConfig('preguntasPorExamen', parseInt(e.target.value) || 0)} 
+                    min={0} max={preguntas.length || 50} 
+                    className="w-full px-2.5 py-2 text-xs border border-gray-200 rounded-lg text-center outline-none focus:border-gray-300 transition-colors"
+                  />
+                </div>
+                <div>
+                  <label className="block text-[10px] font-medium text-gray-400 mb-1">
+                    <Lock className="w-3 h-3 inline mr-1"/>Contraseña
+                  </label>
+                  <input 
+                    type="text" 
+                    value={datos.configuracion.password_examen || ''} 
+                    onChange={e => updateConfig('password_examen', e.target.value || null)} 
+                    className="w-full px-2.5 py-2 text-xs border border-gray-200 rounded-lg outline-none focus:border-gray-300 transition-colors" 
+                    placeholder="Opcional"
+                  />
+                </div>
               </div>
             )}
           </div>
         </div>
 
+        {/* Lista de preguntas */}
         <div className="space-y-3">
           {errores.preguntas && (
             <div className="flex items-center gap-2 text-red-500 bg-red-50 border border-red-200 px-3 py-2 rounded-lg text-xs">
-              <AlertTriangle className="w-4 h-4 flex-shrink-0"/><span>{errores.preguntas}</span>
+              <AlertTriangle className="w-4 h-4 flex-shrink-0"/>
+              <span>{errores.preguntas}</span>
             </div>
           )}
           
@@ -413,11 +526,13 @@ const CreadorExamen = ({ examen: examenInicial = null, onVolver, onGuardar, grup
             />
           ))}
 
+          {/* Botón para agregar preguntas */}
           <div className="flex justify-center py-2">
             <div className="relative" style={{ zIndex: fabAbierto === 'nuevo' ? 99999 : 10 }}>
-              <button onClick={() => handleFabClick('nuevo')} 
-                className="w-10 h-10 rounded-lg border-2 border-dashed border-gray-200 flex items-center justify-center text-gray-400 hover:border-gray-300 hover:text-gray-600 transition-colors" 
-                style={{ WebkitTapHighlightColor: 'transparent' }}>
+              <button 
+                onClick={() => handleFabClick('nuevo')} 
+                className="w-10 h-10 rounded-lg border-2 border-dashed border-gray-200 flex items-center justify-center text-gray-400 hover:border-gray-300 hover:text-gray-600 transition-colors"
+              >
                 <Plus className="w-5 h-5"/>
               </button>
               {fabAbierto === 'nuevo' && (
@@ -429,6 +544,7 @@ const CreadorExamen = ({ examen: examenInicial = null, onVolver, onGuardar, grup
           </div>
         </div>
         
+        {/* Resumen */}
         {preguntas.length > 0 && (
           <div className="text-center text-xs text-gray-400 pb-4">
             {preguntas.length} pregunta{preguntas.length !== 1 ? 's' : ''} | {puntosTotales} punto{puntosTotales !== 1 ? 's' : ''} total{puntosTotales !== 1 ? 'es' : ''}

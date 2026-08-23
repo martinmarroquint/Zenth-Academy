@@ -1,11 +1,14 @@
 // front/src/components/cursos/PanelCursos.jsx
-// PANEL DE CURSOS - CON COMPONENTES UI
+// VERSIÓN GOOGLE CLASSROOM - DISEÑO LIMPIO Y ENFOCADO EN ACCIÓN
 
 import React, { useState, useEffect, useCallback } from 'react';
 import {
   Plus, Search, BookOpen, Users, Clock, Star,
   GraduationCap, Loader2, FileText, Award,
-  Trash2, Eye, Play, Edit3, Send, ChevronRight
+  Trash2, Eye, Play, Edit3, Send, ChevronRight,
+  FolderOpen, Calendar, MoreVertical, Copy,
+  Archive, Download, TrendingUp, CheckCircle,
+  AlertCircle, Settings, Link as LinkIcon
 } from 'lucide-react';
 import { Button, Input, Dropdown, Badge } from '../ui';
 import cursosService from '../../services/cursosService';
@@ -24,6 +27,8 @@ const PanelCursos = ({ onCrearCurso, onVerCurso, onEditarCurso }) => {
   const [publicando, setPublicando] = useState(null);
   const [filtroEstado, setFiltroEstado] = useState('todos');
   const [solicitudesPendientes, setSolicitudesPendientes] = useState(0);
+  const [vista, setVista] = useState('grid'); // 'grid' | 'list'
+  const [ordenando, setOrdenando] = useState(false);
 
   const cargarCursos = useCallback(async () => {
     setCargando(true);
@@ -87,7 +92,6 @@ const PanelCursos = ({ onCrearCurso, onVerCurso, onEditarCurso }) => {
     }
   };
 
-  // Opciones para dropdowns
   const categoriasOptions = [
     { value: 'todos', label: 'Todos' },
     { value: 'programacion', label: 'Programación' },
@@ -120,7 +124,8 @@ const PanelCursos = ({ onCrearCurso, onVerCurso, onEditarCurso }) => {
 
   const cursosFiltrados = cursos.filter(c => {
     const matchBusqueda = (c.titulo || '').toLowerCase().includes(busqueda.toLowerCase()) ||
-                          (c.descripcion || '').toLowerCase().includes(busqueda.toLowerCase());
+                          (c.descripcion || '').toLowerCase().includes(busqueda.toLowerCase()) ||
+                          (c.instructor || '').toLowerCase().includes(busqueda.toLowerCase());
     const matchFiltro = filtro === 'todos' || c.categoria === filtro;
     const matchEstado = filtroEstado === 'todos' || String(c.estado || '').toUpperCase() === filtroEstado.toUpperCase();
     return matchBusqueda && matchFiltro && matchEstado;
@@ -159,6 +164,7 @@ const PanelCursos = ({ onCrearCurso, onVerCurso, onEditarCurso }) => {
   if (error) {
     return (
       <div className="text-center py-16 bg-white rounded-xl border border-gray-200">
+        <AlertCircle className="w-12 h-12 text-red-400 mx-auto mb-4" />
         <p className="text-sm text-red-500 mb-4">{error}</p>
         <Button variant="secondary" onClick={cargarCursos}>
           Reintentar
@@ -169,185 +175,168 @@ const PanelCursos = ({ onCrearCurso, onVerCurso, onEditarCurso }) => {
 
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 py-6 space-y-6">
-      {/* Header */}
+      {/* Header - Estilo Google Classroom */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-        <div>
-          <h2 className="text-2xl font-bold text-gray-900 tracking-tight">Mis Cursos</h2>
-          <p className="text-sm text-gray-500 mt-0.5">
-            {esAdmin ? 'Administra los cursos de la plataforma' : 'Crea, publica y gestiona tus cursos'}
-          </p>
-        </div>
-        <Button variant="primary" onClick={onCrearCurso}>
-          <Plus className="w-4 h-4" />
-          Nuevo Curso
-        </Button>
-      </div>
-
-      {/* KPIs */}
-      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3 sm:gap-4">
-        <div className="bg-white rounded-2xl border border-gray-100 p-4 flex items-center gap-3 shadow-sm">
-          <div className="w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0" style={{ backgroundColor: '#e6f4f2' }}>
-            <BookOpen className="w-5 h-5" style={{ color: '#0f766e' }} />
+        <div className="flex items-center gap-4">
+          <div className="w-12 h-12 rounded-2xl bg-[#0f766e]/10 flex items-center justify-center flex-shrink-0">
+            <GraduationCap className="w-6 h-6 text-[#0f766e]" />
           </div>
-          <div className="min-w-0">
-            <p className="text-xl font-bold text-gray-900 leading-tight">{cursos.length}</p>
-            <p className="text-[11px] text-gray-400 font-medium uppercase tracking-wide">Cursos</p>
-          </div>
-        </div>
-        <div className="bg-white rounded-2xl border border-gray-100 p-4 flex items-center gap-3 shadow-sm">
-          <div className="w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0" style={{ backgroundColor: '#e6f4f2' }}>
-            <Send className="w-5 h-5" style={{ color: '#0f766e' }} />
-          </div>
-          <div className="min-w-0">
-            <p className="text-xl font-bold text-gray-900 leading-tight">{publicados}</p>
-            <p className="text-[11px] text-gray-400 font-medium uppercase tracking-wide">Publicados</p>
-          </div>
-        </div>
-        <div className="bg-white rounded-2xl border border-gray-100 p-4 flex items-center gap-3 shadow-sm">
-          <div className="w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0" style={{ backgroundColor: '#e6f4f2' }}>
-            <Users className="w-5 h-5" style={{ color: '#0f766e' }} />
-          </div>
-          <div className="min-w-0">
-            <p className="text-xl font-bold text-gray-900 leading-tight">{totalEstudiantes}</p>
-            <p className="text-[11px] text-gray-400 font-medium uppercase tracking-wide">Estudiantes</p>
-          </div>
-        </div>
-        <div className="bg-white rounded-2xl border border-gray-100 p-4 flex items-center gap-3 shadow-sm">
-          <div className="w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0" style={{ backgroundColor: '#e6f4f2' }}>
-            <FileText className="w-5 h-5" style={{ color: '#0f766e' }} />
-          </div>
-          <div className="min-w-0">
-            <p className="text-xl font-bold text-gray-900 leading-tight">{totalLecciones}</p>
-            <p className="text-[11px] text-gray-400 font-medium uppercase tracking-wide">Lecciones</p>
-          </div>
-        </div>
-        <div
-          onClick={() => window.location.assign(`${esAdmin ? '/admin' : '/docente'}/solicitudes`)}
-          className={`bg-white rounded-2xl border p-4 flex items-center gap-3 shadow-sm cursor-pointer transition-colors ${
-            solicitudesPendientes > 0 ? 'border-amber-200 hover:border-amber-300' : 'border-gray-100'
-          }`}
-          title="Ver solicitudes de acceso pendientes"
-        >
-          <div className={`w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0 ${
-            solicitudesPendientes > 0 ? 'bg-amber-50' : 'bg-gray-50'
-          }`}>
-            <Award className={`w-5 h-5 ${solicitudesPendientes > 0 ? 'text-amber-500' : 'text-gray-400'}`} />
-          </div>
-          <div className="min-w-0">
-            <p className="text-xl font-bold text-gray-900 leading-tight flex items-center gap-2">
-              {solicitudesPendientes}
-              {solicitudesPendientes > 0 && (
-                <Badge variant="warning" size="sm">pendientes</Badge>
-              )}
+          <div>
+            <h1 className="text-2xl font-bold text-gray-900 tracking-tight">
+              {esAdmin ? 'Todos los cursos' : 'Mis cursos'}
+            </h1>
+            <p className="text-sm text-gray-500">
+              {esAdmin ? 'Gestiona todos los cursos de la plataforma' : 'Crea y administra tus cursos'}
             </p>
-            <p className="text-[11px] text-gray-400 font-medium uppercase tracking-wide">Solicitudes</p>
+          </div>
+        </div>
+        <div className="flex items-center gap-2">
+          {solicitudesPendientes > 0 && (
+            <Badge variant="warning" className="flex items-center gap-1.5 px-3 py-1.5">
+              <Award className="w-3.5 h-3.5" />
+              {solicitudesPendientes} pendientes
+            </Badge>
+          )}
+          <Button variant="primary" onClick={onCrearCurso} className="gap-2">
+            <Plus className="w-4 h-4" />
+            <span className="hidden sm:inline">Crear curso</span>
+            <span className="sm:hidden">Nuevo</span>
+          </Button>
+        </div>
+      </div>
+
+      {/* Estadísticas - Estilo Google Classroom */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+        <div className="bg-white rounded-xl border border-gray-200 px-4 py-3 flex items-center gap-3">
+          <div className="w-10 h-10 rounded-xl bg-[#e6f4f2] flex items-center justify-center flex-shrink-0">
+            <BookOpen className="w-5 h-5 text-[#0f766e]" />
+          </div>
+          <div>
+            <p className="text-xl font-bold text-gray-900 leading-tight">{cursos.length}</p>
+            <p className="text-xs text-gray-400">Total cursos</p>
+          </div>
+        </div>
+        <div className="bg-white rounded-xl border border-gray-200 px-4 py-3 flex items-center gap-3">
+          <div className="w-10 h-10 rounded-xl bg-emerald-50 flex items-center justify-center flex-shrink-0">
+            <CheckCircle className="w-5 h-5 text-emerald-500" />
+          </div>
+          <div>
+            <p className="text-xl font-bold text-gray-900 leading-tight">{publicados}</p>
+            <p className="text-xs text-gray-400">Publicados</p>
+          </div>
+        </div>
+        <div className="bg-white rounded-xl border border-gray-200 px-4 py-3 flex items-center gap-3">
+          <div className="w-10 h-10 rounded-xl bg-blue-50 flex items-center justify-center flex-shrink-0">
+            <Users className="w-5 h-5 text-blue-500" />
+          </div>
+          <div>
+            <p className="text-xl font-bold text-gray-900 leading-tight">{totalEstudiantes}</p>
+            <p className="text-xs text-gray-400">Estudiantes</p>
+          </div>
+        </div>
+        <div className="bg-white rounded-xl border border-gray-200 px-4 py-3 flex items-center gap-3">
+          <div className="w-10 h-10 rounded-xl bg-amber-50 flex items-center justify-center flex-shrink-0">
+            <FileText className="w-5 h-5 text-amber-500" />
+          </div>
+          <div>
+            <p className="text-xl font-bold text-gray-900 leading-tight">{totalLecciones}</p>
+            <p className="text-xs text-gray-400">Lecciones</p>
           </div>
         </div>
       </div>
 
-      {/* Filtros con componentes UI */}
+      {/* Barra de herramientas - Estilo Google Classroom */}
       <div className="flex flex-col sm:flex-row gap-3">
         <div className="relative flex-1">
-          <Input
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+          <input
+            type="text"
             value={busqueda}
             onChange={(e) => setBusqueda(e.target.value)}
             placeholder="Buscar cursos..."
-            icon={<Search className="w-4 h-4" />}
-            size="sm"
-            fullWidth
+            className="w-full pl-10 pr-4 py-2 text-sm border border-gray-200 rounded-xl outline-none focus:border-[#0f766e] focus:ring-2 focus:ring-[#0f766e]/20 transition-all bg-white"
           />
         </div>
-        <div className="sm:w-48">
+        <div className="flex gap-2">
           <Dropdown
             options={categoriasOptions}
             value={filtro}
             onChange={setFiltro}
             placeholder="Categoría"
             size="sm"
-            fullWidth
-            searchable={true}
-            clearable={false}
-            showChevron={true}
+            className="w-36"
           />
-        </div>
-        <div className="sm:w-48">
           <Dropdown
             options={estadoOptions}
             value={filtroEstado}
             onChange={setFiltroEstado}
             placeholder="Estado"
             size="sm"
-            fullWidth
-            searchable={false}
-            clearable={false}
-            showChevron={true}
+            className="w-36"
           />
         </div>
       </div>
 
-      {/* Lista de Cursos - TARJETAS MEJORADAS */}
+      {/* Lista de Cursos - Estilo Google Classroom */}
       {cursosFiltrados.length === 0 ? (
-        <div className="text-center py-16 bg-white rounded-xl border border-gray-200">
-          <GraduationCap className="w-16 h-16 text-gray-300 mx-auto mb-4" />
-          <h3 className="text-lg font-medium text-gray-900">No hay cursos</h3>
-          <p className="text-sm text-gray-500 mt-1">Crea tu primer curso</p>
-          <Button variant="primary" onClick={onCrearCurso} className="mt-4">
+        <div className="text-center py-16 bg-white rounded-2xl border-2 border-dashed border-gray-200">
+          <div className="w-20 h-20 rounded-full bg-gray-100 flex items-center justify-center mx-auto mb-4">
+            <FolderOpen className="w-10 h-10 text-gray-300" />
+          </div>
+          <h3 className="text-lg font-semibold text-gray-900">No hay cursos</h3>
+          <p className="text-sm text-gray-400 mt-1 max-w-sm mx-auto">
+            {esAdmin 
+              ? 'No hay cursos creados en la plataforma aún.' 
+              : 'Comienza creando tu primer curso para compartir tu conocimiento.'}
+          </p>
+          <Button variant="primary" onClick={onCrearCurso} className="mt-4 gap-2">
             <Plus className="w-4 h-4" />
-            Crear Curso
+            Crear curso
           </Button>
         </div>
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
           {cursosFiltrados.map((curso) => (
             <div
               key={curso.id}
-              className="bg-white rounded-xl border border-gray-200 overflow-hidden hover:shadow-lg transition-shadow cursor-pointer group"
+              className="group bg-white rounded-2xl border border-gray-200 overflow-hidden hover:shadow-lg hover:border-gray-300 transition-all cursor-pointer"
               onClick={() => onVerCurso?.(curso.id)}
             >
-              {/* Imagen */}
-              <div className="relative h-48 bg-gradient-to-br flex items-center justify-center" style={{ backgroundImage: 'linear-gradient(to bottom right, #e6f4f2, #d1e8e5)' }}>
-                <BookOpen className="w-16 h-16" style={{ color: '#0f766e', opacity: 0.4 }} />
-                <Badge variant="default" className="absolute top-3 right-3">
-                  {curso.nivel}
-                </Badge>
-                <Badge 
-                  variant={String(curso.estado || '').toUpperCase() === 'PUBLICADO' ? 'success' : 'default'} 
-                  className="absolute top-3 left-3"
-                >
-                  {(curso.estado || 'BORRADOR').toUpperCase()}
-                </Badge>
-              </div>
+              {/* Header con imagen y estado */}
+              <div 
+                className="relative h-36 bg-gradient-to-br flex items-center justify-center overflow-hidden"
+                style={{ 
+                  backgroundImage: `linear-gradient(to bottom right, ${curso.imagen_url ? `url(${curso.imagen_url})` : '#e6f4f2'}, ${curso.imagen_url ? 'rgba(0,0,0,0.3)' : '#d1e8e5'})`,
+                  backgroundSize: 'cover',
+                  backgroundPosition: 'center'
+                }}
+              >
+                {!curso.imagen_url && (
+                  <BookOpen className="w-20 h-20 text-[#0f766e]/20" />
+                )}
+                
+                {/* Badges de estado */}
+                <div className="absolute top-3 left-3 flex flex-col gap-1">
+                  <Badge 
+                    variant={String(curso.estado || '').toUpperCase() === 'PUBLICADO' ? 'success' : 'default'} 
+                    size="sm"
+                  >
+                    {(curso.estado || 'BORRADOR').toUpperCase()}
+                  </Badge>
+                  {curso.nivel && (
+                    <Badge variant="secondary" size="sm" className="bg-white/80 backdrop-blur-sm">
+                      {curso.nivel}
+                    </Badge>
+                  )}
+                </div>
 
-              {/* Contenido */}
-              <div className="p-4">
-                <div className="flex items-center gap-2 text-xs text-gray-500 mb-2">
-                  <span className="flex items-center gap-1"><Clock className="w-3 h-3" />{curso.duracion || 'Sin duración'}</span>
-                  <span className="flex items-center gap-1"><FileText className="w-3 h-3" />{(curso.modulos || []).reduce((acc, m) => acc + (m.lecciones || []).length, 0)} lecciones</span>
-                </div>
-                <h3 className="font-semibold text-gray-900 mb-1 line-clamp-1">{curso.titulo}</h3>
-                <p className="text-sm text-gray-500 line-clamp-2 mb-3">{curso.descripcion}</p>
-                <div className="flex items-center justify-between">
-                  <span className="text-xs text-gray-500">{curso.instructor || curso.docente_nombre || 'Instructor'}</span>
-                  <span className="text-sm font-semibold" style={{ color: '#0f766e' }}>{curso.precio}</span>
-                </div>
-                <div className="mt-3 flex items-center gap-4 text-xs text-gray-400">
-                  <span className="flex items-center gap-1">
-                    <Star className="w-3 h-3 text-amber-400 fill-amber-400" />
-                    {curso.rating || 0}
-                  </span>
-                  <span className="flex items-center gap-1">
-                    <Users className="w-3 h-3" />
-                    {curso.estudiantes_count || 0}
-                  </span>
-                  <div className="flex-1" />
+                {/* Acciones rápidas - hover */}
+                <div className="absolute top-3 right-3 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
                   {String(curso.estado || '').toUpperCase() !== 'PUBLICADO' && (esAdmin || curso.docente_id === usuarioId) && (
                     <button
                       onClick={(e) => { e.stopPropagation(); handlePublicar(curso.id, curso.titulo); }}
                       disabled={publicando === curso.id}
-                      className="p-1.5 rounded-lg transition-colors text-gray-400 hover:text-white"
-                      style={{ hover: { backgroundColor: '#0f766e' } }}
-                      onMouseEnter={(e) => { e.target.style.backgroundColor = '#0f766e'; e.target.style.color = 'white' }}
-                      onMouseLeave={(e) => { e.target.style.backgroundColor = ''; e.target.style.color = '' }}
+                      className="p-1.5 bg-white/90 backdrop-blur-sm rounded-lg hover:bg-[#0f766e] hover:text-white transition-all shadow-sm"
                       title="Publicar"
                     >
                       {publicando === curso.id ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Send className="w-3.5 h-3.5" />}
@@ -355,20 +344,107 @@ const PanelCursos = ({ onCrearCurso, onVerCurso, onEditarCurso }) => {
                   )}
                   <button
                     onClick={(e) => { e.stopPropagation(); onEditarCurso?.(curso); }}
-                    className="p-1.5 hover:bg-gray-100 rounded-lg text-gray-400 hover:text-gray-600 transition-colors"
+                    className="p-1.5 bg-white/90 backdrop-blur-sm rounded-lg hover:bg-gray-100 transition-all shadow-sm"
                     title="Editar"
                   >
-                    <Edit3 className="w-3.5 h-3.5" />
+                    <Edit3 className="w-3.5 h-3.5 text-gray-600" />
                   </button>
                   <button
                     onClick={(e) => { e.stopPropagation(); handleEliminar(curso.id, curso.titulo); }}
                     disabled={eliminando === curso.id}
-                    className="p-1.5 hover:bg-red-50 rounded-lg text-gray-400 hover:text-red-500 transition-colors"
+                    className="p-1.5 bg-white/90 backdrop-blur-sm rounded-lg hover:bg-red-50 transition-all shadow-sm"
                     title="Eliminar"
                   >
-                    {eliminando === curso.id ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Trash2 className="w-3.5 h-3.5" />}
+                    {eliminando === curso.id ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Trash2 className="w-3.5 h-3.5 text-gray-600 hover:text-red-500" />}
                   </button>
                 </div>
+
+                {/* Categoría */}
+                {curso.categoria && (
+                  <div className="absolute bottom-3 left-3">
+                    <Badge variant="secondary" size="sm" className="bg-black/40 text-white border-0 backdrop-blur-sm">
+                      {categoriasOptions.find(c => c.value === curso.categoria)?.label || curso.categoria}
+                    </Badge>
+                  </div>
+                )}
+              </div>
+
+              {/* Contenido */}
+              <div className="p-4">
+                <div className="flex items-center gap-2 text-xs text-gray-400 mb-2">
+                  <span className="flex items-center gap-1">
+                    <Clock className="w-3 h-3" />
+                    {curso.duracion || 'Sin duración'}
+                  </span>
+                  <span className="w-1 h-1 rounded-full bg-gray-300" />
+                  <span className="flex items-center gap-1">
+                    <FileText className="w-3 h-3" />
+                    {(curso.modulos || []).reduce((acc, m) => acc + (m.lecciones || []).length, 0)} lecciones
+                  </span>
+                </div>
+
+                <h3 className="font-semibold text-gray-900 line-clamp-1 text-base">
+                  {curso.titulo}
+                </h3>
+                <p className="text-sm text-gray-500 line-clamp-2 mt-1 min-h-[2.5rem]">
+                  {curso.descripcion || 'Sin descripción'}
+                </p>
+
+                <div className="flex items-center justify-between mt-3 pt-3 border-t border-gray-100">
+                  <div className="flex items-center gap-2">
+                    <div className="w-6 h-6 rounded-full bg-[#e6f4f2] flex items-center justify-center">
+                      <span className="text-[10px] font-semibold text-[#0f766e]">
+                        {curso.instructor ? curso.instructor.charAt(0).toUpperCase() : 'I'}
+                      </span>
+                    </div>
+                    <span className="text-xs text-gray-600 truncate max-w-[100px]">
+                      {curso.instructor || 'Sin instructor'}
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-3 text-xs text-gray-400">
+                    <span className="flex items-center gap-1">
+                      <Users className="w-3 h-3" />
+                      {curso.estudiantes_count || 0}
+                    </span>
+                    {curso.precio_tipo === 'pago' ? (
+                      <Badge variant="warning" size="sm" className="text-[10px]">
+                        {curso.moneda} {curso.precio_monto}
+                      </Badge>
+                    ) : (
+                      <Badge variant="secondary" size="sm" className="text-[10px]">
+                        Gratis
+                      </Badge>
+                    )}
+                  </div>
+                </div>
+
+                {/* Progreso (si está publicado) */}
+                {String(curso.estado || '').toUpperCase() === 'PUBLICADO' && curso.progreso !== undefined && (
+                  <div className="mt-3">
+                    <div className="flex items-center justify-between text-xs text-gray-400 mb-1">
+                      <span>Progreso</span>
+                      <span>{curso.progreso || 0}%</span>
+                    </div>
+                    <div className="w-full h-1 bg-gray-100 rounded-full overflow-hidden">
+                      <div 
+                        className="h-full bg-[#0f766e] rounded-full transition-all duration-500"
+                        style={{ width: `${curso.progreso || 0}%` }}
+                      />
+                    </div>
+                  </div>
+                )}
+
+                {/* Acción principal */}
+                <button
+                  onClick={() => onVerCurso?.(curso.id)}
+                  className="mt-3 w-full py-2 text-sm font-medium text-[#0f766e] border border-[#0f766e]/20 rounded-xl hover:bg-[#e6f4f2] transition-colors flex items-center justify-center gap-1"
+                >
+                  {String(curso.estado || '').toUpperCase() === 'PUBLICADO' ? (
+                    <>Ver curso <ChevronRight className="w-4 h-4" /></>
+                  ) : (
+                    <>Continuar editando <ChevronRight className="w-4 h-4" /></>
+                  )}
+                </button>
               </div>
             </div>
           ))}

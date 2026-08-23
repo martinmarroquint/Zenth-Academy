@@ -1,15 +1,16 @@
 // front/src/components/cursos/CreadorCurso.jsx
-// COMPLETO - CON EDITOR DE TEXTO ENRIQUECIDO TIPTAP
-// ACTUALIZADO: Cursos pagos, bloqueos, metadata, y creación completa de exámenes
+// VERSIÓN ACTUALIZADA - CON MODAL DE EXAMEN COMPLETO
 
 import React, { useState, useEffect } from 'react';
 import {
   ArrowLeft, Save, Plus, Trash2, GripVertical,
-  Type, Video, FileText, BookOpen, X,
-  ChevronDown, Image, Link as LinkIcon, Loader2,
-  Edit3, Eye, Award, ExternalLink, Send,
-  Tag, Target, ListChecks, Users, DollarSign, CreditCard,
-  Calendar, Lock as LockIcon
+  Video, FileText, BookOpen, X,
+  ChevronDown, Link as LinkIcon, Loader2,
+  Edit3, Eye, Award, Send,
+  DollarSign, Lock as LockIcon, FileCheck,
+  Settings, CheckCircle, AlertCircle,
+  Globe, Target, Clock, User, Image as ImageIcon,
+  Layout, Layers, MoveUp, MoveDown
 } from 'lucide-react';
 import cursosService from '../../services/cursosService';
 import examenesService from '../../services/examenesService';
@@ -18,120 +19,157 @@ import EditorTexto from './EditorTexto';
 import ModalCrearExamenRapido from './ModalCrearExamenRapido';
 
 // =============================================
+// COMPONENTES UI
+// =============================================
+import Dropdown from '../ui/Dropdown';
+import Switch from '../ui/Switch';
+import Input from '../ui/Input';
+import Badge from '../ui/Badge';
+
+// =============================================
 // CONSTANTES
 // =============================================
 
 const CATEGORIAS = [
-  { id: 'general', label: 'General' },
-  { id: 'programacion', label: 'Programación' },
-  { id: 'web', label: 'Desarrollo Web' },
-  { id: 'movil', label: 'Desarrollo Móvil' },
-  { id: 'datos', label: 'Data Science' },
-  { id: 'ia', label: 'Inteligencia Artificial' },
-  { id: 'diseno', label: 'Diseño' },
-  { id: 'marketing', label: 'Marketing' },
-  { id: 'negocios', label: 'Negocios' },
-  { id: 'educacion', label: 'Educación' },
-  { id: 'salud', label: 'Salud' },
-  { id: 'idiomas', label: 'Idiomas' },
-  { id: 'musica', label: 'Música' },
-  { id: 'arte', label: 'Arte' },
-  { id: 'fotografia', label: 'Fotografía' },
-  { id: 'finanzas', label: 'Finanzas' },
-  { id: 'emprendimiento', label: 'Emprendimiento' },
-  { id: 'liderazgo', label: 'Liderazgo' },
-  { id: 'productividad', label: 'Productividad' },
-  { id: 'bienestar', label: 'Bienestar' },
+  { value: 'general', label: 'General' },
+  { value: 'programacion', label: 'Programación' },
+  { value: 'web', label: 'Desarrollo Web' },
+  { value: 'movil', label: 'Desarrollo Móvil' },
+  { value: 'datos', label: 'Data Science' },
+  { value: 'ia', label: 'Inteligencia Artificial' },
+  { value: 'diseno', label: 'Diseño' },
+  { value: 'marketing', label: 'Marketing' },
+  { value: 'negocios', label: 'Negocios' },
+  { value: 'educacion', label: 'Educación' },
+  { value: 'salud', label: 'Salud' },
+  { value: 'idiomas', label: 'Idiomas' },
+  { value: 'musica', label: 'Música' },
+  { value: 'arte', label: 'Arte' },
+  { value: 'fotografia', label: 'Fotografía' },
+  { value: 'finanzas', label: 'Finanzas' },
+  { value: 'emprendimiento', label: 'Emprendimiento' },
+  { value: 'liderazgo', label: 'Liderazgo' },
+  { value: 'productividad', label: 'Productividad' },
+  { value: 'bienestar', label: 'Bienestar' },
 ];
 
 const NIVELES = [
-  { id: 'principiante', label: 'Principiante' },
-  { id: 'intermedio', label: 'Intermedio' },
-  { id: 'avanzado', label: 'Avanzado' },
-  { id: 'todos', label: 'Todos los niveles' },
+  { value: 'principiante', label: 'Principiante' },
+  { value: 'intermedio', label: 'Intermedio' },
+  { value: 'avanzado', label: 'Avanzado' },
+  { value: 'todos', label: 'Todos los niveles' },
 ];
 
 const MONEDAS = [
-  { id: 'PEN', label: 'PEN (S/)' },
-  { id: 'USD', label: 'USD ($)' },
-  { id: 'EUR', label: 'EUR (€)' },
-];
-
-const METODOS_PAGO = [
-  { id: 'yape', label: 'Yape' },
-  { id: 'plin', label: 'Plin' },
-  { id: 'ambos', label: 'Yape y Plin' },
+  { value: 'PEN', label: 'PEN' },
+  { value: 'USD', label: 'USD' },
+  { value: 'EUR', label: 'EUR' },
 ];
 
 const TIPOS_BLOQUEO = [
-  { id: 'ninguno', label: 'Sin bloqueo' },
-  { id: 'fecha', label: 'Por fecha' },
-  { id: 'secuencial', label: 'Secuencial' },
-  { id: 'desempeno', label: 'Por desempeño' },
-  { id: 'mixto', label: 'Mixto' },
+  { value: 'ninguno', label: 'Sin bloqueo' },
+  { value: 'secuencial', label: 'Secuencial' },
+  { value: 'fecha', label: 'Por fecha' },
+];
+
+const TIPOS_BLOQUE = [
+  { value: 'video', label: 'Video', icon: Video },
+  { value: 'texto', label: 'Texto', icon: FileText },
+  { value: 'quiz', label: 'Cuestionario', icon: BookOpen },
+  { value: 'examen', label: 'Examen', icon: Award },
+  { value: 'recurso', label: 'Recurso', icon: LinkIcon },
 ];
 
 // =============================================
-// COMPONENTE EDITOR DE LECCIONES
+// COMPONENTE BLOQUE DE CONTENIDO
 // =============================================
-const EditorLeccion = ({ 
-  leccion, 
-  onUpdate, 
-  onEliminar, 
-  examenesDisponibles = [], 
+const BloqueContenido = ({
+  bloque,
+  index,
+  onUpdate,
+  onEliminar,
+  onMoveUp,
+  onMoveDown,
+  examenesDisponibles = [],
   cuestionariosDisponibles = [],
   onExamenCreado,
-  cursoTitulo = 'Curso'
+  cursoTitulo = 'Curso',
+  totalBloques
 }) => {
   const [editando, setEditando] = useState(false);
   const [vistaPrevia, setVistaPrevia] = useState(false);
-  const [tempLeccion, setTempLeccion] = useState(leccion);
+  const [tempBloque, setTempBloque] = useState(bloque);
   const [mostrarModalExamen, setMostrarModalExamen] = useState(false);
 
   const handleSave = () => {
-    onUpdate(tempLeccion);
+    onUpdate(tempBloque);
     setEditando(false);
   };
 
   const handleCancel = () => {
-    setTempLeccion(leccion);
+    setTempBloque(bloque);
     setEditando(false);
   };
 
+  const getTipoLabel = (tipo) => {
+    const found = TIPOS_BLOQUE.find(t => t.value === tipo);
+    return found ? found.label : tipo;
+  };
+
+  const getTipoIcon = (tipo) => {
+    const found = TIPOS_BLOQUE.find(t => t.value === tipo);
+    return found ? found.icon : FileText;
+  };
+
   if (!editando) {
+    const IconComponent = getTipoIcon(bloque.tipo);
     return (
       <div className="flex items-center gap-2 p-2 bg-gray-50 rounded-lg hover:bg-gray-100 transition-colors group">
         <GripVertical className="w-3.5 h-3.5 text-gray-300 cursor-grab" />
-        <span className="text-xs text-gray-400 min-w-[50px]">{leccion.tipo}</span>
-        <span className="flex-1 text-sm text-gray-700 truncate">{leccion.titulo}</span>
-        {leccion.tipo === 'examen' && (
-          <Award className="w-3.5 h-3.5 text-amber-500 flex-shrink-0" />
-        )}
-        <button
-          onClick={() => setEditando(true)}
-          className="p-1 hover:bg-white rounded text-gray-400 hover:text-gray-600 transition-colors opacity-0 group-hover:opacity-100"
-        >
-          <Edit3 className="w-3.5 h-3.5" />
-        </button>
-        <button
-          onClick={onEliminar}
-          className="p-1 hover:bg-red-50 rounded text-gray-400 hover:text-red-500 transition-colors opacity-0 group-hover:opacity-100"
-        >
-          <X className="w-3.5 h-3.5" />
-        </button>
+        <IconComponent className="w-4 h-4 text-gray-400" />
+        <span className="text-xs text-gray-400 min-w-[50px]">{getTipoLabel(bloque.tipo)}</span>
+        <span className="flex-1 text-sm text-gray-700 truncate">
+          {bloque.titulo || `Bloque ${index + 1}`}
+        </span>
+        <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
+          <button
+            onClick={() => onMoveUp()}
+            disabled={index === 0}
+            className={`p-0.5 rounded hover:bg-gray-200 ${index === 0 ? 'text-gray-300 cursor-not-allowed' : 'text-gray-400 hover:text-gray-600'}`}
+          >
+            <MoveUp className="w-3.5 h-3.5" />
+          </button>
+          <button
+            onClick={() => onMoveDown()}
+            disabled={index === totalBloques - 1}
+            className={`p-0.5 rounded hover:bg-gray-200 ${index === totalBloques - 1 ? 'text-gray-300 cursor-not-allowed' : 'text-gray-400 hover:text-gray-600'}`}
+          >
+            <MoveDown className="w-3.5 h-3.5" />
+          </button>
+          <button
+            onClick={() => setEditando(true)}
+            className="p-0.5 hover:bg-gray-200 rounded text-gray-400 hover:text-gray-600 transition-colors"
+          >
+            <Edit3 className="w-3.5 h-3.5" />
+          </button>
+          <button
+            onClick={onEliminar}
+            className="p-0.5 hover:bg-red-100 rounded text-gray-400 hover:text-red-500 transition-colors"
+          >
+            <X className="w-3.5 h-3.5" />
+          </button>
+        </div>
       </div>
     );
   }
 
   return (
-    <div className="bg-white border border-gray-200 rounded-lg p-4 space-y-3">
+    <div className="bg-white border border-gray-200 rounded-lg p-4 space-y-3 relative z-10">
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
-          <span className="text-xs font-medium text-gray-500">EDITANDO LECCIÓN</span>
+          <span className="text-xs font-medium text-gray-500">EDITANDO BLOQUE</span>
           {vistaPrevia && (
-            <span className="text-xs px-2 py-0.5 rounded-full" style={{ backgroundColor: '#e6f4f2', color: '#0f766e' }}>
-              Vista previa
-            </span>
+            <Badge variant="success" size="sm">Vista previa</Badge>
           )}
         </div>
         <div className="flex items-center gap-1">
@@ -151,119 +189,110 @@ const EditorLeccion = ({
             onClick={handleSave}
             className="px-3 py-1 text-xs font-medium text-white rounded-lg transition-colors"
             style={{ backgroundColor: '#0f766e' }}
-            onMouseEnter={(e) => e.target.style.backgroundColor = '#0d5e57'}
-            onMouseLeave={(e) => e.target.style.backgroundColor = '#0f766e'}
           >
             Guardar
           </button>
         </div>
       </div>
 
-      <input
-        type="text"
-        value={tempLeccion.titulo}
-        onChange={(e) => setTempLeccion({ ...tempLeccion, titulo: e.target.value })}
-        placeholder="Título de la lección"
-        className="w-full px-3 py-1.5 text-sm border border-gray-200 rounded-lg outline-none transition-colors focus:border-[#0f766e] focus:ring-2 focus:ring-[#0f766e]/20"
-      />
-
-      <div className="space-y-3">
-        <select
-          value={tempLeccion.tipo}
-          onChange={(e) => {
-            const nuevoTipo = e.target.value;
-            setTempLeccion({
-              ...tempLeccion,
-              tipo: nuevoTipo,
-              contenido: nuevoTipo === 'video' ? { video_url: '' } :
-                        nuevoTipo === 'texto' ? { texto: '' } :
-                        nuevoTipo === 'quiz' ? { cuestionario_id: '' } :
-                        nuevoTipo === 'examen' ? { examen_id: '' } :
+      <div className="grid grid-cols-2 gap-3">
+        <Input
+          value={tempBloque.titulo || ''}
+          onChange={(e) => setTempBloque({ ...tempBloque, titulo: e.target.value })}
+          placeholder="Título del bloque"
+          className="w-full"
+        />
+        <Dropdown
+          value={tempBloque.tipo}
+          onChange={(value) => {
+            setTempBloque({
+              ...tempBloque,
+              tipo: value,
+              contenido: value === 'video' ? { video_url: '' } :
+                        value === 'texto' ? { texto: '' } :
+                        value === 'quiz' ? { cuestionario_id: '' } :
+                        value === 'examen' ? { examen_id: '' } :
                         { archivos: [] }
             });
           }}
-          className="px-3 py-1.5 text-sm border border-gray-200 rounded-lg outline-none focus:border-[#0f766e] focus:ring-2 focus:ring-[#0f766e]/20 bg-white w-full"
-        >
-          <option value="video">Video (YouTube)</option>
-          <option value="texto">Texto Enriquecido</option>
-          <option value="quiz">Cuestionario</option>
-          <option value="examen">Examen</option>
-          <option value="recurso">Recurso / Archivos</option>
-          <option value="pizarra">Pizarra</option>
-        </select>
+          options={TIPOS_BLOQUE.map(t => ({ value: t.value, label: t.label }))}
+          placeholder="Tipo de contenido"
+          className="w-full"
+        />
+      </div>
 
+      <div className="space-y-3 relative z-20">
         {!vistaPrevia && (
           <>
-            {tempLeccion.tipo === 'video' && (
+            {tempBloque.tipo === 'video' && (
               <div>
-                <label className="text-xs text-gray-500">ID o URL de YouTube</label>
-                <input
-                  type="text"
-                  value={tempLeccion.contenido?.video_url || ''}
-                  onChange={(e) => setTempLeccion({
-                    ...tempLeccion,
-                    contenido: { ...tempLeccion.contenido, video_url: e.target.value }
+                <label className="text-xs text-gray-500">URL de YouTube</label>
+                <Input
+                  value={tempBloque.contenido?.video_url || ''}
+                  onChange={(e) => setTempBloque({
+                    ...tempBloque,
+                    contenido: { ...tempBloque.contenido, video_url: e.target.value }
                   })}
-                  placeholder="ej: dQw4w9WgXcQ o https://youtu.be/..."
-                  className="w-full px-3 py-1.5 text-sm border border-gray-200 rounded-lg outline-none focus:border-[#0f766e] focus:ring-2 focus:ring-[#0f766e]/20 transition-colors"
+                  placeholder="https://youtu.be/..."
+                  className="w-full"
                 />
               </div>
             )}
 
-            {tempLeccion.tipo === 'texto' && (
+            {tempBloque.tipo === 'texto' && (
               <div>
-                <label className="text-xs text-gray-500">Contenido enriquecido</label>
+                <label className="text-xs text-gray-500">Contenido</label>
                 <EditorTexto
-                  contenido={tempLeccion.contenido?.texto || ''}
-                  onUpdate={(html) => setTempLeccion({
-                    ...tempLeccion,
-                    contenido: { ...tempLeccion.contenido, texto: html }
+                  contenido={tempBloque.contenido?.texto || ''}
+                  onUpdate={(html) => setTempBloque({
+                    ...tempBloque,
+                    contenido: { ...tempBloque.contenido, texto: html }
                   })}
-                  placeholder="Escribe el contenido de la lección..."
+                  placeholder="Escribe el contenido..."
                 />
               </div>
             )}
 
-            {tempLeccion.tipo === 'quiz' && (
+            {tempBloque.tipo === 'quiz' && (
               <div>
                 <label className="text-xs text-gray-500">Cuestionario</label>
-                <select
-                  value={tempLeccion.contenido?.cuestionario_id || ''}
-                  onChange={(e) => setTempLeccion({
-                    ...tempLeccion,
-                    contenido: { ...tempLeccion.contenido, cuestionario_id: e.target.value }
+                <Dropdown
+                  value={tempBloque.contenido?.cuestionario_id || ''}
+                  onChange={(value) => setTempBloque({
+                    ...tempBloque,
+                    contenido: { ...tempBloque.contenido, cuestionario_id: value }
                   })}
-                  className="w-full px-3 py-1.5 text-sm border border-gray-200 rounded-lg outline-none focus:border-[#0f766e] focus:ring-2 focus:ring-[#0f766e]/20 bg-white transition-colors"
-                >
-                  <option value="">— Seleccionar cuestionario —</option>
-                  {cuestionariosDisponibles.map((c) => (
-                    <option key={c.id} value={c.id}>
-                      {c.titulo}{c.estado ? ` (${String(c.estado).toUpperCase()})` : ''}
-                    </option>
-                  ))}
-                </select>
+                  options={[
+                    { value: '', label: 'Seleccionar cuestionario' },
+                    ...cuestionariosDisponibles.map((c) => ({
+                      value: c.id,
+                      label: c.titulo
+                    }))
+                  ]}
+                  className="w-full"
+                />
               </div>
             )}
 
-            {tempLeccion.tipo === 'examen' && (
+            {tempBloque.tipo === 'examen' && (
               <div>
                 <label className="text-xs text-gray-500">Examen</label>
-                <div className="flex items-center gap-2">
-                  <select
-                    value={tempLeccion.contenido?.examen_id || ''}
-                    onChange={(e) => setTempLeccion({
-                      ...tempLeccion,
-                      contenido: { ...tempLeccion.contenido, examen_id: e.target.value }
+                <div className="flex items-center gap-2 relative z-30">
+                  <Dropdown
+                    value={tempBloque.contenido?.examen_id || ''}
+                    onChange={(value) => setTempBloque({
+                      ...tempBloque,
+                      contenido: { ...tempBloque.contenido, examen_id: value }
                     })}
-                    className="flex-1 px-3 py-1.5 text-sm border border-gray-200 rounded-lg outline-none focus:border-[#0f766e] focus:ring-2 focus:ring-[#0f766e]/20 bg-white transition-colors"
-                  >
-                    <option value="">— Seleccionar examen —</option>
-                    {examenesDisponibles.map((ex) => (
-                      <option key={ex.id} value={ex.id}>
-                        {ex.titulo}{ex.total_preguntas ? ` (${ex.total_preguntas} preguntas)` : ''}
-                      </option>
-                    ))}
-                  </select>
+                    options={[
+                      { value: '', label: 'Seleccionar examen' },
+                      ...examenesDisponibles.map((ex) => ({
+                        value: ex.id,
+                        label: ex.titulo
+                      }))
+                    ]}
+                    className="flex-1"
+                  />
                   <button
                     onClick={() => setMostrarModalExamen(true)}
                     className="px-3 py-1.5 text-xs font-medium text-white rounded-lg transition-colors flex items-center gap-1 whitespace-nowrap"
@@ -275,53 +304,47 @@ const EditorLeccion = ({
                     Nuevo
                   </button>
                 </div>
-                {examenesDisponibles.length === 0 && (
-                  <p className="text-xs text-amber-500 mt-1">No hay exámenes disponibles. Crea uno nuevo.</p>
-                )}
-                <p className="text-xs text-gray-400 mt-1">El estudiante lo resolverá embebido en el curso</p>
               </div>
             )}
 
-            {tempLeccion.tipo === 'recurso' && (
+            {tempBloque.tipo === 'recurso' && (
               <div>
-                <label className="text-xs text-gray-500">Recursos (links)</label>
+                <label className="text-xs text-gray-500">Recursos</label>
                 <div className="space-y-2">
-                  {(tempLeccion.contenido?.archivos || []).map((recurso, index) => (
+                  {(tempBloque.contenido?.archivos || []).map((recurso, index) => (
                     <div key={index} className="flex items-center gap-2">
-                      <input
-                        type="text"
+                      <Input
                         value={recurso.nombre || ''}
                         onChange={(e) => {
-                          const nuevos = [...(tempLeccion.contenido?.archivos || [])];
+                          const nuevos = [...(tempBloque.contenido?.archivos || [])];
                           nuevos[index] = { ...nuevos[index], nombre: e.target.value };
-                          setTempLeccion({
-                            ...tempLeccion,
-                            contenido: { ...tempLeccion.contenido, archivos: nuevos }
+                          setTempBloque({
+                            ...tempBloque,
+                            contenido: { ...tempBloque.contenido, archivos: nuevos }
                           });
                         }}
-                        placeholder="Nombre del recurso"
-                        className="flex-1 px-3 py-1.5 text-sm border border-gray-200 rounded-lg outline-none focus:border-[#0f766e] focus:ring-2 focus:ring-[#0f766e]/20 transition-colors"
+                        placeholder="Nombre"
+                        className="flex-1"
                       />
-                      <input
-                        type="text"
+                      <Input
                         value={recurso.url || ''}
                         onChange={(e) => {
-                          const nuevos = [...(tempLeccion.contenido?.archivos || [])];
+                          const nuevos = [...(tempBloque.contenido?.archivos || [])];
                           nuevos[index] = { ...nuevos[index], url: e.target.value };
-                          setTempLeccion({
-                            ...tempLeccion,
-                            contenido: { ...tempLeccion.contenido, archivos: nuevos }
+                          setTempBloque({
+                            ...tempBloque,
+                            contenido: { ...tempBloque.contenido, archivos: nuevos }
                           });
                         }}
                         placeholder="URL"
-                        className="flex-1 px-3 py-1.5 text-sm border border-gray-200 rounded-lg outline-none focus:border-[#0f766e] focus:ring-2 focus:ring-[#0f766e]/20 transition-colors"
+                        className="flex-1"
                       />
                       <button
                         onClick={() => {
-                          const nuevos = (tempLeccion.contenido?.archivos || []).filter((_, i) => i !== index);
-                          setTempLeccion({
-                            ...tempLeccion,
-                            contenido: { ...tempLeccion.contenido, archivos: nuevos }
+                          const nuevos = (tempBloque.contenido?.archivos || []).filter((_, i) => i !== index);
+                          setTempBloque({
+                            ...tempBloque,
+                            contenido: { ...tempBloque.contenido, archivos: nuevos }
                           });
                         }}
                         className="p-1 hover:bg-red-50 rounded text-gray-400 hover:text-red-500"
@@ -332,11 +355,11 @@ const EditorLeccion = ({
                   ))}
                   <button
                     onClick={() => {
-                      const actuales = tempLeccion.contenido?.archivos || [];
-                      setTempLeccion({
-                        ...tempLeccion,
+                      const actuales = tempBloque.contenido?.archivos || [];
+                      setTempBloque({
+                        ...tempBloque,
                         contenido: {
-                          ...tempLeccion.contenido,
+                          ...tempBloque.contenido,
                           archivos: [...actuales, { nombre: '', url: '', tipo: 'link' }]
                         }
                       });
@@ -352,38 +375,37 @@ const EditorLeccion = ({
         )}
 
         {vistaPrevia && (
-          <div className="border border-gray-200 rounded-lg p-4 min-h-[200px]">
-            {tempLeccion.tipo === 'video' && (
+          <div className="border border-gray-200 rounded-lg p-4 min-h-[100px]">
+            {tempBloque.tipo === 'video' && (
               <div className="text-center text-gray-400">
                 <Video className="w-12 h-12 mx-auto mb-2 text-gray-300" />
-                <p>Video: {tempLeccion.contenido?.video_url || 'Sin video'}</p>
+                <p>Video: {tempBloque.contenido?.video_url || 'Sin video'}</p>
               </div>
             )}
-            {tempLeccion.tipo === 'texto' && (
+            {tempBloque.tipo === 'texto' && (
               <div 
                 className="prose prose-slate max-w-none"
-                dangerouslySetInnerHTML={{ __html: tempLeccion.contenido?.texto || '' }}
+                dangerouslySetInnerHTML={{ __html: tempBloque.contenido?.texto || '' }}
               />
             )}
-            {tempLeccion.tipo === 'quiz' && (
+            {tempBloque.tipo === 'quiz' && (
               <div className="text-center text-gray-400">
                 <BookOpen className="w-12 h-12 mx-auto mb-2 text-gray-300" />
-                <p>{cuestionariosDisponibles.find(c => c.id === tempLeccion.contenido?.cuestionario_id)?.titulo || 'Cuestionario sin asignar'}</p>
+                <p>Cuestionario</p>
               </div>
             )}
-            {tempLeccion.tipo === 'examen' && (
+            {tempBloque.tipo === 'examen' && (
               <div className="text-center text-gray-400">
                 <Award className="w-12 h-12 mx-auto mb-2 text-gray-300" />
-                <p>{examenesDisponibles.find(e => e.id === tempLeccion.contenido?.examen_id)?.titulo || 'Examen sin asignar'}</p>
+                <p>Examen</p>
               </div>
             )}
-            {tempLeccion.tipo === 'recurso' && (
+            {tempBloque.tipo === 'recurso' && (
               <div className="space-y-2">
-                {(tempLeccion.contenido?.archivos || []).map((r, i) => (
+                {(tempBloque.contenido?.archivos || []).map((r, i) => (
                   <div key={i} className="flex items-center gap-2 text-sm text-gray-600">
                     <LinkIcon className="w-4 h-4 text-gray-400" />
-                    <span>{r.nombre || 'Recurso sin nombre'}</span>
-                    <span className="text-xs text-gray-400">{r.url || 'Sin URL'}</span>
+                    <span>{r.nombre || 'Recurso'}</span>
                   </div>
                 ))}
               </div>
@@ -392,22 +414,228 @@ const EditorLeccion = ({
         )}
       </div>
 
-      {/* Modal de creación de examen - usa el componente completo */}
+      {/* Modal para crear examen - ACTUALIZADO */}
       <ModalCrearExamenRapido
         abierto={mostrarModalExamen}
         onClose={() => setMostrarModalExamen(false)}
         onExamenCreado={(examen) => {
-          setTempLeccion({
-            ...tempLeccion,
-            contenido: { ...tempLeccion.contenido, examen_id: examen.id }
+          // Actualizar el bloque con el examen seleccionado
+          setTempBloque({
+            ...tempBloque,
+            contenido: { ...tempBloque.contenido, examen_id: examen.id }
           });
+          // Notificar al padre para actualizar la lista de exámenes disponibles
           if (onExamenCreado) {
             onExamenCreado(examen);
           }
+          // Cerrar el modal
           setMostrarModalExamen(false);
         }}
         cursoTitulo={cursoTitulo}
       />
+    </div>
+  );
+};
+
+// =============================================
+// BARRA DE HERRAMIENTAS PROFESIONAL
+// =============================================
+const Toolbar = ({ datos, setDatos }) => {
+  const [pagoActivo, setPagoActivo] = useState(datos.precio_tipo === 'pago');
+  const [certificadoActivo, setCertificadoActivo] = useState(datos.certificado_habilitado);
+
+  const handlePagoToggle = (checked) => {
+    setPagoActivo(checked);
+    setDatos({ 
+      ...datos, 
+      precio_tipo: checked ? 'pago' : 'gratis',
+      precio_monto: checked ? datos.precio_monto || '49.99' : '',
+    });
+  };
+
+  const handleCertificadoToggle = (checked) => {
+    setCertificadoActivo(checked);
+    setDatos({ 
+      ...datos, 
+      certificado_habilitado: checked,
+      certificado_nota_minima: checked ? datos.certificado_nota_minima || '' : '',
+    });
+  };
+
+  return (
+    <div className="bg-white rounded-xl border border-gray-200/60 shadow-sm">
+      <div className="px-4 py-2 border-b border-gray-100 flex items-center gap-3 bg-gray-50/50">
+        <Settings className="w-4 h-4 text-gray-400" />
+        <span className="text-xs font-medium text-gray-600 uppercase tracking-wider">Configuración del curso</span>
+        <div className="flex-1" />
+        
+        <div className="flex items-center gap-2">
+          <Badge 
+            variant={datos.precio_tipo === 'pago' ? 'success' : 'secondary'} 
+            size="sm"
+            className="flex items-center gap-1"
+          >
+            <DollarSign className="w-3 h-3" />
+            {datos.precio_tipo === 'pago' ? `Pago (${datos.moneda} ${datos.precio_monto})` : 'Gratis'}
+          </Badge>
+          
+          {datos.certificado_habilitado && (
+            <Badge variant="success" size="sm" className="flex items-center gap-1">
+              <FileCheck className="w-3 h-3" />
+              Certificado
+              {datos.certificado_nota_minima && ` (Nota: ${datos.certificado_nota_minima})`}
+            </Badge>
+          )}
+          
+          {datos.tipo_bloqueo !== 'ninguno' && (
+            <Badge variant="warning" size="sm" className="flex items-center gap-1">
+              <LockIcon className="w-3 h-3" />
+              {TIPOS_BLOQUEO.find(t => t.value === datos.tipo_bloqueo)?.label}
+            </Badge>
+          )}
+        </div>
+      </div>
+
+      <div className="p-3 flex items-center gap-4 flex-wrap overflow-visible">
+        <div className="flex items-center gap-3 overflow-visible">
+          <div className="flex items-center gap-1 overflow-visible">
+            <Globe className="w-3.5 h-3.5 text-gray-400 flex-shrink-0" />
+            <Dropdown
+              value={datos.categoria}
+              onChange={(value) => setDatos({ ...datos, categoria: value })}
+              options={CATEGORIAS}
+              placeholder="Categoría"
+              className="w-32"
+              size="sm"
+            />
+          </div>
+          
+          <div className="flex items-center gap-1 overflow-visible">
+            <Target className="w-3.5 h-3.5 text-gray-400 flex-shrink-0" />
+            <Dropdown
+              value={datos.nivel}
+              onChange={(value) => setDatos({ ...datos, nivel: value })}
+              options={NIVELES}
+              placeholder="Nivel"
+              className="w-28"
+              size="sm"
+            />
+          </div>
+          
+          <div className="flex items-center gap-1">
+            <Clock className="w-3.5 h-3.5 text-gray-400 flex-shrink-0" />
+            <Input
+              value={datos.duracion}
+              onChange={(e) => setDatos({ ...datos, duracion: e.target.value })}
+              placeholder="Duración"
+              className="w-24"
+              size="sm"
+            />
+          </div>
+        </div>
+
+        <div className="w-px h-6 bg-gray-200 flex-shrink-0" />
+
+        <div className="flex items-center gap-3 overflow-visible">
+          <div className="flex items-center gap-1">
+            <User className="w-3.5 h-3.5 text-gray-400 flex-shrink-0" />
+            <Input
+              value={datos.instructor}
+              onChange={(e) => setDatos({ ...datos, instructor: e.target.value })}
+              placeholder="Instructor"
+              className="w-32"
+              size="sm"
+            />
+          </div>
+          
+          <div className="flex items-center gap-1">
+            <ImageIcon className="w-3.5 h-3.5 text-gray-400 flex-shrink-0" />
+            <Input
+              value={datos.imagen_url}
+              onChange={(e) => setDatos({ ...datos, imagen_url: e.target.value })}
+              placeholder="URL imagen"
+              className="w-40"
+              size="sm"
+            />
+          </div>
+        </div>
+
+        <div className="w-px h-6 bg-gray-200 flex-shrink-0" />
+
+        <div className="flex items-center gap-4 overflow-visible">
+          <div className="flex items-center gap-2 overflow-visible">
+            <Switch
+              checked={pagoActivo}
+              onChange={handlePagoToggle}
+              size="sm"
+            />
+            <span className="text-xs text-gray-600 flex-shrink-0">Pago</span>
+            {pagoActivo && (
+              <div className="flex items-center gap-1 ml-1 overflow-visible">
+                <Input
+                  type="number"
+                  value={datos.precio_monto}
+                  onChange={(e) => setDatos({ ...datos, precio_monto: e.target.value })}
+                  placeholder="49.99"
+                  className="w-16"
+                  size="sm"
+                />
+                <Dropdown
+                  value={datos.moneda}
+                  onChange={(value) => setDatos({ ...datos, moneda: value })}
+                  options={MONEDAS}
+                  className="w-16"
+                  size="sm"
+                />
+                <Input
+                  value={datos.numero_pago}
+                  onChange={(e) => setDatos({ ...datos, numero_pago: e.target.value })}
+                  placeholder="Yape/Plin"
+                  className="w-24"
+                  size="sm"
+                />
+              </div>
+            )}
+          </div>
+
+          <div className="flex items-center gap-2 overflow-visible">
+            <Switch
+              checked={certificadoActivo}
+              onChange={handleCertificadoToggle}
+              size="sm"
+            />
+            <span className="text-xs text-gray-600 flex-shrink-0">Certificado</span>
+            {certificadoActivo && (
+              <div className="flex items-center gap-1 ml-1 overflow-visible">
+                <span className="text-xs text-gray-400 flex-shrink-0">Nota:</span>
+                <Input
+                  type="number"
+                  min="0"
+                  max="20"
+                  step="0.5"
+                  value={datos.certificado_nota_minima}
+                  onChange={(e) => setDatos({ ...datos, certificado_nota_minima: e.target.value })}
+                  placeholder="11"
+                  className="w-14"
+                  size="sm"
+                />
+              </div>
+            )}
+          </div>
+
+          <div className="flex items-center gap-2 overflow-visible">
+            <LockIcon className="w-3.5 h-3.5 text-gray-400 flex-shrink-0" />
+            <Dropdown
+              value={datos.tipo_bloqueo}
+              onChange={(value) => setDatos({ ...datos, tipo_bloqueo: value })}
+              options={TIPOS_BLOQUEO}
+              placeholder="Bloqueo"
+              className="w-28"
+              size="sm"
+            />
+          </div>
+        </div>
+      </div>
     </div>
   );
 };
@@ -420,8 +648,6 @@ const CreadorCurso = ({ cursoInicial = null, onGuardar, onVolver }) => {
   const [error, setError] = useState('');
   const [examenesDisponibles, setExamenesDisponibles] = useState([]);
   const [cuestionariosDisponibles, setCuestionariosDisponibles] = useState([]);
-  const [mostrarBloqueo, setMostrarBloqueo] = useState(false);
-  const [mostrarCertificado, setMostrarCertificado] = useState(false);
 
   useEffect(() => {
     let activo = true;
@@ -459,25 +685,15 @@ const CreadorCurso = ({ cursoInicial = null, onGuardar, onVolver }) => {
     precio_tipo: cursoInicial?.precio_tipo || 'gratis',
     precio_monto: cursoInicial?.precio_monto || '',
     moneda: cursoInicial?.moneda || 'PEN',
-    metodo_pago: cursoInicial?.metodo_pago || '',
     numero_pago: cursoInicial?.numero_pago || '',
-    instrucciones_pago: cursoInicial?.instrucciones_pago || '',
     duracion: cursoInicial?.duracion || '',
     instructor: cursoInicial?.instructor || '',
     imagen_url: cursoInicial?.imagen_url || '',
-    etiquetas: cursoInicial?.etiquetas || [],
-    requisitos: cursoInicial?.requisitos || [],
-    objetivos: cursoInicial?.objetivos || [],
-    publico_objetivo: cursoInicial?.publico_objetivo || '',
     tipo_bloqueo: cursoInicial?.tipo_bloqueo || 'ninguno',
     bloqueo_config: cursoInicial?.bloqueo_config || {},
     certificado_habilitado: cursoInicial?.certificado_habilitado !== false,
     certificado_nota_minima: cursoInicial?.certificado_nota_minima ?? '',
   });
-
-  const [etiquetaInput, setEtiquetaInput] = useState('');
-  const [requisitoInput, setRequisitoInput] = useState('');
-  const [objetivoInput, setObjetivoInput] = useState('');
 
   const [modulos, setModulos] = useState(() => {
     if (cursoInicial?.modulos) return cursoInicial.modulos;
@@ -488,8 +704,20 @@ const CreadorCurso = ({ cursoInicial = null, onGuardar, onVolver }) => {
         { 
           id: Date.now() + 1, 
           titulo: 'Introducción', 
-          tipo: 'video', 
-          contenido: { video_url: '' } 
+          bloques: [
+            { 
+              id: Date.now() + 2, 
+              titulo: 'Video introductorio', 
+              tipo: 'video', 
+              contenido: { video_url: '' } 
+            },
+            { 
+              id: Date.now() + 3, 
+              titulo: 'Contenido de la clase', 
+              tipo: 'texto', 
+              contenido: { texto: '' } 
+            }
+          ] 
         }
       ] 
     }];
@@ -504,8 +732,14 @@ const CreadorCurso = ({ cursoInicial = null, onGuardar, onVolver }) => {
       lecciones: [{ 
         id: Date.now() + 1, 
         titulo: 'Nueva Lección', 
-        tipo: 'video', 
-        contenido: { video_url: '' } 
+        bloques: [
+          { 
+            id: Date.now() + 2, 
+            titulo: 'Contenido', 
+            tipo: 'texto', 
+            contenido: { texto: '' } 
+          }
+        ] 
       }]
     };
     setModulos([...modulos, nuevoModulo]);
@@ -524,8 +758,14 @@ const CreadorCurso = ({ cursoInicial = null, onGuardar, onVolver }) => {
       const nuevaLeccion = { 
         id: Date.now(), 
         titulo: `Lección ${m.lecciones.length + 1}`, 
-        tipo: 'video', 
-        contenido: { video_url: '' } 
+        bloques: [
+          { 
+            id: Date.now() + 1, 
+            titulo: 'Contenido', 
+            tipo: 'texto', 
+            contenido: { texto: '' } 
+          }
+        ] 
       };
       return { ...m, lecciones: [...m.lecciones, nuevaLeccion] };
     }));
@@ -535,6 +775,82 @@ const CreadorCurso = ({ cursoInicial = null, onGuardar, onVolver }) => {
     setModulos(modulos.map(m => {
       if (m.id !== moduloId) return m;
       return { ...m, lecciones: m.lecciones.filter(l => l.id !== leccionId) };
+    }));
+  };
+
+  const agregarBloque = (moduloId, leccionId) => {
+    setModulos(modulos.map(m => {
+      if (m.id !== moduloId) return m;
+      return {
+        ...m,
+        lecciones: m.lecciones.map(l => {
+          if (l.id !== leccionId) return l;
+          return {
+            ...l,
+            bloques: [
+              ...l.bloques,
+              { 
+                id: Date.now(), 
+                titulo: `Bloque ${l.bloques.length + 1}`, 
+                tipo: 'texto', 
+                contenido: { texto: '' } 
+              }
+            ]
+          };
+        })
+      };
+    }));
+  };
+
+  const actualizarBloque = (moduloId, leccionId, bloqueActualizado) => {
+    setModulos(modulos.map(m => {
+      if (m.id !== moduloId) return m;
+      return {
+        ...m,
+        lecciones: m.lecciones.map(l => {
+          if (l.id !== leccionId) return l;
+          return {
+            ...l,
+            bloques: l.bloques.map(b => 
+              b.id === bloqueActualizado.id ? bloqueActualizado : b
+            )
+          };
+        })
+      };
+    }));
+  };
+
+  const eliminarBloque = (moduloId, leccionId, bloqueId) => {
+    setModulos(modulos.map(m => {
+      if (m.id !== moduloId) return m;
+      return {
+        ...m,
+        lecciones: m.lecciones.map(l => {
+          if (l.id !== leccionId) return l;
+          return {
+            ...l,
+            bloques: l.bloques.filter(b => b.id !== bloqueId)
+          };
+        })
+      };
+    }));
+  };
+
+  const moverBloque = (moduloId, leccionId, bloqueId, direccion) => {
+    setModulos(modulos.map(m => {
+      if (m.id !== moduloId) return m;
+      return {
+        ...m,
+        lecciones: m.lecciones.map(l => {
+          if (l.id !== leccionId) return l;
+          const index = l.bloques.findIndex(b => b.id === bloqueId);
+          const nuevoIndex = index + direccion;
+          if (nuevoIndex < 0 || nuevoIndex >= l.bloques.length) return l;
+          const nuevosBloques = [...l.bloques];
+          [nuevosBloques[index], nuevosBloques[nuevoIndex]] = [nuevosBloques[nuevoIndex], nuevosBloques[index]];
+          return { ...l, bloques: nuevosBloques };
+        })
+      };
     }));
   };
 
@@ -561,39 +877,6 @@ const CreadorCurso = ({ cursoInicial = null, onGuardar, onVolver }) => {
     });
   };
 
-  const agregarEtiqueta = () => {
-    if (etiquetaInput.trim() && !datos.etiquetas.includes(etiquetaInput.trim())) {
-      setDatos({ ...datos, etiquetas: [...datos.etiquetas, etiquetaInput.trim()] });
-      setEtiquetaInput('');
-    }
-  };
-
-  const eliminarEtiqueta = (etiqueta) => {
-    setDatos({ ...datos, etiquetas: datos.etiquetas.filter(e => e !== etiqueta) });
-  };
-
-  const agregarRequisito = () => {
-    if (requisitoInput.trim() && !datos.requisitos.includes(requisitoInput.trim())) {
-      setDatos({ ...datos, requisitos: [...datos.requisitos, requisitoInput.trim()] });
-      setRequisitoInput('');
-    }
-  };
-
-  const eliminarRequisito = (requisito) => {
-    setDatos({ ...datos, requisitos: datos.requisitos.filter(r => r !== requisito) });
-  };
-
-  const agregarObjetivo = () => {
-    if (objetivoInput.trim() && !datos.objetivos.includes(objetivoInput.trim())) {
-      setDatos({ ...datos, objetivos: [...datos.objetivos, objetivoInput.trim()] });
-      setObjetivoInput('');
-    }
-  };
-
-  const eliminarObjetivo = (objetivo) => {
-    setDatos({ ...datos, objetivos: datos.objetivos.filter(o => o !== objetivo) });
-  };
-
   const guardarCurso = async () => {
     if (!datos.titulo.trim()) {
       setError('El título del curso es obligatorio');
@@ -612,13 +895,7 @@ const CreadorCurso = ({ cursoInicial = null, onGuardar, onVolver }) => {
       precio_tipo: datos.precio_tipo || 'gratis',
       precio_monto: datos.precio_tipo === 'pago' && datos.precio_monto ? parseFloat(datos.precio_monto) : null,
       moneda: datos.moneda || 'PEN',
-      metodo_pago: datos.precio_tipo === 'pago' ? datos.metodo_pago : null,
       numero_pago: datos.precio_tipo === 'pago' ? datos.numero_pago : null,
-      instrucciones_pago: datos.precio_tipo === 'pago' ? datos.instrucciones_pago : null,
-      etiquetas: datos.etiquetas || [],
-      requisitos: datos.requisitos || [],
-      objetivos: datos.objetivos || [],
-      publico_objetivo: datos.publico_objetivo || null,
       tipo_bloqueo: datos.tipo_bloqueo || 'ninguno',
       bloqueo_config: datos.bloqueo_config || {},
       certificado_habilitado: !!datos.certificado_habilitado,
@@ -629,7 +906,10 @@ const CreadorCurso = ({ cursoInicial = null, onGuardar, onVolver }) => {
         ...m,
         lecciones: m.lecciones.map(l => ({
           ...l,
-          contenido: l.contenido || {}
+          bloques: l.bloques.map(b => ({
+            ...b,
+            contenido: b.contenido || {}
+          }))
         }))
       }))
     };
@@ -675,7 +955,7 @@ const CreadorCurso = ({ cursoInicial = null, onGuardar, onVolver }) => {
 
   return (
     <div className="min-h-screen bg-[#fbfbfa]">
-      <header className="sticky top-0 z-30 bg-white/80 backdrop-blur-sm border-b border-gray-200/50">
+      <header className="sticky top-0 z-50 bg-white/80 backdrop-blur-sm border-b border-gray-200/50">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 h-14 flex items-center justify-between">
           <div className="flex items-center gap-3">
             <button onClick={onVolver} className="p-2 hover:bg-gray-100 rounded-lg transition-colors text-gray-400 hover:text-gray-600">
@@ -684,15 +964,18 @@ const CreadorCurso = ({ cursoInicial = null, onGuardar, onVolver }) => {
             <span className="text-sm font-medium text-gray-700">
               {cursoInicial?.id ? 'Editar Curso' : 'Nuevo Curso'}
             </span>
+            <Badge variant="secondary" size="sm" className="ml-2">
+              {modulos.reduce((acc, m) => acc + m.lecciones.length, 0)} lecciones
+            </Badge>
           </div>
           <div className="flex items-center gap-2">
             <button
               onClick={handlePublicar}
-              disabled={cargando}
-              className="px-4 py-1.5 text-sm font-medium text-white rounded-lg transition-colors flex items-center gap-2 disabled:opacity-50"
+              disabled={cargando || !datos.titulo.trim()}
+              className="px-4 py-1.5 text-sm font-medium text-white rounded-lg transition-colors flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
               style={{ backgroundColor: '#0f766e' }}
-              onMouseEnter={(e) => e.target.style.backgroundColor = '#0d5e57'}
-              onMouseLeave={(e) => e.target.style.backgroundColor = '#0f766e'}
+              onMouseEnter={(e) => !cargando && datos.titulo.trim() && (e.target.style.backgroundColor = '#0d5e57')}
+              onMouseLeave={(e) => !cargando && datos.titulo.trim() && (e.target.style.backgroundColor = '#0f766e')}
             >
               {cargando ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
               {cargando ? 'Procesando...' : 'Publicar'}
@@ -709,15 +992,19 @@ const CreadorCurso = ({ cursoInicial = null, onGuardar, onVolver }) => {
         </div>
       </header>
 
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 py-6 space-y-6">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 py-6 space-y-4">
         {error && (
-          <div className="bg-red-50 border border-red-200 text-red-600 text-sm px-4 py-3 rounded-lg">
-            {error}
+          <div className="bg-red-50 border border-red-200 text-red-600 text-sm px-4 py-3 rounded-lg flex items-start gap-3">
+            <AlertCircle className="w-5 h-5 text-red-500 flex-shrink-0 mt-0.5" />
+            <span>{error}</span>
+            <button onClick={() => setError('')} className="ml-auto p-1 hover:bg-red-100 rounded-lg">
+              <X className="w-4 h-4 text-red-400" />
+            </button>
           </div>
         )}
 
-        {/* Información básica */}
-        <div className="bg-white rounded-xl border border-gray-200/60 p-6 space-y-4">
+        {/* TÍTULO Y DESCRIPCIÓN */}
+        <div className="bg-white rounded-xl border border-gray-200/60 p-5 space-y-3">
           <input
             type="text"
             value={datos.titulo}
@@ -730,435 +1017,31 @@ const CreadorCurso = ({ cursoInicial = null, onGuardar, onVolver }) => {
             value={datos.descripcion}
             onChange={(e) => setDatos({ ...datos, descripcion: e.target.value })}
             placeholder="Descripción del curso..."
-            rows={2}
+            rows={1}
             className="w-full text-sm text-gray-500 bg-transparent border-0 border-b-2 pb-2 resize-none transition-colors border-transparent hover:border-gray-200 focus:border-[#0f766e] focus:outline-none placeholder:text-gray-300"
           />
-
-          <div className="flex flex-wrap gap-3 pt-2 border-t border-gray-100">
-            <select
-              value={datos.categoria}
-              onChange={(e) => setDatos({ ...datos, categoria: e.target.value })}
-              className="px-3 py-1.5 text-sm border border-gray-200 rounded-lg outline-none focus:border-[#0f766e] focus:ring-2 focus:ring-[#0f766e]/20 bg-transparent"
-            >
-              {CATEGORIAS.map((cat) => (
-                <option key={cat.id} value={cat.id}>{cat.label}</option>
-              ))}
-            </select>
-
-            <select
-              value={datos.nivel}
-              onChange={(e) => setDatos({ ...datos, nivel: e.target.value })}
-              className="px-3 py-1.5 text-sm border border-gray-200 rounded-lg outline-none focus:border-[#0f766e] focus:ring-2 focus:ring-[#0f766e]/20 bg-transparent"
-            >
-              {NIVELES.map((n) => (
-                <option key={n.id} value={n.id}>{n.label}</option>
-              ))}
-            </select>
-
-            <input
-              type="text"
-              value={datos.duracion}
-              onChange={(e) => setDatos({ ...datos, duracion: e.target.value })}
-              placeholder="Duración (ej: 40 horas)"
-              className="px-3 py-1.5 text-sm border border-gray-200 rounded-lg outline-none focus:border-[#0f766e] focus:ring-2 focus:ring-[#0f766e]/20 bg-transparent"
-            />
-
-            <input
-              type="text"
-              value={datos.instructor}
-              onChange={(e) => setDatos({ ...datos, instructor: e.target.value })}
-              placeholder="Instructor"
-              className="px-3 py-1.5 text-sm border border-gray-200 rounded-lg outline-none focus:border-[#0f766e] focus:ring-2 focus:ring-[#0f766e]/20 bg-transparent"
-            />
-
-            <input
-              type="text"
-              value={datos.imagen_url}
-              onChange={(e) => setDatos({ ...datos, imagen_url: e.target.value })}
-              placeholder="URL de la imagen de portada"
-              className="px-3 py-1.5 text-sm border border-gray-200 rounded-lg outline-none focus:border-[#0f766e] focus:ring-2 focus:ring-[#0f766e]/20 bg-transparent flex-1 min-w-[200px]"
-            />
-          </div>
         </div>
 
-        {/* SECCIÓN DE PAGOS */}
-        <div className="bg-white rounded-xl border border-gray-200/60 p-6 space-y-4">
-          <div className="flex items-center gap-2">
-            <DollarSign className="w-4 h-4 text-gray-400" />
-            <h3 className="text-sm font-medium text-gray-700">Configuración de pago</h3>
-          </div>
+        {/* BARRA DE HERRAMIENTAS */}
+        <Toolbar datos={datos} setDatos={setDatos} />
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div>
-              <label className="text-xs text-gray-500 block mb-1">Tipo de precio</label>
-              <select
-                value={datos.precio_tipo}
-                onChange={(e) => setDatos({ ...datos, precio_tipo: e.target.value })}
-                className="w-full px-3 py-1.5 text-sm border border-gray-200 rounded-lg outline-none focus:border-[#0f766e] focus:ring-2 focus:ring-[#0f766e]/20 bg-white transition-colors"
-              >
-                <option value="gratis">Gratis</option>
-                <option value="pago">Pago</option>
-              </select>
-            </div>
-
-            {datos.precio_tipo === 'pago' && (
-              <>
-                <div>
-                  <label className="text-xs text-gray-500 block mb-1">Monto</label>
-                  <div className="flex gap-2">
-                    <input
-                      type="number"
-                      value={datos.precio_monto}
-                      onChange={(e) => setDatos({ ...datos, precio_monto: e.target.value })}
-                      placeholder="49.99"
-                      min="0"
-                      step="0.01"
-                      className="flex-1 px-3 py-1.5 text-sm border border-gray-200 rounded-lg outline-none focus:border-[#0f766e] focus:ring-2 focus:ring-[#0f766e]/20 transition-colors"
-                    />
-                    <select
-                      value={datos.moneda}
-                      onChange={(e) => setDatos({ ...datos, moneda: e.target.value })}
-                      className="px-3 py-1.5 text-sm border border-gray-200 rounded-lg outline-none focus:border-[#0f766e] focus:ring-2 focus:ring-[#0f766e]/20 bg-white transition-colors"
-                    >
-                      {MONEDAS.map((m) => (
-                        <option key={m.id} value={m.id}>{m.label}</option>
-                      ))}
-                    </select>
-                  </div>
-                </div>
-
-                <div>
-                  <label className="text-xs text-gray-500 block mb-1">Método de pago</label>
-                  <select
-                    value={datos.metodo_pago}
-                    onChange={(e) => setDatos({ ...datos, metodo_pago: e.target.value })}
-                    className="w-full px-3 py-1.5 text-sm border border-gray-200 rounded-lg outline-none focus:border-[#0f766e] focus:ring-2 focus:ring-[#0f766e]/20 bg-white transition-colors"
-                  >
-                    <option value="">Seleccionar...</option>
-                    {METODOS_PAGO.map((m) => (
-                      <option key={m.id} value={m.id}>{m.label}</option>
-                    ))}
-                  </select>
-                </div>
-
-                <div>
-                  <label className="text-xs text-gray-500 block mb-1">Número de teléfono (Yape/Plin)</label>
-                  <input
-                    type="text"
-                    value={datos.numero_pago}
-                    onChange={(e) => setDatos({ ...datos, numero_pago: e.target.value })}
-                    placeholder="ej: 987654321"
-                    className="w-full px-3 py-1.5 text-sm border border-gray-200 rounded-lg outline-none focus:border-[#0f766e] focus:ring-2 focus:ring-[#0f766e]/20 transition-colors"
-                  />
-                </div>
-
-                <div className="md:col-span-2">
-                  <label className="text-xs text-gray-500 block mb-1">Instrucciones para el pago</label>
-                  <textarea
-                    value={datos.instrucciones_pago}
-                    onChange={(e) => setDatos({ ...datos, instrucciones_pago: e.target.value })}
-                    placeholder="Instrucciones adicionales para el estudiante..."
-                    rows={2}
-                    className="w-full px-3 py-1.5 text-sm border border-gray-200 rounded-lg outline-none focus:border-[#0f766e] focus:ring-2 focus:ring-[#0f766e]/20 transition-colors resize-none"
-                  />
-                </div>
-              </>
-            )}
-          </div>
-        </div>
-
-        {/* SECCIÓN DE METADATA */}
-        <div className="bg-white rounded-xl border border-gray-200/60 p-6 space-y-4">
-          <div className="flex items-center gap-2">
-            <Tag className="w-4 h-4 text-gray-400" />
-            <h3 className="text-sm font-medium text-gray-700">Metadatos</h3>
-          </div>
-
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div className="md:col-span-2">
-              <label className="text-xs text-gray-500 block mb-1">Público objetivo</label>
-              <input
-                type="text"
-                value={datos.publico_objetivo}
-                onChange={(e) => setDatos({ ...datos, publico_objetivo: e.target.value })}
-                placeholder="Ej: Estudiantes de programación, profesionales de marketing..."
-                className="w-full px-3 py-1.5 text-sm border border-gray-200 rounded-lg outline-none focus:border-[#0f766e] focus:ring-2 focus:ring-[#0f766e]/20 transition-colors"
-              />
-            </div>
-
-            <div>
-              <label className="text-xs text-gray-500 block mb-1">Etiquetas</label>
-              <div className="flex gap-2">
-                <input
-                  type="text"
-                  value={etiquetaInput}
-                  onChange={(e) => setEtiquetaInput(e.target.value)}
-                  onKeyDown={(e) => e.key === 'Enter' && agregarEtiqueta()}
-                  placeholder="Agregar etiqueta..."
-                  className="flex-1 px-3 py-1.5 text-sm border border-gray-200 rounded-lg outline-none focus:border-[#0f766e] focus:ring-2 focus:ring-[#0f766e]/20 transition-colors"
-                />
-                <button
-                  onClick={agregarEtiqueta}
-                  className="px-3 py-1.5 text-sm text-gray-500 hover:text-gray-700 border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors"
-                >
-                  <Plus className="w-4 h-4" />
-                </button>
-              </div>
-              <div className="flex flex-wrap gap-1.5 mt-2">
-                {datos.etiquetas.map((etiqueta) => (
-                  <span key={etiqueta} className="inline-flex items-center gap-1 px-2 py-0.5 text-xs bg-gray-100 text-gray-600 rounded-full">
-                    {etiqueta}
-                    <button onClick={() => eliminarEtiqueta(etiqueta)} className="hover:text-red-500">
-                      <X className="w-3 h-3" />
-                    </button>
-                  </span>
-                ))}
-              </div>
-            </div>
-
-            <div>
-              <label className="text-xs text-gray-500 block mb-1">Requisitos</label>
-              <div className="flex gap-2">
-                <input
-                  type="text"
-                  value={requisitoInput}
-                  onChange={(e) => setRequisitoInput(e.target.value)}
-                  onKeyDown={(e) => e.key === 'Enter' && agregarRequisito()}
-                  placeholder="Agregar requisito..."
-                  className="flex-1 px-3 py-1.5 text-sm border border-gray-200 rounded-lg outline-none focus:border-[#0f766e] focus:ring-2 focus:ring-[#0f766e]/20 transition-colors"
-                />
-                <button
-                  onClick={agregarRequisito}
-                  className="px-3 py-1.5 text-sm text-gray-500 hover:text-gray-700 border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors"
-                >
-                  <Plus className="w-4 h-4" />
-                </button>
-              </div>
-              <div className="flex flex-wrap gap-1.5 mt-2">
-                {datos.requisitos.map((requisito) => (
-                  <span key={requisito} className="inline-flex items-center gap-1 px-2 py-0.5 text-xs bg-gray-100 text-gray-600 rounded-full">
-                    {requisito}
-                    <button onClick={() => eliminarRequisito(requisito)} className="hover:text-red-500">
-                      <X className="w-3 h-3" />
-                    </button>
-                  </span>
-                ))}
-              </div>
-            </div>
-
-            <div className="md:col-span-2">
-              <label className="text-xs text-gray-500 block mb-1">Objetivos del curso</label>
-              <div className="flex gap-2">
-                <input
-                  type="text"
-                  value={objetivoInput}
-                  onChange={(e) => setObjetivoInput(e.target.value)}
-                  onKeyDown={(e) => e.key === 'Enter' && agregarObjetivo()}
-                  placeholder="Agregar objetivo..."
-                  className="flex-1 px-3 py-1.5 text-sm border border-gray-200 rounded-lg outline-none focus:border-[#0f766e] focus:ring-2 focus:ring-[#0f766e]/20 transition-colors"
-                />
-                <button
-                  onClick={agregarObjetivo}
-                  className="px-3 py-1.5 text-sm text-gray-500 hover:text-gray-700 border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors"
-                >
-                  <Plus className="w-4 h-4" />
-                </button>
-              </div>
-              <div className="flex flex-wrap gap-1.5 mt-2">
-                {datos.objetivos.map((objetivo) => (
-                  <span key={objetivo} className="inline-flex items-center gap-1 px-2 py-0.5 text-xs bg-gray-100 text-gray-600 rounded-full">
-                    {objetivo}
-                    <button onClick={() => eliminarObjetivo(objetivo)} className="hover:text-red-500">
-                      <X className="w-3 h-3" />
-                    </button>
-                  </span>
-                ))}
-              </div>
-            </div>
-          </div>
-        </div>
-
-        {/* SECCIÓN DE BLOQUEO */}
-        <div className="bg-white rounded-xl border border-gray-200/60 p-6 space-y-4">
-          <button
-            onClick={() => setMostrarBloqueo(!mostrarBloqueo)}
-            className="flex items-center justify-between w-full"
-          >
-            <div className="flex items-center gap-2">
-              <LockIcon className="w-4 h-4 text-gray-400" />
-              <h3 className="text-sm font-medium text-gray-700">Control de bloqueo</h3>
-              {datos.tipo_bloqueo !== 'ninguno' && (
-                <span className="text-xs px-2 py-0.5 rounded-full" style={{ backgroundColor: '#e6f4f2', color: '#0f766e' }}>
-                  {TIPOS_BLOQUEO.find(t => t.id === datos.tipo_bloqueo)?.label || datos.tipo_bloqueo}
-                </span>
-              )}
-            </div>
-            <ChevronDown className={`w-4 h-4 text-gray-400 transition-transform ${mostrarBloqueo ? 'rotate-180' : ''}`} />
-          </button>
-
-          {mostrarBloqueo && (
-            <div className="space-y-4 pt-4 border-t border-gray-100">
-              <div>
-                <label className="text-xs text-gray-500 block mb-1">Tipo de bloqueo</label>
-                <select
-                  value={datos.tipo_bloqueo}
-                  onChange={(e) => setDatos({ ...datos, tipo_bloqueo: e.target.value })}
-                  className="w-full px-3 py-1.5 text-sm border border-gray-200 rounded-lg outline-none focus:border-[#0f766e] focus:ring-2 focus:ring-[#0f766e]/20 bg-white transition-colors"
-                >
-                  {TIPOS_BLOQUEO.map((t) => (
-                    <option key={t.id} value={t.id}>{t.label}</option>
-                  ))}
-                </select>
-                <p className="text-xs text-gray-400 mt-1">
-                  {datos.tipo_bloqueo === 'ninguno' && 'Sin restricciones de acceso'}
-                  {datos.tipo_bloqueo === 'fecha' && 'Las lecciones se liberan en fechas específicas'}
-                  {datos.tipo_bloqueo === 'secuencial' && 'Debes completar cada lección antes de avanzar'}
-                  {datos.tipo_bloqueo === 'desempeno' && 'Debes aprobar evaluaciones para avanzar'}
-                  {datos.tipo_bloqueo === 'mixto' && 'Combinación de bloqueos (configuración avanzada)'}
-                </p>
-              </div>
-
-              {(datos.tipo_bloqueo === 'fecha' || datos.tipo_bloqueo === 'mixto') && (
-                <div>
-                  <label className="text-xs text-gray-500 block mb-1">Fechas de liberación por lección</label>
-                  <p className="text-xs text-gray-400 mb-2">
-                    Configura las fechas en las que cada lección estará disponible.
-                    El formato debe ser: <code className="bg-gray-100 px-1 rounded">YYYY-MM-DDTHH:mm:ss</code>
-                  </p>
-                  <div className="space-y-2">
-                    {modulos.map((modulo) => (
-                      modulo.lecciones.map((leccion) => (
-                        <div key={leccion.id} className="flex items-center gap-2">
-                          <span className="text-xs text-gray-500 min-w-[150px] truncate">{leccion.titulo}</span>
-                          <input
-                            type="datetime-local"
-                            value={datos.bloqueo_config?.fechas?.[leccion.id] || ''}
-                            onChange={(e) => {
-                              const nuevasFechas = {
-                                ...(datos.bloqueo_config?.fechas || {}),
-                                [leccion.id]: e.target.value
-                              };
-                              setDatos({
-                                ...datos,
-                                bloqueo_config: {
-                                  ...datos.bloqueo_config,
-                                  fechas: nuevasFechas
-                                }
-                              });
-                            }}
-                            className="flex-1 px-3 py-1.5 text-sm border border-gray-200 rounded-lg outline-none focus:border-[#0f766e] focus:ring-2 focus:ring-[#0f766e]/20 transition-colors"
-                          />
-                          {datos.bloqueo_config?.fechas?.[leccion.id] && (
-                            <button
-                              onClick={() => {
-                                const nuevasFechas = { ...datos.bloqueo_config?.fechas };
-                                delete nuevasFechas[leccion.id];
-                                setDatos({
-                                  ...datos,
-                                  bloqueo_config: {
-                                    ...datos.bloqueo_config,
-                                    fechas: nuevasFechas
-                                  }
-                                });
-                              }}
-                              className="p-1 hover:bg-red-50 rounded text-gray-400 hover:text-red-500"
-                            >
-                              <X className="w-3.5 h-3.5" />
-                            </button>
-                          )}
-                        </div>
-                      ))
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              {(datos.tipo_bloqueo === 'desempeno' || datos.tipo_bloqueo === 'mixto') && (
-                <div className="bg-amber-50 border border-amber-200 rounded-lg p-3">
-                  <p className="text-xs text-amber-700">
-                    <strong>Nota:</strong> Para configurar evaluaciones por lección, ve a la lección y usa la opción 
-                    "Configurar evaluación" en el panel de edición.
-                  </p>
-                </div>
-              )}
-            </div>
-          )}
-        </div>
-
-        {/* SECCIÓN DE CERTIFICADO */}
-        <div className="bg-white rounded-xl border border-gray-200/60 p-6 space-y-4">
-          <button
-            onClick={() => setMostrarCertificado(!mostrarCertificado)}
-            className="flex items-center justify-between w-full"
-          >
-            <div className="flex items-center gap-2">
-              <Award className="w-4 h-4 text-gray-400" />
-              <h3 className="text-sm font-medium text-gray-700">Certificado</h3>
-              {datos.certificado_habilitado && (
-                <span className="text-xs px-2 py-0.5 rounded-full" style={{ backgroundColor: '#e6f4f2', color: '#0f766e' }}>
-                  Habilitado
-                </span>
-              )}
-            </div>
-            <ChevronDown className={`w-4 h-4 text-gray-400 transition-transform ${mostrarCertificado ? 'rotate-180' : ''}`} />
-          </button>
-
-          {mostrarCertificado && (
-            <div className="space-y-4 pt-4 border-t border-gray-100">
-              <label className="flex items-center gap-2 text-sm text-gray-600 cursor-pointer">
-                <input
-                  type="checkbox"
-                  checked={datos.certificado_habilitado}
-                  onChange={(e) => setDatos({ ...datos, certificado_habilitado: e.target.checked })}
-                  className="w-4 h-4 rounded border-gray-300 focus:ring-[#0f766e]"
-                  style={{ accentColor: '#0f766e' }}
-                />
-                Emitir certificado al completar el curso
-              </label>
-              <p className="text-xs text-gray-400">
-                Cuando un estudiante complete el 100% de las lecciones, se generará automáticamente
-                su certificado con un código único.
-              </p>
-
-              {datos.certificado_habilitado && (
-                <div>
-                  <label className="text-xs text-gray-500 block mb-1">
-                    Nota mínima requerida (opcional)
-                  </label>
-                  <input
-                    type="number"
-                    min="0"
-                    max="20"
-                    step="0.5"
-                    value={datos.certificado_nota_minima}
-                    onChange={(e) => setDatos({ ...datos, certificado_nota_minima: e.target.value })}
-                    placeholder="Ej: 11"
-                    className="w-full sm:w-64 px-3 py-1.5 text-sm border border-gray-200 rounded-lg outline-none focus:border-[#0f766e] focus:ring-2 focus:ring-[#0f766e]/20 transition-colors"
-                  />
-                  <p className="text-xs text-gray-400 mt-1">
-                    Si se define, el estudiante debe tener un promedio igual o mayor a esta nota
-                    (escala 0–20) para recibir su certificado.
-                  </p>
-                </div>
-              )}
-            </div>
-          )}
-        </div>
-
-        {/* Módulos y lecciones */}
+        {/* CONTENIDO DEL CURSO */}
         <div className="space-y-3">
           <div className="flex items-center justify-between">
-            <h3 className="text-sm font-medium text-gray-700">Contenido del Curso</h3>
+            <div className="flex items-center gap-2">
+              <BookOpen className="w-4 h-4 text-gray-400" />
+              <h3 className="text-sm font-medium text-gray-700">Contenido del Curso</h3>
+            </div>
             <button
               onClick={agregarModulo}
-              className="text-sm text-gray-500 hover:text-gray-700 flex items-center gap-1"
+              className="text-sm text-gray-500 hover:text-gray-700 flex items-center gap-1 transition-colors"
             >
               <Plus className="w-4 h-4" /> Agregar Módulo
             </button>
           </div>
 
           {modulos.map((modulo, index) => (
-            <div key={modulo.id} className="bg-white rounded-xl border border-gray-200/60 overflow-hidden">
+            <div key={modulo.id} className="bg-white rounded-xl border border-gray-200/60 overflow-hidden shadow-sm hover:shadow-md transition-shadow">
               <div 
                 className="flex items-center gap-3 px-4 py-3 cursor-pointer hover:bg-gray-50/50 transition-colors"
                 onClick={() => setModuloEditando(moduloEditando === modulo.id ? null : modulo.id)}
@@ -1179,31 +1062,69 @@ const CreadorCurso = ({ cursoInicial = null, onGuardar, onVolver }) => {
               </div>
 
               {moduloEditando === modulo.id && (
-                <div className="border-t border-gray-100 px-4 py-4 space-y-3">
-                  <input
-                    type="text"
+                <div className="border-t border-gray-100 px-4 py-4 space-y-4">
+                  <Input
                     value={modulo.titulo}
                     onChange={(e) => actualizarModulo(modulo.id, 'titulo', e.target.value)}
                     placeholder="Nombre del módulo"
-                    className="w-full px-3 py-1.5 text-sm border border-gray-200 rounded-lg outline-none focus:border-[#0f766e] focus:ring-2 focus:ring-[#0f766e]/20 transition-colors"
+                    className="w-full"
                   />
 
-                  <div className="space-y-2">
+                  <div className="space-y-3">
                     {modulo.lecciones.map((leccion) => (
-                      <EditorLeccion
-                        key={leccion.id}
-                        leccion={leccion}
-                        onUpdate={(updated) => actualizarLeccion(modulo.id, updated)}
-                        onEliminar={() => eliminarLeccion(modulo.id, leccion.id)}
-                        examenesDisponibles={examenesDisponibles}
-                        cuestionariosDisponibles={cuestionariosDisponibles}
-                        onExamenCreado={handleExamenCreado}
-                        cursoTitulo={datos.titulo || 'Curso'}
-                      />
+                      <div key={leccion.id} className="bg-gray-50 rounded-lg border border-gray-200 p-4 space-y-3">
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-2">
+                            <Layout className="w-4 h-4 text-gray-400" />
+                            <Input
+                              value={leccion.titulo}
+                              onChange={(e) => actualizarLeccion(modulo.id, { ...leccion, titulo: e.target.value })}
+                              placeholder="Título de la lección"
+                              className="flex-1 border-0 bg-transparent focus:ring-0 px-0 text-sm font-medium"
+                            />
+                            <Badge variant="secondary" size="sm">
+                              {leccion.bloques.length} bloques
+                            </Badge>
+                          </div>
+                          <button
+                            onClick={() => eliminarLeccion(modulo.id, leccion.id)}
+                            className="p-1 hover:bg-red-50 rounded text-gray-400 hover:text-red-500 transition-colors"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
+
+                        <div className="space-y-2 ml-6">
+                          {leccion.bloques.map((bloque, bIndex) => (
+                            <BloqueContenido
+                              key={bloque.id}
+                              bloque={bloque}
+                              index={bIndex}
+                              totalBloques={leccion.bloques.length}
+                              onUpdate={(updated) => actualizarBloque(modulo.id, leccion.id, updated)}
+                              onEliminar={() => eliminarBloque(modulo.id, leccion.id, bloque.id)}
+                              onMoveUp={() => moverBloque(modulo.id, leccion.id, bloque.id, -1)}
+                              onMoveDown={() => moverBloque(modulo.id, leccion.id, bloque.id, 1)}
+                              examenesDisponibles={examenesDisponibles}
+                              cuestionariosDisponibles={cuestionariosDisponibles}
+                              onExamenCreado={handleExamenCreado}
+                              cursoTitulo={datos.titulo || 'Curso'}
+                            />
+                          ))}
+                          
+                          <button
+                            onClick={() => agregarBloque(modulo.id, leccion.id)}
+                            className="text-xs text-gray-400 hover:text-gray-600 flex items-center gap-1 mt-1 ml-6 transition-colors"
+                          >
+                            <Plus className="w-3.5 h-3.5" /> Agregar contenido
+                          </button>
+                        </div>
+                      </div>
                     ))}
+                    
                     <button
                       onClick={() => agregarLeccion(modulo.id)}
-                      className="text-xs text-gray-400 hover:text-gray-600 flex items-center gap-1 mt-2"
+                      className="text-xs text-gray-400 hover:text-gray-600 flex items-center gap-1 transition-colors"
                     >
                       <Plus className="w-3.5 h-3.5" /> Agregar lección
                     </button>

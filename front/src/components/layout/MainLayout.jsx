@@ -1,5 +1,5 @@
 // front/src/components/layout/MainLayout.jsx
-// LAYOUT PRINCIPAL - SIDEBAR CON BOTÓN FLOTANTE MODERNO
+// LAYOUT PRINCIPAL - SIDEBAR FIJO CON BOTÓN FLOTANTE MODERNO
 
 import React, { useState, useEffect } from 'react';
 import { NavLink, Outlet, useLocation } from 'react-router-dom';
@@ -228,16 +228,24 @@ const MainLayout = () => {
     return usuario.nombres || usuario.nombre || 'Usuario';
   };
 
+  // ✅ SIDEBAR FIJO - position: fixed
   const sidebarClasses = `
     bg-white border-r border-gray-200 flex flex-col flex-shrink-0 
-    transition-all duration-300 ease-in-out fixed inset-y-0 left-0 z-40
+    transition-all duration-300 ease-in-out
+    fixed inset-y-0 left-0 z-40
     ${menuMovil ? 'w-64 translate-x-0 shadow-2xl' : 'w-64 -translate-x-full'}
-    lg:static lg:translate-x-0 lg:shadow-none 
+    lg:translate-x-0 lg:shadow-none 
     ${sidebarAbierto ? 'lg:w-64' : 'lg:w-14'}
   `;
 
+  // ✅ CONTENIDO CON MARGEN PARA EL SIDEBAR FIJO
+  const contentMarginClass = `
+    transition-all duration-300 ease-in-out
+    ${sidebarAbierto ? 'lg:ml-64' : 'lg:ml-14'}
+  `;
+
   return (
-    <div className="bg-[#f8f9fa] min-h-screen flex">
+    <div className="bg-[#f8f9fa] min-h-screen">
       
       {/* Overlay móvil */}
       {menuMovil && (
@@ -247,12 +255,8 @@ const MainLayout = () => {
         />
       )}
 
-      {/* ===================== SIDEBAR ===================== */}
-      <aside 
-        className={sidebarClasses}
-        onMouseEnter={() => !sidebarAbierto && setHoverExpand(true)}
-        onMouseLeave={() => setHoverExpand(false)}
-      >
+      {/* ===================== SIDEBAR FIJO ===================== */}
+      <aside className={sidebarClasses}>
         {/* Logo - Versión expandida */}
         {sidebarAbierto && (
           <div className="h-14 border-b border-gray-200 flex items-center px-3 flex-shrink-0">
@@ -274,7 +278,7 @@ const MainLayout = () => {
           </div>
         )}
 
-        {/* Navegación */}
+        {/* Navegación - Scrollable */}
         <nav className="flex-1 overflow-y-auto py-2 px-2 space-y-1">
           {secciones.map((seccion) => (
             <div key={seccion.seccion}>
@@ -348,9 +352,7 @@ const MainLayout = () => {
           </button>
         </div>
 
-        {/* ============================================================ */}
-        {/* 🚀 BOTÓN FLOTANTE MODERNO PARA COLAPSAR/EXPANDIR */}
-        {/* ============================================================ */}
+        {/* Botón flotante para colapsar/expandir */}
         <button
           onClick={toggleSidebar}
           className={`
@@ -371,7 +373,6 @@ const MainLayout = () => {
           `}
           title={sidebarAbierto ? 'Colapsar menú' : 'Expandir menú'}
         >
-          {/* Icono con rotación suave */}
           <div className={`
             transition-transform duration-500 ease-in-out
             ${sidebarAbierto ? 'rotate-0' : 'rotate-180'}
@@ -379,7 +380,6 @@ const MainLayout = () => {
             <ChevronLeft className="w-4 h-4" />
           </div>
 
-          {/* Anillo decorativo al hacer hover */}
           <span className="
             absolute inset-0 rounded-full
             border-2 border-[#0f766e]/0
@@ -388,7 +388,6 @@ const MainLayout = () => {
             scale-0 group-hover:scale-110
           " />
           
-          {/* Tooltip elegante */}
           <span className="
             absolute -bottom-9 left-1/2 -translate-x-1/2
             px-2.5 py-1 rounded-lg
@@ -410,11 +409,10 @@ const MainLayout = () => {
         </button>
       </aside>
 
-      {/* ===================== CONTENIDO ===================== */}
-      <div className="flex-1 flex flex-col overflow-hidden bg-[#f8f9fa] min-h-screen">
-
-        {/* Header */}
-        <header className="bg-white border-b border-gray-200 px-4 py-3 flex items-center justify-between flex-shrink-0 h-14">
+      {/* ===================== CONTENIDO CON MARGEN ===================== */}
+      <div className={`flex-1 flex flex-col bg-[#f8f9fa] min-h-screen ${contentMarginClass}`}>
+        {/* Header - FIJO también */}
+        <header className="bg-white border-b border-gray-200 px-4 py-3 flex items-center justify-between flex-shrink-0 h-14 sticky top-0 z-30">
           <div className="flex items-center gap-2 min-w-0">
             {/* Botón móvil */}
             <button
@@ -441,7 +439,7 @@ const MainLayout = () => {
           </div>
         </header>
 
-        {/* Main content */}
+        {/* Main content - con padding para compensar header fijo */}
         <main className="flex-1 overflow-y-auto p-4 lg:p-6">
           <Outlet />
         </main>

@@ -1,5 +1,5 @@
 // front/src/components/cursos/DetalleCurso.jsx
-// VERSIÓN MEJORADA - LECCIONES BLOQUEADAS EN VISTA DIRECTA
+// VERSIÓN COMPLETA ACTUALIZADA - NAVEGACIÓN CORREGIDA
 
 import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
@@ -37,7 +37,6 @@ const VideoPlayer = ({ videoId, onComplete, isBlocked = false }) => {
   const playerRef = useRef(null);
   const intervalRef = useRef(null);
 
-  // Si está bloqueado, mostrar versión bloqueada
   if (isBlocked) {
     return (
       <div className="flex flex-col items-center justify-center h-full bg-gray-100 rounded-xl min-h-[300px] border-2 border-dashed border-gray-300">
@@ -433,7 +432,6 @@ const RecursosDisplay = ({ recursos, isBlocked = false }) => {
 
   const handlePreview = (recurso) => {
     if (isBlocked) {
-      // Si está bloqueado, mostrar mensaje
       alert('Este contenido está bloqueado. Solicita acceso para ver los recursos.');
       return;
     }
@@ -505,22 +503,21 @@ const RecursosDisplay = ({ recursos, isBlocked = false }) => {
     }
   }, [previewUrl]);
 
-  if (!recursos || recursos.length === 0) {
-    return (
-      <div className="text-center py-8 text-gray-400">
-        <FileText className="w-12 h-12 mx-auto mb-2 text-gray-300" />
-        <p>No hay recursos disponibles</p>
-      </div>
-    );
-  }
-
-  // Si está bloqueado, mostrar versión bloqueada
   if (isBlocked) {
     return (
       <div className="flex flex-col items-center justify-center min-h-[200px] bg-gray-50 rounded-xl border-2 border-dashed border-gray-300 p-8">
         <Lock className="w-12 h-12 text-gray-300 mx-auto mb-3" />
         <p className="text-gray-400 font-medium">Recursos bloqueados</p>
         <p className="text-sm text-gray-300">Solicita acceso para ver los recursos</p>
+      </div>
+    );
+  }
+
+  if (!recursos || recursos.length === 0) {
+    return (
+      <div className="text-center py-8 text-gray-400">
+        <FileText className="w-12 h-12 mx-auto mb-2 text-gray-300" />
+        <p>No hay recursos disponibles</p>
       </div>
     );
   }
@@ -909,7 +906,7 @@ const getTipoLabel = (tipo) => {
 };
 
 // ============================================================
-// COMPONENTE DE LECCIÓN CON VISTA PREVIA SUTIL
+// COMPONENTE DE LECCIÓN (con soporte para bloqueado)
 // ============================================================
 const LeccionItem = ({ 
   leccion, 
@@ -1069,6 +1066,26 @@ const DetalleCurso = ({
   const esDocente = usuario?.rol === 'docente' || usuario?.rol === 'admin';
   const esEstudiante = usuario?.rol === 'estudiante';
 
+  // ✅ HANDLER CORREGIDO PARA VOLVER A CURSOS
+  const handleVolverCursos = () => {
+    const rol = usuario?.rol || 'estudiante';
+    
+    // Si hay una función onVolver prop, usarla
+    if (onVolver) {
+      onVolver();
+      return;
+    }
+    
+    // Navegar a la ruta correcta según el rol
+    if (rol === 'admin') {
+      navigate('/admin/cursos');
+    } else if (rol === 'docente') {
+      navigate('/docente/cursos');
+    } else {
+      navigate('/estudiante/cursos');
+    }
+  };
+
   const tabs = [
     { id: 'contenido', label: 'Contenido', icon: BookOpen, visible: true },
     { id: 'foro', label: 'Foro', icon: MessageSquare, visible: true },
@@ -1079,6 +1096,7 @@ const DetalleCurso = ({
     ...(esDocente && onEditarCurso ? [{ id: 'configuracion', label: 'Configuración', icon: Settings, visible: true }] : []),
   ].filter(t => t.visible);
 
+  // Cargar curso
   useEffect(() => {
     const cargarCurso = async () => {
       if (!cursoId) {
@@ -1127,6 +1145,7 @@ const DetalleCurso = ({
     cargarCurso();
   }, [cursoId, usuarioId, esDocente]);
 
+  // Calcular progreso
   useEffect(() => {
     if (!curso?.modulos) return;
     const total = curso.modulos.reduce((acc, m) => {
@@ -1139,8 +1158,8 @@ const DetalleCurso = ({
     setCursoCompletado(total > 0 && completadas >= total);
   }, [curso, leccionesCompletadas]);
 
+  // Handlers
   const handleAbrirLeccion = (modulo, leccion) => {
-    // Si está bloqueado, mostrar la lección en vista previa (sin modal)
     if (curso?.precio_tipo === 'pago' && !tieneAcceso && !esDocente) {
       setModuloActual(modulo);
       setLeccionActual(leccion);
@@ -1229,7 +1248,7 @@ const DetalleCurso = ({
     }
   };
 
-  // Renderizar contenido de la lección (con soporte para bloqueo)
+  // Renderizar contenido de la lección
   const renderContenidoLeccion = () => {
     if (!leccionActual) return null;
     
@@ -1644,9 +1663,12 @@ const DetalleCurso = ({
   // ============================================================
   return (
     <div className="max-w-6xl mx-auto px-4 sm:px-6 py-6 space-y-6">
-      {/* Header */}
+      {/* Header - CON BOTÓN CORREGIDO */}
       <div className="flex items-center justify-between">
-        <button onClick={() => navigate('/cursos')} className="flex items-center gap-2 text-gray-500 hover:text-gray-700 transition-colors text-sm">
+        <button 
+          onClick={handleVolverCursos} 
+          className="flex items-center gap-2 text-gray-500 hover:text-gray-700 transition-colors text-sm"
+        >
           <ArrowLeft className="w-4 h-4" /> Volver a cursos
         </button>
         {esDocente && (
@@ -1695,7 +1717,7 @@ const DetalleCurso = ({
             )}
           </div>
 
-          {/* Estado de acceso - SUTIL Y PROFESIONAL */}
+          {/* Estado de acceso */}
           {esEstudiante && (
             <div className="pt-2 border-t border-gray-100">
               {estaBloqueado ? (

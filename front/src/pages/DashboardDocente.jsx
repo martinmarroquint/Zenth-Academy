@@ -4,12 +4,11 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
-  FileText, ClipboardList, BookOpen, Users, FolderOpen,
+  FileText, BookOpen, Users, FolderOpen,
   Loader2, MessageCircle, Send, ArrowRight
 } from 'lucide-react';
 import { Button, Badge, Card } from '../components/ui';
 import examenesService from '../services/examenesService';
-import cuestionariosService from '../services/cuestionariosService';
 import cursosService from '../services/cursosService';
 
 const DashboardDocente = () => {
@@ -19,7 +18,6 @@ const DashboardDocente = () => {
   const [stats, setStats] = useState({
     examenes: 0,
     grupos: 0,
-    cuestionarios: 0,
     cursos: 0,
     alumnos: 0,
   });
@@ -27,24 +25,16 @@ const DashboardDocente = () => {
   useEffect(() => {
     const cargar = async () => {
       try {
-        const gruposData = await examenesService.listarGrupos();
-        const grupoIds = (gruposData || []).map(g => g.id);
-
-        const [examenesPorGrupo, cuestionarios, cursos, alumnos, solicitudes] = await Promise.allSettled([
-          grupoIds.length > 0
-            ? examenesService.listarExamenesPorGrupos(grupoIds)
-            : Promise.resolve({}),
-          cuestionariosService.listar(),
+        const [examenes, grupos, cursos, alumnos, solicitudes] = await Promise.allSettled([
+          examenesService.listarExamenes(),
+          examenesService.listarGrupos(),
           cursosService.listar(),
           examenesService.listarAlumnos(),
           cursosService.solicitudesPendientes().catch(() => []),
         ]);
 
-        const examenesData = examenesPorGrupo.value || {};
-        const totalExamenes = Object.values(examenesData).reduce(
-          (acc, examenes) => acc + (examenes?.length || 0),
-          0
-        );
+        const examenesData = examenes.status === 'fulfilled' ? examenes.value : [];
+        const totalExamenes = Array.isArray(examenesData) ? examenesData.length : 0;
 
         const solicitudesData = Array.isArray(solicitudes.value) ? solicitudes.value : [];
         const pendientes = solicitudesData.filter(s => s.estado === 'pendiente').length;
@@ -52,8 +42,7 @@ const DashboardDocente = () => {
         setSolicitudesPendientes(pendientes);
         setStats({
           examenes: totalExamenes,
-          grupos: (gruposData || []).length,
-          cuestionarios: Array.isArray(cuestionarios.value) ? cuestionarios.value.length : 0,
+          grupos: Array.isArray(grupos.value) ? grupos.value.length : 0,
           cursos: Array.isArray(cursos.value) ? cursos.value.length : 0,
           alumnos: Array.isArray(alumnos.value) ? alumnos.value.length : 0,
         });
@@ -69,14 +58,12 @@ const DashboardDocente = () => {
   const kpis = [
     { icon: FileText, label: 'Exámenes', valor: stats.examenes, color: 'primary' },
     { icon: FolderOpen, label: 'Grupos', valor: stats.grupos, color: 'info' },
-    { icon: ClipboardList, label: 'Cuestionarios', valor: stats.cuestionarios, color: 'success' },
     { icon: BookOpen, label: 'Cursos', valor: stats.cursos, color: 'warning' },
     { icon: Users, label: 'Alumnos', valor: stats.alumnos, color: 'default' },
   ];
 
   const accesosRapidos = [
     { id: 'examenes', icon: FileText, label: 'Exámenes', path: '/docente/examenes' },
-    { id: 'cuestionarios', icon: ClipboardList, label: 'Cuestionarios', path: '/docente/cuestionarios' },
     { id: 'cursos', icon: BookOpen, label: 'Mis Cursos', path: '/docente/cursos' },
     { id: 'comunidad', icon: MessageCircle, label: 'Comunidad', path: '/docente/foro' },
     { id: 'solicitudes', icon: Send, label: 'Solicitudes', path: '/docente/solicitudes' },
@@ -85,7 +72,7 @@ const DashboardDocente = () => {
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 py-6">
       {/* KPIs reales */}
-      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3 sm:gap-4 mb-6">
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3 sm:gap-4 mb-6">
         {/* KPI de Solicitudes - DESTACADO */}
         <div 
           onClick={() => navigate('/docente/solicitudes')}
@@ -133,7 +120,7 @@ const DashboardDocente = () => {
       </div>
 
       {/* Accesos rápidos con Button */}
-      <div className="grid grid-cols-2 sm:grid-cols-5 gap-3 sm:gap-4">
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 sm:gap-4">
         {accesosRapidos.map((item) => {
           const Icon = item.icon;
           const isSolicitudes = item.id === 'solicitudes';

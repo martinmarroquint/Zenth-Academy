@@ -14,7 +14,6 @@ import {
 } from 'lucide-react';
 import cursosService from '../../services/cursosService';
 import examenesService from '../../services/examenesService';
-import cuestionariosService from '../../services/cuestionariosService';
 import EditorTexto from './EditorTexto';
 import ModalCrearExamenRapido from './ModalCrearExamenRapido';
 
@@ -91,7 +90,6 @@ const BloqueContenido = ({
   onMoveUp,
   onMoveDown,
   examenesDisponibles = [],
-  cuestionariosDisponibles = [],
   onExamenCreado,
   cursoTitulo = 'Curso',
   totalBloques
@@ -131,30 +129,30 @@ const BloqueContenido = ({
         <span className="flex-1 text-sm text-gray-700 truncate">
           {bloque.titulo || `Bloque ${index + 1}`}
         </span>
-        <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
+        <div className="flex items-center gap-1 opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity">
           <button
             onClick={() => onMoveUp()}
             disabled={index === 0}
-            className={`p-0.5 rounded hover:bg-gray-200 ${index === 0 ? 'text-gray-300 cursor-not-allowed' : 'text-gray-400 hover:text-gray-600'}`}
+            className={`p-1.5 rounded hover:bg-gray-200 ${index === 0 ? 'text-gray-300 cursor-not-allowed' : 'text-gray-400 hover:text-gray-600'}`}
           >
             <MoveUp className="w-3.5 h-3.5" />
           </button>
           <button
             onClick={() => onMoveDown()}
             disabled={index === totalBloques - 1}
-            className={`p-0.5 rounded hover:bg-gray-200 ${index === totalBloques - 1 ? 'text-gray-300 cursor-not-allowed' : 'text-gray-400 hover:text-gray-600'}`}
+            className={`p-1.5 rounded hover:bg-gray-200 ${index === totalBloques - 1 ? 'text-gray-300 cursor-not-allowed' : 'text-gray-400 hover:text-gray-600'}`}
           >
             <MoveDown className="w-3.5 h-3.5" />
           </button>
           <button
             onClick={() => setEditando(true)}
-            className="p-0.5 hover:bg-gray-200 rounded text-gray-400 hover:text-gray-600 transition-colors"
+            className="p-1.5 hover:bg-gray-200 rounded text-gray-400 hover:text-gray-600 transition-colors"
           >
             <Edit3 className="w-3.5 h-3.5" />
           </button>
           <button
             onClick={onEliminar}
-            className="p-0.5 hover:bg-red-100 rounded text-gray-400 hover:text-red-500 transition-colors"
+            className="p-1.5 hover:bg-red-100 rounded text-gray-400 hover:text-red-500 transition-colors"
           >
             <X className="w-3.5 h-3.5" />
           </button>
@@ -195,7 +193,7 @@ const BloqueContenido = ({
         </div>
       </div>
 
-      <div className="grid grid-cols-2 gap-3">
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
         <Input
           value={tempBloque.titulo || ''}
           onChange={(e) => setTempBloque({ ...tempBloque, titulo: e.target.value })}
@@ -249,27 +247,6 @@ const BloqueContenido = ({
                     contenido: { ...tempBloque.contenido, texto: html }
                   })}
                   placeholder="Escribe el contenido..."
-                />
-              </div>
-            )}
-
-            {tempBloque.tipo === 'quiz' && (
-              <div>
-                <label className="text-xs text-gray-500">Cuestionario</label>
-                <Dropdown
-                  value={tempBloque.contenido?.cuestionario_id || ''}
-                  onChange={(value) => setTempBloque({
-                    ...tempBloque,
-                    contenido: { ...tempBloque.contenido, cuestionario_id: value }
-                  })}
-                  options={[
-                    { value: '', label: 'Seleccionar cuestionario' },
-                    ...cuestionariosDisponibles.map((c) => ({
-                      value: c.id,
-                      label: c.titulo
-                    }))
-                  ]}
-                  className="w-full"
                 />
               </div>
             )}
@@ -647,24 +624,19 @@ const CreadorCurso = ({ cursoInicial = null, onGuardar, onVolver }) => {
   const [cargando, setCargando] = useState(false);
   const [error, setError] = useState('');
   const [examenesDisponibles, setExamenesDisponibles] = useState([]);
-  const [cuestionariosDisponibles, setCuestionariosDisponibles] = useState([]);
 
   useEffect(() => {
     let activo = true;
     
     const cargarDatos = async () => {
       try {
-        const [examenes, cuestionarios] = await Promise.allSettled([
+        const examenes = await Promise.allSettled([
           examenesService.listarExamenes({ limit: 100 }),
-          cuestionariosService.listar()
         ]);
         
         if (activo) {
           if (examenes.status === 'fulfilled') {
             setExamenesDisponibles(Array.isArray(examenes.value) ? examenes.value : []);
-          }
-          if (cuestionarios.status === 'fulfilled') {
-            setCuestionariosDisponibles(Array.isArray(cuestionarios.value) ? cuestionarios.value : []);
           }
         }
       } catch (e) {
@@ -1106,7 +1078,6 @@ const CreadorCurso = ({ cursoInicial = null, onGuardar, onVolver }) => {
                               onMoveUp={() => moverBloque(modulo.id, leccion.id, bloque.id, -1)}
                               onMoveDown={() => moverBloque(modulo.id, leccion.id, bloque.id, 1)}
                               examenesDisponibles={examenesDisponibles}
-                              cuestionariosDisponibles={cuestionariosDisponibles}
                               onExamenCreado={handleExamenCreado}
                               cursoTitulo={datos.titulo || 'Curso'}
                             />

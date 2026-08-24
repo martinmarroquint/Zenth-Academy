@@ -8,12 +8,6 @@ from app.models.resultado_examen import ResultadoExamen
 from app.models.alumno_examen import AlumnoExamen  # ✅ Legacy - solo lectura
 from app.models.grupo import Grupo
 from app.models.curso import Curso, InscripcionCurso
-from app.models.cuestionario import (
-    Cuestionario,
-    PreguntaCuestionario,
-    RespuestaCuestionario,
-    RespuestaPregunta
-)
 from app.models.pizarra import Pizarra, SesionPizarra
 from app.models.post import Post, Comentario, LikePost
 from app.models.certificado import Certificado
@@ -31,7 +25,6 @@ __all__ = [
     "Alumno",  # ✅ Modelo principal
     "AlumnoExamen",  # ✅ Legacy - solo lectura
     "Examen", "Pregunta", "ResultadoExamen", "Grupo",
-    "Cuestionario", "PreguntaCuestionario", "RespuestaCuestionario", "RespuestaPregunta",
     "Pizarra", "SesionPizarra",
     "Curso", "InscripcionCurso",
     "Post", "Comentario", "LikePost",

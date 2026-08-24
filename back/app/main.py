@@ -53,7 +53,7 @@ else:
 app = FastAPI(
     title="Zenth Academy - Ecosistema Educativo",
     version=settings.VERSION,
-    description="API para el ecosistema educativo Zenth Academy: Examenes Online, Grupos, Cuestionarios Dinamicos, Pizarra Interactiva, Cursos EDM Team, Foro, Certificados, Carpeta Docente e Integraciones.",
+    description="API para el ecosistema educativo Zenth Academy: Examenes Online, Grupos, Pizarra Interactiva, Cursos EDM Team, Foro, Certificados, Carpeta Docente e Integraciones.",
     docs_url=docs_url,
     redoc_url=redoc_url,
     openapi_url=openapi_url,
@@ -62,7 +62,6 @@ app = FastAPI(
         {"name": "Alumnos", "description": "Gestion unificada de alumnos"},
         {"name": "Examenes", "description": "Sistema de examenes online - Creacion, publicacion, rendicion y resultados"},
         {"name": "Grupos", "description": "Gestion de grupos/clases - Alumnos, asistencias y materiales"},
-        {"name": "Cuestionarios", "description": "Sistema de cuestionarios dinamicos - Encuestas, evaluaciones, feedback, tests"},
         {"name": "Pizarra", "description": "Pizarra interactiva colaborativa en tiempo real"},
         {"name": "Cursos", "description": "Cursos online - EDM Team"},
         {"name": "Foro", "description": "Comunidad / Foro de docentes"},
@@ -158,7 +157,6 @@ modulos_existentes = [
     'alumnos',
     'examenes',
     'grupos',
-    'cuestionarios',
     'pizarra',
     'integracion_edm',
     'historial',
@@ -226,7 +224,6 @@ async def system_info():
         "modulos": modulos_existentes,
         "examenes_online": "Disponible",
         "grupos_clases": "Disponible",
-        "cuestionarios_dinamicos": "Disponible",
         "pizarra_interactiva": "Disponible",
         "cursos_edm_team": "Disponible",
         "foro_docentes": "Disponible",
@@ -380,7 +377,6 @@ async def startup_event():
     logger.info(f"Alumnos Unificados: DISPONIBLE")
     logger.info(f"Examenes Online: DISPONIBLE")
     logger.info(f"Grupos de Clases: DISPONIBLE")
-    logger.info(f"Cuestionarios Dinamicos: DISPONIBLE")
     logger.info(f"Pizarra Interactiva: DISPONIBLE")
     logger.info(f"Cursos EDM Team: DISPONIBLE")
     logger.info(f"Foro de Docentes: DISPONIBLE")

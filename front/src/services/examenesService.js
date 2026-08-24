@@ -455,7 +455,8 @@ class ExamenesService {
       ...rows.map(row => row.map(cell => `"${String(cell).replace(/"/g, '""')}"`).join(','))
     ].join('\n');
     
-    return csvContent;
+    // ✅ CORREGIDO: Agregar BOM UTF-8 para que Excel muestre caracteres español correctamente
+    return '\uFEFF' + csvContent;
   }
 
   generarCodigoExamen() {
@@ -465,6 +466,48 @@ class ExamenesService {
     const dia = String(ahora.getDate()).padStart(2, '0');
     const random = Math.floor(Math.random() * 9999) + 1;
     return `EXA-${anio}${mes}${dia}-${String(random).padStart(4, '0')}`;
+  }
+
+  // =============================================
+  // ACCESO PUBLICO (sin autenticacion)
+  // =============================================
+  
+  async obtenerExamenPublico(codigo) {
+    const baseUrl = import.meta.env.VITE_API_URL || 'http://localhost:8000/api/v1';
+    const response = await fetch(`${baseUrl}/examenes/publico/${codigo}`);
+    if (!response.ok) {
+      const error = await response.json().catch(() => ({ detail: 'Error al obtener examen' }));
+      throw new Error(error.detail || 'Error al obtener examen');
+    }
+    return response.json();
+  }
+
+  async verificarPasswordExamenPublico(codigo, password) {
+    const baseUrl = import.meta.env.VITE_API_URL || 'http://localhost:8000/api/v1';
+    const response = await fetch(`${baseUrl}/examenes/publico/${codigo}/verificar-password`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ password })
+    });
+    if (!response.ok) {
+      const error = await response.json().catch(() => ({ detail: 'Password incorrecto' }));
+      throw new Error(error.detail || 'Password incorrecto');
+    }
+    return response.json();
+  }
+
+  async guardarResultadoPublico(codigo, data) {
+    const baseUrl = import.meta.env.VITE_API_URL || 'http://localhost:8000/api/v1';
+    const response = await fetch(`${baseUrl}/examenes/publico/${codigo}/resultado`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data)
+    });
+    if (!response.ok) {
+      const error = await response.json().catch(() => ({ detail: 'Error al guardar resultado' }));
+      throw new Error(error.detail || 'Error al guardar resultado');
+    }
+    return response.json();
   }
 }
 

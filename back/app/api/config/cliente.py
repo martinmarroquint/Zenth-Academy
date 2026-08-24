@@ -25,7 +25,6 @@ async def get_cliente_config_publico(
         "modulos": {
             "examenes": True,
             "carpeta_docente": True,
-            "cuestionarios": True,
             "pizarra": True,
             "integraciones": True,
             "cursos": True,

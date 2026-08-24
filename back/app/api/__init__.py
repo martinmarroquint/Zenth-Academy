@@ -6,7 +6,6 @@ from app.api import (
     auth,
     alumnos,
     examenes,
-    cuestionarios,
     pizarra,
     integracion_edm,
     historial,
@@ -37,15 +36,6 @@ api_router.include_router(alumnos.router, prefix="/alumnos", tags=["Alumnos"])
 # EXÁMENES ONLINE (incluye grupos)
 # =============================================
 api_router.include_router(examenes.router, prefix="/examenes", tags=["Examenes"])
-
-# =============================================
-# CUESTIONARIOS DINÁMICOS
-# =============================================
-api_router.include_router(
-    cuestionarios.router,
-    prefix="/cuestionarios",
-    tags=["Cuestionarios"]
-)
 
 # =============================================
 # PIZARRA INTERACTIVA
@@ -144,7 +134,6 @@ __all__ = [
     'auth',
     'alumnos',
     'examenes',
-    'cuestionarios',
     'pizarra',
     'integracion_edm',
     'historial',

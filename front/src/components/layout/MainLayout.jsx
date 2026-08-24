@@ -4,7 +4,7 @@
 import React, { useState, useEffect } from 'react';
 import { NavLink, Outlet, useLocation } from 'react-router-dom';
 import {
-  Users, FileText, ClipboardList, BookOpen, FolderOpen,
+  Users, FileText, BookOpen, FolderOpen,
   PenTool, MessageCircle, Award, LogOut, ChevronLeft,
   ChevronRight, HelpCircle, LayoutDashboard, Send, Settings,
   Home, GraduationCap, Calendar, Bell, UserCircle, Menu, X,
@@ -17,7 +17,6 @@ const ICONOS_NAV = {
   dashboard: LayoutDashboard,
   usuarios: Users,
   examenes: FileText,
-  cuestionarios: ClipboardList,
   cursos: BookOpen,
   alumnos: Users,
   pizarra: PenTool,
@@ -53,7 +52,6 @@ const MENU_POR_ROL = {
       seccion: 'HERRAMIENTAS',
       items: [
         { id: 'examenes', label: 'Exámenes', to: 'examenes' },
-        { id: 'cuestionarios', label: 'Cuestionarios', to: 'cuestionarios' },
         { id: 'pizarra', label: 'Pizarra', to: 'pizarra' },
       ],
     },
@@ -89,7 +87,6 @@ const MENU_POR_ROL = {
       seccion: 'HERRAMIENTAS',
       items: [
         { id: 'examenes', label: 'Exámenes', to: 'examenes' },
-        { id: 'cuestionarios', label: 'Cuestionarios', to: 'cuestionarios' },
         { id: 'pizarra', label: 'Pizarra', to: 'pizarra' },
       ],
     },
@@ -153,6 +150,18 @@ const MainLayout = () => {
   useEffect(() => {
     setMenuMovil(false);
   }, [location.pathname]);
+
+  // Lock body scroll when mobile menu is open
+  useEffect(() => {
+    if (menuMovil) {
+      document.body.style.overflow = 'hidden';
+    } else {
+      document.body.style.overflow = 'unset';
+    }
+    return () => {
+      document.body.style.overflow = 'unset';
+    };
+  }, [menuMovil]);
   
   let rol = 'estudiante';
   try {
@@ -342,7 +351,7 @@ const MainLayout = () => {
         <div className="border-t border-gray-200 p-2 space-y-0.5 flex-shrink-0">
           <button
             onClick={handleLogout}
-            className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg text-gray-400 hover:bg-red-50 hover:text-red-600 transition-colors ${
+            className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-gray-400 hover:bg-red-50 hover:text-red-600 transition-colors min-h-[44px] ${
               !sidebarAbierto && 'lg:justify-center'
             }`}
             title={!sidebarAbierto ? 'Salir' : ''}
@@ -417,7 +426,7 @@ const MainLayout = () => {
             {/* Botón móvil */}
             <button
               onClick={() => setMenuMovil(true)}
-              className="lg:hidden p-2 -ml-2 rounded-lg hover:bg-gray-100 text-gray-500 transition-colors"
+              className="lg:hidden p-2.5 -ml-2 rounded-lg hover:bg-gray-100 text-gray-500 transition-colors min-w-[44px] min-h-[44px] flex items-center justify-center"
             >
               <Menu className="w-5 h-5" />
             </button>

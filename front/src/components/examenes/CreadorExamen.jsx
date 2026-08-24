@@ -455,7 +455,7 @@ const CreadorExamen = ({
               <Shield className="w-3 h-3"/> Seguridad y restricciones 
               <ChevronDown className={`w-3 h-3 transition-transform ${mostrarSeguridad ? 'rotate-180' : ''}`}/>
             </button>
-            {mostrarSeguridad && (
+            {mostrarSeguridad && (<>
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 mt-3 pb-3">
                 <div>
                   <label className="block text-[10px] font-medium text-gray-400 mb-1">Límite violaciones</label>
@@ -499,7 +499,24 @@ const CreadorExamen = ({
                   />
                 </div>
               </div>
-            )}
+              <div className="flex items-center gap-4 pb-3 flex-wrap">
+                <label className="flex items-center gap-2.5 cursor-pointer py-1">
+                  <input type="checkbox" checked={datos.configuracion?.acceso_publico || false}
+                    onChange={(e) => updateConfig('acceso_publico', e.target.checked)}
+                    className="w-4 h-4 rounded" style={{ accentColor: '#0f766e' }}/>
+                  <span className="text-[11px] font-medium text-gray-700">Acceso público</span>
+                </label>
+                <label className="flex items-center gap-2.5 cursor-pointer py-1">
+                  <input type="checkbox" checked={datos.configuracion?.anonimo || false}
+                    onChange={(e) => updateConfig('anonimo', e.target.checked)}
+                    className="w-4 h-4 rounded" style={{ accentColor: '#0f766e' }}/>
+                  <span className="text-[11px] font-medium text-gray-700">Modo anónimo</span>
+                </label>
+                {datos.configuracion?.acceso_publico && (
+                  <span className="text-[10px] text-teal-600 font-mono break-all">/examen/{datos.codigo || '...'}</span>
+                )}
+              </div>
+            </>)}
           </div>
         </div>
 

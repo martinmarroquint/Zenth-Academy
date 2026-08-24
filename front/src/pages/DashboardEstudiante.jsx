@@ -97,21 +97,21 @@ const DashboardEstudiante = () => {
       </div>
 
       {/* Stats Grid con Badges */}
-      <div className="grid grid-cols-4 gap-4 mb-8">
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 sm:gap-4 mb-8">
         <div className="bg-white border border-gray-100 rounded-lg px-4 py-3">
-          <p className="text-xl font-semibold text-gray-900">{stats.total}</p>
+          <p className="text-xl sm:text-2xl font-semibold text-gray-900">{stats.total}</p>
           <Badge variant="default" size="sm">Inscritos</Badge>
         </div>
         <div className="bg-white border border-gray-100 rounded-lg px-4 py-3">
-          <p className="text-xl font-semibold text-gray-900">{stats.activos}</p>
+          <p className="text-xl sm:text-2xl font-semibold text-gray-900">{stats.activos}</p>
           <Badge variant="primary" size="sm">En curso</Badge>
         </div>
         <div className="bg-white border border-gray-100 rounded-lg px-4 py-3">
-          <p className="text-xl font-semibold text-gray-900">{stats.completados}</p>
+          <p className="text-xl sm:text-2xl font-semibold text-gray-900">{stats.completados}</p>
           <Badge variant="success" size="sm">Completados</Badge>
         </div>
         <div className="bg-white border border-gray-100 rounded-lg px-4 py-3">
-          <p className="text-xl font-semibold text-gray-900">{stats.certificados}</p>
+          <p className="text-xl sm:text-2xl font-semibold text-gray-900">{stats.certificados}</p>
           <Badge variant="warning" size="sm">Certificados</Badge>
         </div>
       </div>

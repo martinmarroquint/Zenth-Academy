@@ -25,10 +25,13 @@ def listar_pizarras(
     estado: Optional[str] = Query(None),
     grupo_id: Optional[str] = Query(None),
     empresa_id: Optional[str] = Query(None),
+    creado_por: Optional[str] = Query(None),
     db: Session = Depends(get_db)
 ):
-    """Lista todas las pizarras"""
+    """Lista todas las pizarras, con filtro opcional por creado_por"""
     query = db.query(Pizarra)
+    if creado_por:
+        query = query.filter(Pizarra.creado_por == creado_por)
     if tipo:
         query = query.filter(Pizarra.tipo == tipo)
     if estado:

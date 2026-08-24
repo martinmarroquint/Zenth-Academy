@@ -667,29 +667,29 @@ const EstudiantesCurso = ({ cursoId }) => {
                         onClick={() => handleDesinscribir(est.estudiante_id, est.estudiante_nombre)}
                         disabled={desinscribiendo === est.estudiante_id}
                         title="Desinscribir del curso (elimina acceso y progreso)"
-                        className="p-1.5 hover:bg-red-50 rounded-lg text-gray-400 hover:text-red-600 transition-colors disabled:opacity-50"
+                        className="p-2.5 hover:bg-red-50 rounded-lg text-gray-400 hover:text-red-600 transition-colors disabled:opacity-50 min-w-[44px] min-h-[44px] flex items-center justify-center"
                       >
                         {desinscribiendo === est.estudiante_id ? (
-                          <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                          <Loader2 className="w-4 h-4 animate-spin" />
                         ) : (
-                          <Trash2 className="w-3.5 h-3.5" />
+                          <Trash2 className="w-4 h-4" />
                         )}
                       </button>
                       <button
                         onClick={() => handleDesactivarAcceso(est.estudiante_id, est.estudiante_nombre)}
                         disabled={desactivando === est.estudiante_id}
                         title="Desactivar acceso (puede reactivarse)"
-                        className="p-1.5 hover:bg-amber-50 rounded-lg text-gray-400 hover:text-amber-600 transition-colors disabled:opacity-50"
+                        className="p-2.5 hover:bg-amber-50 rounded-lg text-gray-400 hover:text-amber-600 transition-colors disabled:opacity-50 min-w-[44px] min-h-[44px] flex items-center justify-center"
                       >
                         {desactivando === est.estudiante_id ? (
-                          <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                          <Loader2 className="w-4 h-4 animate-spin" />
                         ) : (
-                          <UserX className="w-3.5 h-3.5" />
+                          <UserX className="w-4 h-4" />
                         )}
                       </button>
                       <button
                         onClick={() => verDetalle(est.estudiante_id)}
-                        className="p-1.5 hover:bg-gray-100 rounded-lg text-gray-400 hover:text-gray-600 transition-colors"
+                        className="p-2.5 hover:bg-gray-100 rounded-lg text-gray-400 hover:text-gray-600 transition-colors min-w-[44px] min-h-[44px] flex items-center justify-center"
                         title={expandido ? 'Ocultar detalle' : 'Ver progreso detallado'}
                       >
                         {expandido ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
@@ -723,7 +723,7 @@ const EstudiantesCurso = ({ cursoId }) => {
                                       {leccion.titulo}
                                     </span>
                                     {editandoNota && editandoNota.estudianteId === est.estudiante_id && editandoNota.leccionId === leccion.id ? (
-                                      <div className="flex items-center gap-1 flex-shrink-0">
+                                      <div className="flex items-center gap-1.5 flex-shrink-0">
                                         <input
                                           type="number"
                                           min="0"
@@ -731,7 +731,7 @@ const EstudiantesCurso = ({ cursoId }) => {
                                           step="0.5"
                                           value={notaEdicion}
                                           onChange={(e) => setNotaEdicion(e.target.value)}
-                                          className="w-14 px-2 py-0.5 text-xs border border-[#0f766e]/30 rounded-lg outline-none focus:ring-2 focus:ring-[#0f766e]/20"
+                                          className="w-16 px-2 py-2 text-xs border border-[#0f766e]/30 rounded-lg outline-none focus:ring-2 focus:ring-[#0f766e]/20 min-h-[44px]"
                                           placeholder="Nota"
                                           autoFocus
                                           onKeyDown={(e) => {
@@ -743,19 +743,19 @@ const EstudiantesCurso = ({ cursoId }) => {
                                           onClick={() => guardarNota(leccion)}
                                           disabled={guardandoNota === leccion.id}
                                           title="Guardar nota"
-                                          className="p-1 hover:bg-emerald-50 rounded-lg text-gray-400 hover:text-emerald-600 transition-colors disabled:opacity-50"
+                                          className="p-2 hover:bg-emerald-50 rounded-lg text-gray-400 hover:text-emerald-600 transition-colors disabled:opacity-50 min-w-[44px] min-h-[44px] flex items-center justify-center"
                                         >
                                           {guardandoNota === leccion.id ? (
-                                            <Loader2 className="w-3 h-3 animate-spin" />
+                                            <Loader2 className="w-4 h-4 animate-spin" />
                                           ) : (
-                                            <Save className="w-3 h-3" />
+                                            <Save className="w-4 h-4" />
                                           )}
                                         </button>
                                         <button
                                           onClick={() => setEditandoNota(null)}
-                                          className="p-1 hover:bg-gray-100 rounded-lg text-gray-400 hover:text-gray-600 transition-colors"
+                                          className="p-2 hover:bg-gray-100 rounded-lg text-gray-400 hover:text-gray-600 transition-colors min-w-[44px] min-h-[44px] flex items-center justify-center"
                                         >
-                                          <X className="w-3 h-3" />
+                                          <X className="w-4 h-4" />
                                         </button>
                                       </div>
                                     ) : (

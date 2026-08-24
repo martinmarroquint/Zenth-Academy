@@ -64,7 +64,9 @@ def calcular_resultado(examen, respuestas_alumno):
         puntos_pregunta = 0
         
         if pregunta.tipo == 'opcion_multiple':
-            if respuesta is not None and respuesta == pregunta.respuesta_correcta:
+            # CORRECCIÓN: respuesta es int (del JSON), respuesta_correcta es string (VARCHAR en BD)
+            # Se comparan ambos como enteros para evitar int != str
+            if respuesta is not None and int(respuesta) == int(pregunta.respuesta_correcta):
                 puntos_pregunta = pts
                 pregunta_correcta = True
                 
@@ -123,6 +125,12 @@ def calcular_resultado(examen, respuestas_alumno):
         elif pregunta.tipo == 'ensayo':
             puntos_pregunta = 0
             pregunta_correcta = None
+            
+        elif pregunta.tipo in ('likert', 'estrellas', 'escala_numerica'):
+            # Tipos de encuesta: siempre puntaje completo si respondieron
+            if respuesta is not None:
+                puntos_pregunta = pts
+                pregunta_correcta = True
         
         puntos_obtenidos += puntos_pregunta
         if pregunta_correcta:
@@ -758,6 +766,30 @@ def guardar_resultado(
     examen = db.query(Examen).filter(Examen.id == data.examen_id).first()
     if not examen:
         raise HTTPException(status_code=404, detail="Examen no encontrado")
+    
+    # ✅ CORREGIDO: Verificar que el examen esté publicado
+    if examen.estado != 'PUBLICADO':
+        raise HTTPException(status_code=400, detail="El examen no está disponible para entregar respuestas")
+    
+    # ✅ CORREGIDO: Verificar ventana de fechas
+    config = examen.configuracion or {}
+    ahora = datetime.now(timezone.utc)
+    if config.get('fecha_inicio'):
+        try:
+            fecha_inicio = datetime.fromisoformat(config['fecha_inicio'].replace('Z', '+00:00'))
+            if ahora < fecha_inicio:
+                raise HTTPException(status_code=400, detail="El examen aún no está disponible")
+        except (ValueError, AttributeError):
+            pass
+    if config.get('fecha_fin'):
+        try:
+            fecha_fin = datetime.fromisoformat(config['fecha_fin'].replace('Z', '+00:00'))
+            if ahora > fecha_fin:
+                raise HTTPException(status_code=400, detail="El plazo para entregar el examen ha expirado")
+        except (ValueError, AttributeError):
+            pass
+    
+    # Verificar límite de intentos
     if examen.intentos_permitidos and examen.intentos_permitidos > 0:
         intentos_actuales = db.query(ResultadoExamen).filter(
             ResultadoExamen.examen_id == data.examen_id,
@@ -765,12 +797,16 @@ def guardar_resultado(
         ).count()
         if intentos_actuales >= examen.intentos_permitidos:
             raise HTTPException(status_code=400, detail="Límite de intentos alcanzado")
+    
     resultado_calculado = calcular_resultado(examen, data.respuestas or {})
     estado_final = data.estado or 'COMPLETADO'
     calificacion = resultado_calculado["calificacion"]
     puntos_obtenidos = resultado_calculado["puntos_obtenidos"]
     correctas = resultado_calculado["correctas"]
-    if data.violaciones and data.violaciones >= 3:
+    
+    # ✅ CORREGIDO: Usar límite de violaciones de la config del examen, no hardcodear 3
+    limite_violaciones = config.get('limite_violaciones', 3)
+    if data.violaciones and data.violaciones >= limite_violaciones:
         estado_final = 'TRAMPA'
         calificacion = 0
         puntos_obtenidos = 0
@@ -910,7 +946,11 @@ def obtener_revision(
             if pregunta.opcion_e: opciones["E"] = pregunta.opcion_e
             item["opciones"] = opciones
             item["respuesta_correcta"] = pregunta.respuesta_correcta
-            item["correcta"] = (respuesta == pregunta.respuesta_correcta)
+            # CORRECCIÓN: comparar como enteros (int vs string de BD)
+            try:
+                item["correcta"] = (respuesta is not None and int(respuesta) == int(pregunta.respuesta_correcta))
+            except (ValueError, TypeError):
+                item["correcta"] = False
             item["puntos_obtenidos"] = pregunta.puntos if item["correcta"] else 0
         elif pregunta.tipo == 'verdadero_falso':
             afirmaciones = []
@@ -987,6 +1027,10 @@ def obtener_revision(
             item["correcta"] = None
             item["puntos_obtenidos"] = 0
             item["detalle"]["nota"] = "Las preguntas de ensayo no se califican automáticamente"
+        elif pregunta.tipo in ('likert', 'estrellas', 'escala_numerica'):
+            item["correcta"] = respuesta is not None
+            item["puntos_obtenidos"] = pregunta.puntos if respuesta is not None else 0
+            item["detalle"]["nota"] = "Pregunta de encuesta"
         detalle.append(item)
     return {
         "resultado_id": resultado.id,
@@ -1278,6 +1322,137 @@ def cambiar_estado_examen(
         'BORRADOR': 'Examen vuelto a borrador'
     }
     return {"mensaje": mensajes.get(estado, 'Estado actualizado'), "ok": True}
+
+
+# =============================================
+# ACCESO PUBLICO A EXAMENES (sin autenticacion)
+# =============================================
+
+@router.get("/publico/{codigo}", response_model=ExamenDetailResponse)
+def obtener_examen_publico(
+    codigo: str,
+    db: Session = Depends(get_db)
+):
+    """Obtener un examen publico por su codigo (sin login)"""
+    examen = db.query(Examen).filter(
+        Examen.codigo == codigo,
+        Examen.estado == 'PUBLICADO'
+    ).first()
+    if not examen:
+        raise HTTPException(status_code=404, detail="Examen no encontrado")
+    config = examen.configuracion or {}
+    if not config.get('acceso_publico', False):
+        raise HTTPException(status_code=403, detail="Este examen no tiene acceso publico habilitado")
+    return examen
+
+
+@router.post("/publico/{codigo}/verificar-password")
+def verificar_password_examen_publico(
+    codigo: str,
+    data: dict,
+    db: Session = Depends(get_db)
+):
+    """Verificar password de examen publico (sin login)"""
+    examen = db.query(Examen).filter(
+        Examen.codigo == codigo,
+        Examen.estado == 'PUBLICADO'
+    ).first()
+    if not examen:
+        raise HTTPException(status_code=404, detail="Examen no encontrado")
+    config = examen.configuracion or {}
+    password_correcto = config.get('password_examen')
+    if password_correcto and data.get('password') != password_correcto:
+        raise HTTPException(status_code=401, detail="Password incorrecto")
+    return {"ok": True, "mensaje": "Password verificado"}
+
+
+@router.post("/publico/{codigo}/resultado")
+def guardar_resultado_publico(
+    codigo: str,
+    data: dict,
+    db: Session = Depends(get_db)
+):
+    """Guardar resultado de examen publico/anonimo (sin login)"""
+    from app.models.resultado_examen import ResultadoExamen
+    import uuid
+    
+    examen = db.query(Examen).filter(
+        Examen.codigo == codigo,
+        Examen.estado == 'PUBLICADO'
+    ).first()
+    if not examen:
+        raise HTTPException(status_code=404, detail="Examen no encontrado")
+    
+    config = examen.configuracion or {}
+    if not config.get('acceso_publico', False):
+        raise HTTPException(status_code=403, detail="Este examen no tiene acceso publico habilitado")
+    
+    # Verificar password si es requerido
+    password_correcto = config.get('password_examen')
+    if password_correcto and data.get('password') != password_correcto:
+        raise HTTPException(status_code=401, detail="Password incorrecto")
+    
+    # Verificar ventana de fechas
+    if config.get('fecha_inicio'):
+        from datetime import datetime as dt
+        try:
+            fecha_inicio = dt.fromisoformat(config['fecha_inicio'].replace('Z', '+00:00'))
+            if dt.now(timezone.utc) < fecha_inicio:
+                raise HTTPException(status_code=400, detail="El examen aun no esta disponible")
+        except (ValueError, TypeError):
+            pass
+    
+    if config.get('fecha_fin'):
+        from datetime import datetime as dt
+        try:
+            fecha_fin = dt.fromisoformat(config['fecha_fin'].replace('Z', '+00:00'))
+            if dt.now(timezone.utc) > fecha_fin:
+                raise HTTPException(status_code=400, detail="El examen ya no esta disponible")
+        except (ValueError, TypeError):
+            pass
+    
+    respuestas_alumno = data.get('respuestas', {})
+    resultado_calculado = calcular_resultado(examen, respuestas_alumno)
+    
+    es_anonimo = config.get('anonimo', False)
+    alumno_nombre = "Anonimo" if es_anonimo else data.get('alumno_nombre', 'Participante')
+    
+    resultado = ResultadoExamen(
+        id=str(uuid.uuid4()),
+        examen_id=examen.id,
+        alumno_id=None if es_anonimo else data.get('alumno_id', 'publico'),
+        alumno_id_unificado=None,
+        alumno_nombre=alumno_nombre,
+        alumno_grado=data.get('alumno_grado', ''),
+        alumno_dni="00000000" if es_anonimo else data.get('alumno_dni', ''),
+        calificacion=resultado_calculado['calificacion'],
+        correctas=resultado_calculado['correctas'],
+        total_preguntas=resultado_calculado['total_preguntas'],
+        puntos_obtenidos=resultado_calculado['puntos_obtenidos'],
+        total_puntos=resultado_calculado['total_puntos'],
+        tiempo_usado=data.get('tiempo_usado', 0),
+        violaciones=data.get('violaciones', 0),
+        estado='TRAMPA' if data.get('violaciones', 0) >= config.get('limite_violaciones', 3) else 'COMPLETADO',
+        respuestas=respuestas_alumno,
+        entregado_en=datetime.now(timezone.utc).isoformat()
+    )
+    
+    db.add(resultado)
+    db.commit()
+    
+    mostrar_resultados = config.get('mostrar_resultados', True)
+    
+    return {
+        "ok": True,
+        "resultado_id": resultado.id,
+        "calificacion": resultado_calculado['calificacion'] if mostrar_resultados else None,
+        "correctas": resultado_calculado['correctas'] if mostrar_resultados else None,
+        "total_preguntas": resultado_calculado['total_preguntas'],
+        "puntos_obtenidos": resultado_calculado['puntos_obtenidos'] if mostrar_resultados else None,
+        "total_puntos": resultado_calculado['total_puntos'],
+        "estado": resultado.estado,
+        "mensaje": "Resultado guardado" if mostrar_resultados else "Resultado registrado correctamente"
+    }
 
 
 # =============================================

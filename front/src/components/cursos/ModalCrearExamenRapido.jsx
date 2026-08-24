@@ -149,7 +149,7 @@ const ModalCrearExamenRapido = ({
             </div>
           ) : (
             <CreadorExamen
-              examenInicial={null}
+              examen={null}
               onGuardar={handleGuardarExamen}
               onVolver={handleVolver}
               grupoId={null}

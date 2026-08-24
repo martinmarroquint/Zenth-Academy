@@ -3,7 +3,8 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { 
   Plus, Trash2, CheckCircle2, X, Eye, Type, Hash, Copy, GripVertical,
-  ListChecks, ToggleLeft, ArrowLeftRight, ArrowUpDown, PenLine, AlignLeft 
+  ListChecks, ToggleLeft, ArrowLeftRight, ArrowUpDown, PenLine, AlignLeft,
+  BarChart3, Star
 } from 'lucide-react';
 import { COLOR_PRIMARIO, TIPOS_PREGUNTA_CONFIG } from './constantes';
 
@@ -14,13 +15,17 @@ const ICONOS_POR_TIPO = {
   ordenamiento: ArrowUpDown,
   completar: PenLine,
   respuesta_corta: Type,
-  ensayo: AlignLeft
+  ensayo: AlignLeft,
+  likert: BarChart3,
+  estrellas: Star,
+  escala_numerica: Hash
 };
 
 const COLORES_TIPO = {
   opcion_multiple: '#188C5D', verdadero_falso: '#2563EB',
   relacionar: '#7C3AED', ordenamiento: '#F59E0B',
-  completar: '#DC2626', respuesta_corta: '#0891B2', ensayo: '#4F46E5'
+  completar: '#DC2626', respuesta_corta: '#0891B2', ensayo: '#4F46E5',
+  likert: '#0D9488', estrellas: '#D97706', escala_numerica: '#7C3AED'
 };
 
 const PreguntaItem = ({ 
@@ -161,12 +166,12 @@ const PreguntaItem = ({
                       </div>
                       <div className="flex items-center gap-2 w-full sm:w-auto">
                         <button onClick={() => actAfirmacion(af.id, 'esVerdadero', true)}
-                          className={`flex-1 sm:flex-initial sm:w-20 py-1.5 text-[10px] font-bold rounded-lg border transition-all ${af.esVerdadero === true ? 'bg-emerald-500 text-white border-emerald-500 shadow-sm' : 'bg-white text-gray-400 border-gray-200 hover:bg-emerald-50 hover:text-emerald-600'}`}
+                          className={`flex-1 sm:flex-initial sm:w-20 py-2 text-[10px] font-bold rounded-lg border transition-all ${af.esVerdadero === true ? 'bg-emerald-500 text-white border-emerald-500 shadow-sm' : 'bg-white text-gray-400 border-gray-200 hover:bg-emerald-50 hover:text-emerald-600'}`}
                           style={{ WebkitTapHighlightColor: 'transparent' }}><CheckCircle2 className="w-3 h-3 inline mr-0.5"/> V</button>
                         <button onClick={() => actAfirmacion(af.id, 'esVerdadero', false)}
-                          className={`flex-1 sm:flex-initial sm:w-20 py-1.5 text-[10px] font-bold rounded-lg border transition-all ${af.esVerdadero === false ? 'bg-red-500 text-white border-red-500 shadow-sm' : 'bg-white text-gray-400 border-gray-200 hover:bg-red-50 hover:text-red-500'}`}
+                          className={`flex-1 sm:flex-initial sm:w-20 py-2 text-[10px] font-bold rounded-lg border transition-all ${af.esVerdadero === false ? 'bg-red-500 text-white border-red-500 shadow-sm' : 'bg-white text-gray-400 border-gray-200 hover:bg-red-50 hover:text-red-500'}`}
                           style={{ WebkitTapHighlightColor: 'transparent' }}><X className="w-3 h-3 inline mr-0.5"/> F</button>
-                        <button onClick={() => delAfirmacion(af.id)} className="p-1 hover:bg-red-50 rounded transition-colors" style={{ WebkitTapHighlightColor: 'transparent' }}><Trash2 className="w-3 h-3 text-gray-400 hover:text-red-500"/></button>
+                        <button onClick={() => delAfirmacion(af.id)} className="p-2 hover:bg-red-50 rounded transition-colors" style={{ WebkitTapHighlightColor: 'transparent' }}><Trash2 className="w-3.5 h-3.5 text-gray-400 hover:text-red-500"/></button>
                       </div>
                     </div>
                   ))}
@@ -207,7 +212,7 @@ const PreguntaItem = ({
                           className="flex-1 px-2.5 py-1.5 text-xs border border-gray-200 rounded-lg outline-none focus:border-emerald-400 transition-all bg-white"
                           style={{ WebkitTapHighlightColor: 'transparent', caretColor: COLOR_PRIMARIO }}/>
                         <button onClick={() => delPar(i)} disabled={llenos <= 2} 
-                          className="p-1.5 hover:bg-red-50 rounded-lg transition-colors disabled:opacity-30 flex-shrink-0" 
+                          className="p-2 hover:bg-red-50 rounded-lg transition-colors disabled:opacity-30 flex-shrink-0" 
                           style={{ WebkitTapHighlightColor: 'transparent' }}>
                           <X className="w-3.5 h-3.5 text-gray-400 hover:text-red-500"/>
                         </button>
@@ -300,14 +305,14 @@ const PreguntaItem = ({
                                 <span className="relative bg-white border border-gray-200 rounded-md shadow-sm">
                                   <input type="text" value={seg.texto || ''} onChange={(e) => actSegmento(frase.id, seg.id, 'texto', e.target.value)} placeholder="texto"
                                     className="px-2 py-0.5 text-[11px] bg-transparent outline-none rounded-md min-w-[50px]" style={{ caretColor: COLOR_PRIMARIO }}/>
-                                  <button onClick={() => delSegmento(frase.id, seg.id)} className="absolute -top-1.5 -right-1.5 w-4 h-4 bg-white border border-gray-200 rounded-full flex items-center justify-center opacity-0 group-hover/seg:opacity-100 shadow-sm hover:bg-red-50 transition-all" style={{ WebkitTapHighlightColor: 'transparent' }}><X className="w-2.5 h-2.5 text-gray-400 hover:text-red-500"/></button>
+                                  <button onClick={() => delSegmento(frase.id, seg.id)} className="absolute -top-2 -right-2 w-5 h-5 bg-white border border-gray-200 rounded-full flex items-center justify-center opacity-100 sm:opacity-0 sm:group-hover/seg:opacity-100 shadow-sm hover:bg-red-50 transition-all" style={{ WebkitTapHighlightColor: 'transparent' }}><X className="w-3 h-3 text-gray-400 hover:text-red-500"/></button>
                                 </span>
                               ) : (
                                 <span className="relative bg-emerald-50 border border-emerald-200 rounded-md px-1.5 py-0.5 flex items-center gap-1 shadow-sm">
                                   <span className="w-3.5 h-3.5 rounded bg-emerald-200 flex items-center justify-center text-[8px] font-bold text-emerald-700">{(frase.segmentos || []).filter(s => s.tipo === 'espacio').findIndex(s => s.id === seg.id) + 1}</span>
                                   <input type="text" value={seg.respuesta || ''} onChange={(e) => actSegmento(frase.id, seg.id, 'respuesta', e.target.value)} placeholder="rpta"
                                     className="w-20 px-1 py-0.5 text-[11px] bg-transparent text-emerald-700 font-medium outline-none" style={{ caretColor: COLOR_PRIMARIO }}/>
-                                  <button onClick={() => delSegmento(frase.id, seg.id)} className="absolute -top-1.5 -right-1.5 w-4 h-4 bg-white border border-gray-200 rounded-full flex items-center justify-center opacity-0 group-hover/seg:opacity-100 shadow-sm hover:bg-red-50 transition-all" style={{ WebkitTapHighlightColor: 'transparent' }}><X className="w-2.5 h-2.5 text-gray-400 hover:text-red-500"/></button>
+                                  <button onClick={() => delSegmento(frase.id, seg.id)} className="absolute -top-2 -right-2 w-5 h-5 bg-white border border-gray-200 rounded-full flex items-center justify-center opacity-100 sm:opacity-0 sm:group-hover/seg:opacity-100 shadow-sm hover:bg-red-50 transition-all" style={{ WebkitTapHighlightColor: 'transparent' }}><X className="w-3 h-3 text-gray-400 hover:text-red-500"/></button>
                                 </span>
                               )}
                             </span>
@@ -369,6 +374,139 @@ const PreguntaItem = ({
               </div>
             </div>
           )}
+
+          {/* ============================================= */}
+          {/* LIKERT (ENCUESTA) */}
+          {/* ============================================= */}
+          {pregunta.tipo === 'likert' && (
+            <div className="pl-2 space-y-3">
+              <div className="bg-teal-50 border border-teal-200 rounded-xl p-3">
+                <p className="text-[11px] font-medium text-teal-600 mb-2">Vista previa de la escala Likert</p>
+                <div className="space-y-1.5">
+                  {['Totalmente en desacuerdo', 'En desacuerdo', 'Neutral', 'De acuerdo', 'Totalmente de acuerdo'].map((label, i) => (
+                    <div key={i} className="flex items-center gap-2">
+                      <span className="w-4 h-4 rounded-full border-2 border-teal-300 flex-shrink-0"/>
+                      <span className="text-xs text-gray-600">{label}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <p className="text-[11px] font-medium text-gray-400 mb-1">Numero de opciones</p>
+                  <select value={pregunta.escala_opciones || 5} onChange={(e) => onUpdate('escala_opciones', parseInt(e.target.value))}
+                    className="w-full px-3 py-2 text-sm border border-gray-200 rounded-xl outline-none focus:border-emerald-400 transition-all">
+                    <option value={3}>3 opciones</option>
+                    <option value={5}>5 opciones (estandar)</option>
+                    <option value={7}>7 opciones</option>
+                  </select>
+                </div>
+                <div>
+                  <p className="text-[11px] font-medium text-gray-400 mb-1">Etiqueta minima</p>
+                  <input type="text" value={pregunta.escala_min_label || 'Totalmente en desacuerdo'} onChange={(e) => onUpdate('escala_min_label', e.target.value)}
+                    className="w-full px-3 py-2 text-sm border border-gray-200 rounded-xl outline-none focus:border-emerald-400 transition-all"/>
+                </div>
+                <div>
+                  <p className="text-[11px] font-medium text-gray-400 mb-1">Etiqueta maxima</p>
+                  <input type="text" value={pregunta.escala_max_label || 'Totalmente de acuerdo'} onChange={(e) => onUpdate('escala_max_label', e.target.value)}
+                    className="w-full px-3 py-2 text-sm border border-gray-200 rounded-xl outline-none focus:border-emerald-400 transition-all"/>
+                </div>
+              </div>
+              <p className="text-[10px] text-teal-500 flex items-center gap-1">
+                <BarChart3 className="w-3 h-3"/> Pregunta de encuesta: no se califica automaticamente
+              </p>
+            </div>
+          )}
+
+          {/* ============================================= */}
+          {/* ESTRELLAS (ENCUESTA) */}
+          {/* ============================================= */}
+          {pregunta.tipo === 'estrellas' && (
+            <div className="pl-2 space-y-3">
+              <div className="bg-amber-50 border border-amber-200 rounded-xl p-3">
+                <p className="text-[11px] font-medium text-amber-600 mb-2">Vista previa</p>
+                <div className="flex items-center gap-1">
+                  {[1,2,3,4,5].map(n => (
+                    <Star key={n} className="w-6 h-6 text-amber-300 fill-amber-300"/>
+                  ))}
+                  <span className="text-xs text-gray-500 ml-2">(1-5 estrellas)</span>
+                </div>
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <p className="text-[11px] font-medium text-gray-400 mb-1">Numero maximo de estrellas</p>
+                  <select value={pregunta.escala_max || 5} onChange={(e) => onUpdate('escala_max', parseInt(e.target.value))}
+                    className="w-full px-3 py-2 text-sm border border-gray-200 rounded-xl outline-none focus:border-emerald-400 transition-all">
+                    <option value={3}>3 estrellas</option>
+                    <option value={5}>5 estrellas</option>
+                    <option value={7}>7 estrellas</option>
+                    <option value={10}>10 estrellas</option>
+                  </select>
+                </div>
+                <div>
+                  <p className="text-[11px] font-medium text-gray-400 mb-1">Etiqueta izquierda</p>
+                  <input type="text" value={pregunta.escala_min_label || 'Muy malo'} onChange={(e) => onUpdate('escala_min_label', e.target.value)}
+                    className="w-full px-3 py-2 text-sm border border-gray-200 rounded-xl outline-none focus:border-emerald-400 transition-all"/>
+                </div>
+                <div>
+                  <p className="text-[11px] font-medium text-gray-400 mb-1">Etiqueta derecha</p>
+                  <input type="text" value={pregunta.escala_max_label || 'Excelente'} onChange={(e) => onUpdate('escala_max_label', e.target.value)}
+                    className="w-full px-3 py-2 text-sm border border-gray-200 rounded-xl outline-none focus:border-emerald-400 transition-all"/>
+                </div>
+              </div>
+              <p className="text-[10px] text-amber-500 flex items-center gap-1">
+                <Star className="w-3 h-3"/> Pregunta de encuesta: no se califica automaticamente
+              </p>
+            </div>
+          )}
+
+          {/* ============================================= */}
+          {/* ESCALA NUMERICA (ENCUESTA) */}
+          {/* ============================================= */}
+          {pregunta.tipo === 'escala_numerica' && (
+            <div className="pl-2 space-y-3">
+              <div className="bg-purple-50 border border-purple-200 rounded-xl p-3">
+                <p className="text-[11px] font-medium text-purple-600 mb-2">Vista previa de la escala</p>
+                <div className="flex items-center gap-3">
+                  <span className="text-xs text-gray-500">{pregunta.escala_min || 1}</span>
+                  <input type="range" min={pregunta.escala_min || 1} max={pregunta.escala_max || 10} defaultValue={Math.round(((pregunta.escala_min || 1) + (pregunta.escala_max || 10)) / 2)} className="flex-1" disabled/>
+                  <span className="text-xs text-gray-500">{pregunta.escala_max || 10}</span>
+                </div>
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                <div>
+                  <p className="text-[11px] font-medium text-gray-400 mb-1">Valor minimo</p>
+                  <input type="number" value={pregunta.escala_min || 1} onChange={(e) => onUpdate('escala_min', parseInt(e.target.value) || 1)}
+                    className="w-full px-3 py-2 text-sm border border-gray-200 rounded-xl outline-none focus:border-emerald-400 transition-all text-center"/>
+                </div>
+                <div>
+                  <p className="text-[11px] font-medium text-gray-400 mb-1">Valor maximo</p>
+                  <input type="number" value={pregunta.escala_max || 10} onChange={(e) => onUpdate('escala_max', parseInt(e.target.value) || 10)}
+                    className="w-full px-3 py-2 text-sm border border-gray-200 rounded-xl outline-none focus:border-emerald-400 transition-all text-center"/>
+                </div>
+                <div>
+                  <p className="text-[11px] font-medium text-gray-400 mb-1">Paso</p>
+                  <input type="number" value={pregunta.escala_paso || 1} onChange={(e) => onUpdate('escala_paso', parseInt(e.target.value) || 1)} min={1}
+                    className="w-full px-3 py-2 text-sm border border-gray-200 rounded-xl outline-none focus:border-emerald-400 transition-all text-center"/>
+                </div>
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <p className="text-[11px] font-medium text-gray-400 mb-1">Etiqueta minima</p>
+                  <input type="text" value={pregunta.escala_min_label || 'Nada'} onChange={(e) => onUpdate('escala_min_label', e.target.value)}
+                    className="w-full px-3 py-2 text-sm border border-gray-200 rounded-xl outline-none focus:border-emerald-400 transition-all"/>
+                </div>
+                <div>
+                  <p className="text-[11px] font-medium text-gray-400 mb-1">Etiqueta maxima</p>
+                  <input type="text" value={pregunta.escala_max_label || 'Mucho'} onChange={(e) => onUpdate('escala_max_label', e.target.value)}
+                    className="w-full px-3 py-2 text-sm border border-gray-200 rounded-xl outline-none focus:border-emerald-400 transition-all"/>
+                </div>
+              </div>
+              <p className="text-[10px] text-purple-500 flex items-center gap-1">
+                <Hash className="w-3 h-3"/> Pregunta de encuesta: no se califica automaticamente
+              </p>
+            </div>
+          )}
         </div>
 
         {/* ============================================= */}
@@ -380,7 +518,7 @@ const PreguntaItem = ({
           <div className="relative" ref={menuRef}>
             <button 
               onClick={() => setMenuAbierto(!menuAbierto)}
-              className="w-7 h-7 rounded-lg flex items-center justify-center text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition-all duration-200"
+              className="w-9 h-9 rounded-lg flex items-center justify-center text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition-all duration-200"
               style={{ WebkitTapHighlightColor: 'transparent' }}>
               <Plus className="w-4 h-4"/>
             </button>
@@ -414,12 +552,12 @@ const PreguntaItem = ({
           </div>
 
           {onDuplicate && (
-            <button onClick={onDuplicate} className="w-7 h-7 rounded-lg flex items-center justify-center text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition-all duration-200" style={{ WebkitTapHighlightColor: 'transparent' }} title="Duplicar">
-              <Copy className="w-3.5 h-3.5"/>
+            <button onClick={onDuplicate} className="w-9 h-9 rounded-lg flex items-center justify-center text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition-all duration-200" style={{ WebkitTapHighlightColor: 'transparent' }} title="Duplicar">
+              <Copy className="w-4 h-4"/>
             </button>
           )}
-          <button onClick={onDelete} className="w-7 h-7 rounded-lg flex items-center justify-center text-gray-400 hover:text-red-500 hover:bg-red-50 transition-all duration-200" style={{ WebkitTapHighlightColor: 'transparent' }} title="Eliminar">
-            <Trash2 className="w-3.5 h-3.5"/>
+          <button onClick={onDelete} className="w-9 h-9 rounded-lg flex items-center justify-center text-gray-400 hover:text-red-500 hover:bg-red-50 transition-all duration-200" style={{ WebkitTapHighlightColor: 'transparent' }} title="Eliminar">
+            <Trash2 className="w-4 h-4"/>
           </button>
         </div>
       </div>

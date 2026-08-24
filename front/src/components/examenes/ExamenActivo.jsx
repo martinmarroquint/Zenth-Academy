@@ -3,7 +3,8 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { 
   AlertTriangle, Clock, Flag, ChevronLeft, ChevronRight, 
-  Send, Shuffle, CheckCircle2, XCircle, GripVertical
+  Send, Shuffle, CheckCircle2, XCircle, GripVertical,
+  Star, BarChart3
 } from 'lucide-react';
 import Temporizador from './Temporizador';
 import NavegadorPreguntas from './NavegadorPreguntas';
@@ -132,7 +133,9 @@ const ExamenActivo = ({ examen, alumno, onFinalizar, onAbandonar }) => {
     onAlerta: setAlertaActiva
   });
 
-  const seguridad = useExamenSeguridad(MODO_ESTRICTO, { 
+  // ✅ CORREGIDO: primer parámetro es examenActivo (boolean), no MODO_ESTRICTO
+  const examenActivo = !entregado && preguntasExamen.length > 0;
+  const seguridad = useExamenSeguridad(examenActivo, { 
     limiteViolaciones: LIMITE_VIOLACIONES, 
     modoEstricto: MODO_ESTRICTO
   });
@@ -405,7 +408,7 @@ const ExamenActivo = ({ examen, alumno, onFinalizar, onAbandonar }) => {
               <div className="flex items-center justify-between mb-3 sm:mb-6">
                 <div className="flex items-center gap-2">
                   <span className="text-xs sm:text-sm font-bold text-gray-400">Pregunta {preguntaActual + 1}</span>
-                  <button onClick={() => toggleMarcarRevision(preguntaActual)} className={`p-1.5 rounded-lg ${preguntasMarcadas.has(preguntaActual) ? 'bg-amber-100 text-amber-700' : 'text-gray-400 hover:bg-gray-100'}`}>
+                  <button onClick={() => toggleMarcarRevision(preguntaActual)} className={`p-2 rounded-lg min-w-[44px] min-h-[44px] flex items-center justify-center ${preguntasMarcadas.has(preguntaActual) ? 'bg-amber-100 text-amber-700' : 'text-gray-400 hover:bg-gray-100'}`}>
                     <Flag className="w-4 h-4" />
                   </button>
                 </div>
@@ -419,7 +422,7 @@ const ExamenActivo = ({ examen, alumno, onFinalizar, onAbandonar }) => {
                 {/* OPCION MULTIPLE */}
                 {preguntaActualData.tipo === 'opcion_multiple' && (
                   <div className="space-y-2">
-                    {['a','b','c','d'].map((l, i) => {
+                    {['a','b','c','d','e'].map((l, i) => {
                       const t = preguntaActualData['opcion_' + l];
                       if (!t || !t.trim()) return null;
                       const sel = respuestas[claveReal] === i;
@@ -438,20 +441,20 @@ const ExamenActivo = ({ examen, alumno, onFinalizar, onAbandonar }) => {
 
                 {/* V/F */}
                 {preguntaActualData.tipo === 'verdadero_falso' && (
-                  <div className="border rounded-xl overflow-hidden">
-                    <div className="bg-gray-100 flex items-center p-2 sm:p-3 text-xs font-bold text-gray-600">
-                      <span className="w-6 sm:w-8">#</span><span className="flex-1">AFIRMACION</span><span className="w-24 sm:w-32 text-center">RESPUESTA</span>
+                  <div className="border rounded-xl overflow-x-auto">
+                    <div className="bg-gray-100 flex items-center p-2 sm:p-3 text-xs font-bold text-gray-600 min-w-[280px]">
+                      <span className="w-6 sm:w-8">#</span><span className="flex-1">AFIRMACION</span><span className="w-28 sm:w-32 text-center">RESPUESTA</span>
                     </div>
                     <div className="divide-y">
                       {(preguntaActualData.afirmaciones||[]).map((af,i)=>{
                         const ra=(respuestas[claveReal]||[])[i];
                         return(
-                          <div key={af.id||i} className="flex items-center gap-1.5 sm:gap-2 p-2 sm:p-3">
+                          <div key={af.id||i} className="flex items-center gap-1.5 sm:gap-2 p-2 sm:p-3 min-w-[280px]">
                             <span className="w-6 sm:w-8 text-center text-xs text-gray-400">{i+1}</span>
-                            <span className="flex-1 text-xs sm:text-sm text-gray-800">{af.texto}</span>
-                            <div className="w-24 sm:w-32 flex justify-center gap-0.5 sm:gap-1">
-                              <button onClick={()=>guardarVF(i,true)} disabled={entregado} className={'w-10 sm:w-12 py-1 sm:py-1.5 text-xs font-bold rounded-l-lg border transition-all '+(ra===true?'bg-emerald-500 text-white border-emerald-500':'bg-white text-gray-500 border-gray-300')}>V</button>
-                              <button onClick={()=>guardarVF(i,false)} disabled={entregado} className={'w-10 sm:w-12 py-1 sm:py-1.5 text-xs font-bold rounded-r-lg border transition-all '+(ra===false?'bg-red-500 text-white border-red-500':'bg-white text-gray-500 border-gray-300')}>F</button>
+                            <span className="flex-1 text-xs sm:text-sm text-gray-800 truncate">{af.texto}</span>
+                            <div className="w-28 sm:w-32 flex justify-center gap-0.5 sm:gap-1">
+                              <button onClick={()=>guardarVF(i,true)} disabled={entregado} className={'w-12 sm:w-14 py-3 text-xs font-bold rounded-l-lg border transition-all min-h-[44px] '+(ra===true?'bg-emerald-500 text-white border-emerald-500':'bg-white text-gray-500 border-gray-300')}>V</button>
+                              <button onClick={()=>guardarVF(i,false)} disabled={entregado} className={'w-12 sm:w-14 py-3 text-xs font-bold rounded-r-lg border transition-all min-h-[44px] '+(ra===false?'bg-red-500 text-white border-red-500':'bg-white text-gray-500 border-gray-300')}>F</button>
                             </div>
                           </div>
                         );
@@ -477,7 +480,7 @@ const ExamenActivo = ({ examen, alumno, onFinalizar, onAbandonar }) => {
                             <div className="space-y-1.5 pl-8">
                               {opciones.map((itemB, j) => (
                                 <button key={j} onClick={() => guardarRelacion(i, j)} disabled={entregado}
-                                  className={`w-full text-left px-3 py-2.5 rounded-lg border-2 text-sm transition-all ${ra === j ? 'border-emerald-500 bg-emerald-50 text-emerald-700 font-medium' : 'border-gray-200 text-gray-600 hover:border-gray-300 active:bg-gray-50'}`}>
+                                  className={`w-full text-left px-3 py-3 rounded-lg border-2 text-sm transition-all min-h-[44px] ${ra === j ? 'border-emerald-500 bg-emerald-50 text-emerald-700 font-medium' : 'border-gray-200 text-gray-600 hover:border-gray-300 active:bg-gray-50'}`}>
                                   <span className="font-bold mr-2">{String.fromCharCode(65 + j)}.</span>
                                   <span className="text-xs sm:text-sm">{itemB}</span>
                                 </button>
@@ -502,7 +505,7 @@ const ExamenActivo = ({ examen, alumno, onFinalizar, onAbandonar }) => {
                         <input type="number" min="1" max={(preguntaActualData.elementos||[]).length}
                           value={(respuestas[claveReal]||[])[i]||''}
                           onChange={(e)=>{const a=respuestas[claveReal]||[];const n=[...a];n[i]=parseInt(e.target.value)||'';setRespuestas(prev=>({...prev,[claveReal]:n}));}}
-                          disabled={entregado} className="w-14 sm:w-16 px-2 py-1 text-xs sm:text-sm border rounded-lg text-center" placeholder="#" />
+                          disabled={entregado} className="w-14 sm:w-16 px-2 py-2.5 text-xs sm:text-sm border rounded-lg text-center min-h-[44px]" placeholder="#" />
                       </div>
                     ))}
                   </div>
@@ -530,7 +533,7 @@ const ExamenActivo = ({ examen, alumno, onFinalizar, onAbandonar }) => {
                                     <input type="text" value={(respuestas[claveReal]||[])[idx]||''}
                                       onChange={(e)=>{const a=respuestas[claveReal]||[];const n=[...a];n[idx]=e.target.value;setRespuestas(prev=>({...prev,[claveReal]:n}));}}
                                       disabled={entregado} placeholder="______"
-                                      className="inline-block mx-1 px-2 sm:px-3 py-1.5 sm:py-2 border-2 border-dashed border-emerald-400 bg-white rounded-lg text-center text-xs sm:text-sm text-emerald-700 font-medium w-full sm:w-auto min-w-[80px] sm:min-w-[120px]" />
+                                      className="inline-block mx-1 px-2 sm:px-3 py-2.5 sm:py-3 border-2 border-dashed border-emerald-400 bg-white rounded-lg text-center text-xs sm:text-sm text-emerald-700 font-medium w-full sm:w-auto min-w-[80px] sm:min-w-[120px] min-h-[44px]" />
                                   )}
                                 </span>
                               );
@@ -556,20 +559,94 @@ const ExamenActivo = ({ examen, alumno, onFinalizar, onAbandonar }) => {
                     <p className="text-xs text-gray-400 mt-1">Minimo {preguntaActualData.longitud_minima||100} palabras</p>
                   </div>
                 )}
+
+                {/* LIKERT (ENCUESTA) */}
+                {preguntaActualData.tipo === 'likert' && (
+                  <div className="space-y-3">
+                    <p className="text-xs text-teal-600 font-medium flex items-center gap-1">
+                      <BarChart3 className="w-3.5 h-3.5"/> Encuesta - seleccione una opcion
+                    </p>
+                    <div className="space-y-2">
+                      {Array.from({ length: preguntaActualData.escala_opciones || 5 }, (_, i) => {
+                        const total = preguntaActualData.escala_opciones || 5;
+                        const seleccionado = respuestas[claveReal] === i + 1;
+                        return (
+                          <label key={i} className={`flex items-center gap-3 p-3 rounded-xl border-2 cursor-pointer transition-all ${seleccionado ? 'border-teal-400 bg-teal-50' : 'border-gray-200 hover:border-teal-200 hover:bg-gray-50'}`}>
+                            <input type="radio" name={`likert_${claveReal}`} checked={seleccionado} onChange={() => guardarRespuesta(i + 1)} disabled={entregado} className="w-4 h-4" style={{ accentColor: '#0D9488' }}/>
+                            <span className="text-sm text-gray-700">{i + 1}</span>
+                            <span className="text-xs text-gray-500">
+                              {i === 0 ? (preguntaActualData.escala_min_label || 'Totalmente en desacuerdo') :
+                               i === total - 1 ? (preguntaActualData.escala_max_label || 'Totalmente de acuerdo') :
+                               i === Math.floor(total / 2) ? 'Neutral' : ''}
+                            </span>
+                          </label>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+
+                {/* ESTRELLAS (ENCUESTA) */}
+                {preguntaActualData.tipo === 'estrellas' && (
+                  <div className="space-y-3">
+                    <p className="text-xs text-amber-600 font-medium flex items-center gap-1">
+                      <Star className="w-3.5 h-3.5"/> Encuesta - califique con estrellas
+                    </p>
+                    <div className="flex items-center gap-3 py-2 overflow-x-auto">
+                      {Array.from({ length: preguntaActualData.escala_max || 5 }, (_, i) => {
+                        const valor = i + 1;
+                        const seleccionado = (respuestas[claveReal] || 0) >= valor;
+                        return (
+                          <button key={i} onClick={() => !entregado && guardarRespuesta(valor)} disabled={entregado}
+                            className="transition-all hover:scale-110 p-1 min-w-[44px] min-h-[44px] flex items-center justify-center">
+                            <Star className={`w-8 h-8 ${seleccionado ? 'text-amber-400 fill-amber-400' : 'text-gray-300'}`}/>
+                          </button>
+                        );
+                      })}
+                      {respuestas[claveReal] > 0 && (
+                        <span className="text-sm font-medium text-gray-600 ml-2">({respuestas[claveReal]}/{preguntaActualData.escala_max || 5})</span>
+                      )}
+                    </div>
+                    <div className="flex justify-between text-[10px] text-gray-400">
+                      <span>{preguntaActualData.escala_min_label || 'Muy malo'}</span>
+                      <span>{preguntaActualData.escala_max_label || 'Excelente'}</span>
+                    </div>
+                  </div>
+                )}
+
+                {/* ESCALA NUMERICA (ENCUESTA) */}
+                {preguntaActualData.tipo === 'escala_numerica' && (
+                  <div className="space-y-3">
+                    <p className="text-xs text-purple-600 font-medium flex items-center gap-1">
+                      <BarChart3 className="w-3.5 h-3.5"/> Encuesta - seleccione un valor
+                    </p>
+                    <div className="py-2">
+                      <input type="range" min={preguntaActualData.escala_min || 1} max={preguntaActualData.escala_max || 10} step={preguntaActualData.escala_paso || 1}
+                        value={respuestas[claveReal] || Math.round(((preguntaActualData.escala_min || 1) + (preguntaActualData.escala_max || 10)) / 2)}
+                        onChange={(e) => guardarRespuesta(parseInt(e.target.value))} disabled={entregado}
+                        className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-purple-500"/>
+                      <div className="flex justify-between mt-2">
+                        <span className="text-xs text-gray-400">{preguntaActualData.escala_min_label || 'Nada'}</span>
+                        <span className="text-lg font-bold text-purple-600">{respuestas[claveReal] || Math.round(((preguntaActualData.escala_min || 1) + (preguntaActualData.escala_max || 10)) / 2)}</span>
+                        <span className="text-xs text-gray-400">{preguntaActualData.escala_max_label || 'Mucho'}</span>
+                      </div>
+                    </div>
+                  </div>
+                )}
               </div>
 
               <div className="flex items-center justify-between mt-6 pt-4 border-t border-gray-100">
                 {!configExamen.mostrarUnaSolaPregunta ? (
                   <>
-                    <button onClick={anteriorPregunta} disabled={preguntaActual===0} className="flex items-center gap-1 px-3 py-2 text-sm text-gray-600 hover:bg-gray-100 rounded-lg disabled:opacity-30">
+                    <button onClick={anteriorPregunta} disabled={preguntaActual===0} className="flex items-center gap-1 px-3 py-2.5 text-sm text-gray-600 hover:bg-gray-100 rounded-lg disabled:opacity-30 min-h-[44px]">
                       <ChevronLeft className="w-4 h-4"/> Anterior
                     </button>
                     {preguntaActual<totalPreguntas-1 ? (
-                      <button onClick={siguientePregunta} className="flex items-center gap-1 px-4 py-2 text-sm text-white rounded-lg" style={{backgroundColor:COLOR_PRIMARIO}}>
+                      <button onClick={siguientePregunta} className="flex items-center gap-1 px-4 py-2.5 text-sm text-white rounded-lg min-h-[44px]" style={{backgroundColor:COLOR_PRIMARIO}}>
                         Siguiente <ChevronRight className="w-4 h-4"/>
                       </button>
                     ) : (
-                      <button onClick={()=>setMostrarConfirmacion(true)} className="flex items-center gap-1 px-4 py-2 text-sm text-white rounded-lg" style={{backgroundColor:COLOR_PRIMARIO}}>
+                      <button onClick={()=>setMostrarConfirmacion(true)} className="flex items-center gap-1 px-4 py-2.5 text-sm text-white rounded-lg min-h-[44px]" style={{backgroundColor:COLOR_PRIMARIO}}>
                         <Send className="w-4 h-4"/> Entregar
                       </button>
                     )}
@@ -577,11 +654,11 @@ const ExamenActivo = ({ examen, alumno, onFinalizar, onAbandonar }) => {
                 ) : (
                   <div className="w-full flex justify-end">
                     {preguntaActual<totalPreguntas-1 ? (
-                      <button onClick={siguientePregunta} className="flex items-center gap-1 px-4 py-2 text-sm text-white rounded-lg" style={{backgroundColor:COLOR_PRIMARIO}}>
+                      <button onClick={siguientePregunta} className="flex items-center gap-1 px-4 py-2.5 text-sm text-white rounded-lg min-h-[44px]" style={{backgroundColor:COLOR_PRIMARIO}}>
                         Siguiente <ChevronRight className="w-4 h-4"/>
                       </button>
                     ) : (
-                      <button onClick={()=>setMostrarConfirmacion(true)} className="flex items-center gap-1 px-4 py-2 text-sm text-white rounded-lg" style={{backgroundColor:COLOR_PRIMARIO}}>
+                      <button onClick={()=>setMostrarConfirmacion(true)} className="flex items-center gap-1 px-4 py-2.5 text-sm text-white rounded-lg min-h-[44px]" style={{backgroundColor:COLOR_PRIMARIO}}>
                         <Send className="w-4 h-4"/> Entregar
                       </button>
                     )}
@@ -602,7 +679,7 @@ const ExamenActivo = ({ examen, alumno, onFinalizar, onAbandonar }) => {
                   onMarcarRevisar={toggleMarcarRevision} 
                   preguntasExamen={preguntasExamen}
                 />
-                <button onClick={()=>setMostrarConfirmacion(true)} className="w-full py-2.5 text-white text-sm font-medium rounded-lg" style={{backgroundColor:COLOR_PRIMARIO}}>Finalizar Examen</button>
+                <button onClick={()=>setMostrarConfirmacion(true)} className="w-full py-2.5 sm:py-3 text-white text-sm font-medium rounded-lg min-h-[44px]" style={{backgroundColor:COLOR_PRIMARIO}}>Finalizar Examen</button>
               </div>
             </div>
           )}

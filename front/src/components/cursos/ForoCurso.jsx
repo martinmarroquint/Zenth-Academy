@@ -87,8 +87,8 @@ const ForoCurso = ({ cursoId }) => {
   return (
     <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
       {/* Header del foro */}
-      <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100">
-        <div>
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between px-4 sm:px-5 py-3 sm:py-4 border-b border-gray-100 gap-3">
+        <div className="min-w-0">
           <h3 className="font-semibold text-gray-900 flex items-center gap-2">
             <MessageCircle className="w-4 h-4 text-indigo-600" />
             Foro del curso
@@ -98,7 +98,7 @@ const ForoCurso = ({ cursoId }) => {
         {puedeCrear && (
           <button
             onClick={() => setCreando(true)}
-            className="px-3 py-1.5 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors flex items-center gap-1.5 text-xs font-medium"
+            className="px-3 py-2.5 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors flex items-center gap-1.5 text-xs font-medium min-h-[44px] flex-shrink-0"
           >
             <Plus className="w-3.5 h-3.5" />
             Nueva publicación

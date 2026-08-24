@@ -365,12 +365,12 @@ const PanelAdminExamenes = ({ onSalir }) => {
             className="w-full pl-9 pr-4 py-2.5 text-sm bg-white border border-gray-200 rounded-xl outline-none focus:border-indigo-300 focus:ring-2 focus:ring-indigo-100 transition-all"
           />
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 flex-wrap">
           {['todos', 'PUBLICADO', 'BORRADOR'].map(estado => (
             <button
               key={estado}
               onClick={() => setFiltroEstado(estado)}
-              className={`px-3.5 py-2 rounded-xl text-xs font-medium transition-colors ${
+              className={`px-3.5 py-2 min-h-[44px] rounded-xl text-xs font-medium transition-colors ${
                 filtroEstado === estado
                   ? 'bg-gray-900 text-white'
                   : 'bg-white text-gray-500 border border-gray-200 hover:bg-gray-50'
@@ -443,45 +443,47 @@ const PanelAdminExamenes = ({ onSalir }) => {
                   <button
                     onClick={() => abrirAsignar(examen)}
                     title="Asignar a curso"
-                    className="inline-flex items-center gap-1.5 px-2.5 py-1.5 text-[11px] font-medium text-indigo-600 bg-indigo-50 hover:bg-indigo-100 rounded-lg transition-colors"
+                    className="inline-flex items-center gap-1.5 px-2.5 py-2 text-[11px] font-medium text-indigo-600 bg-indigo-50 hover:bg-indigo-100 rounded-lg transition-colors"
                   >
-                    <Link2 className="w-3.5 h-3.5" />Asignar a curso
+                    <Link2 className="w-3.5 h-3.5" />Asignar
                   </button>
                   <button
                     onClick={() => verResultados(examen)}
                     title="Resultados"
-                    className="inline-flex items-center gap-1.5 px-2.5 py-1.5 text-[11px] font-medium text-gray-600 bg-gray-50 hover:bg-gray-100 rounded-lg transition-colors"
+                    className="inline-flex items-center gap-1.5 px-2.5 py-2 text-[11px] font-medium text-gray-600 bg-gray-50 hover:bg-gray-100 rounded-lg transition-colors"
                   >
                     <ClipboardList className="w-3.5 h-3.5" />Resultados
                   </button>
                   <button
                     onClick={() => verDetalle(examen)}
                     title="Ver preguntas"
-                    className="inline-flex items-center gap-1.5 px-2.5 py-1.5 text-[11px] font-medium text-purple-600 bg-purple-50 hover:bg-purple-100 rounded-lg transition-colors"
+                    className="inline-flex items-center gap-1.5 px-2.5 py-2 text-[11px] font-medium text-purple-600 bg-purple-50 hover:bg-purple-100 rounded-lg transition-colors"
                   >
                     <FileQuestion className="w-3.5 h-3.5" />Preguntas
                   </button>
-                  <button
-                    onClick={() => editarExamen(examen)}
-                    title="Editar"
-                    className="p-1.5 text-gray-400 hover:text-gray-700 hover:bg-gray-50 rounded-lg transition-colors"
-                  >
-                    <Edit3 className="w-3.5 h-3.5" />
-                  </button>
-                  <button
-                    onClick={() => cambiarEstado(examen, esPublicado ? 'BORRADOR' : 'PUBLICADO')}
-                    title={esPublicado ? 'Pasar a borrador' : 'Publicar'}
-                    className="p-1.5 text-gray-400 hover:text-emerald-600 hover:bg-emerald-50 rounded-lg transition-colors"
-                  >
-                    {esPublicado ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
-                  </button>
-                  <button
-                    onClick={() => eliminarExamen(examen)}
-                    title="Eliminar"
-                    className="p-1.5 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors"
-                  >
-                    <Trash2 className="w-3.5 h-3.5" />
-                  </button>
+                  <div className="flex items-center gap-0.5 ml-auto">
+                    <button
+                      onClick={() => editarExamen(examen)}
+                      title="Editar"
+                      className="p-2 text-gray-400 hover:text-gray-700 hover:bg-gray-50 rounded-lg transition-colors"
+                    >
+                      <Edit3 className="w-4 h-4" />
+                    </button>
+                    <button
+                      onClick={() => cambiarEstado(examen, esPublicado ? 'BORRADOR' : 'PUBLICADO')}
+                      title={esPublicado ? 'Pasar a borrador' : 'Publicar'}
+                      className="p-2 text-gray-400 hover:text-emerald-600 hover:bg-emerald-50 rounded-lg transition-colors"
+                    >
+                      {esPublicado ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                    </button>
+                    <button
+                      onClick={() => eliminarExamen(examen)}
+                      title="Eliminar"
+                      className="p-2 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </button>
+                  </div>
                 </div>
               </div>
             );
@@ -493,22 +495,22 @@ const PanelAdminExamenes = ({ onSalir }) => {
           MODAL: DETALLE DE EXAMEN CON PREGUNTAS
       ============================================= */}
       {mostrarDetalle && detalleExamen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40">
-          <div className="bg-white rounded-2xl w-full max-w-2xl max-h-[80vh] overflow-y-auto shadow-2xl">
-            <div className="sticky top-0 bg-white z-10 flex items-center justify-between px-6 py-4 border-b border-gray-100">
-              <div>
-                <h2 className="text-lg font-bold text-gray-900">{detalleExamen.titulo}</h2>
-                <p className="text-[11px] text-gray-400">{detalleExamen.codigo}</p>
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/40">
+          <div className="bg-white rounded-2xl w-full max-w-2xl max-h-[85vh] overflow-y-auto shadow-2xl">
+            <div className="sticky top-0 bg-white z-10 flex items-center justify-between px-4 sm:px-6 py-3 sm:py-4 border-b border-gray-100">
+              <div className="min-w-0">
+                <h2 className="text-lg font-bold text-gray-900 truncate">{detalleExamen.titulo}</h2>
+                <p className="text-[11px] text-gray-400 truncate">{detalleExamen.codigo}</p>
               </div>
               <button
                 onClick={() => setMostrarDetalle(false)}
-                className="p-1.5 text-gray-400 hover:text-gray-600 hover:bg-gray-50 rounded-lg transition-colors"
+                className="p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-50 rounded-lg transition-colors flex-shrink-0 min-w-[44px] min-h-[44px] flex items-center justify-center"
               >
                 <X className="w-5 h-5" />
               </button>
             </div>
 
-            <div className="p-6">
+            <div className="p-4 sm:p-6">
               <div className="mb-4">
                 <p className="text-sm text-gray-500">{detalleExamen.descripcion || 'Sin descripcion'}</p>
                 <div className="flex items-center gap-4 mt-2 text-xs text-gray-400">
@@ -602,19 +604,19 @@ const PanelAdminExamenes = ({ onSalir }) => {
           MODAL: ASIGNAR EXAMEN A CURSO
       ============================================= */}
       {asignando && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40" onClick={() => !guardandoAsignacion && setAsignando(null)}>
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/40" onClick={() => !guardandoAsignacion && setAsignando(null)}>
           <div className="bg-white rounded-2xl w-full max-w-lg shadow-2xl max-h-[90vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
-            <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
-              <div>
-                <h2 className="text-sm font-semibold text-gray-900">Asignar examen a un curso</h2>
-                <p className="text-[11px] text-gray-400 mt-0.5">"{asignando.titulo}" se anadira como leccion tipo examen</p>
+            <div className="flex items-center justify-between px-4 sm:px-6 py-3 sm:py-4 border-b border-gray-100">
+              <div className="min-w-0">
+                <h2 className="text-sm font-semibold text-gray-900 truncate">Asignar examen a un curso</h2>
+                <p className="text-[11px] text-gray-400 mt-0.5 truncate">"{asignando.titulo}" se anadira como leccion tipo examen</p>
               </div>
-              <button onClick={() => setAsignando(null)} className="p-1.5 text-gray-400 hover:text-gray-700 hover:bg-gray-50 rounded-lg transition-colors">
+              <button onClick={() => setAsignando(null)} className="p-2 text-gray-400 hover:text-gray-700 hover:bg-gray-50 rounded-lg transition-colors flex-shrink-0 min-w-[44px] min-h-[44px] flex items-center justify-center">
                 <X className="w-4 h-4" />
               </button>
             </div>
 
-            <div className="px-6 py-5 space-y-4">
+            <div className="px-4 sm:px-6 py-4 sm:py-5 space-y-4">
               {/* Curso */}
               <div>
                 <label className="block text-[11px] font-medium text-gray-500 mb-1.5">Curso</label>

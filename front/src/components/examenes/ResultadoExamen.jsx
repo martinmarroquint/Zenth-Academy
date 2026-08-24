@@ -31,7 +31,9 @@ const ResultadoExamen = ({
   const fechaEntrega = resultado?.fechaEntrega || resultado?.entregado_en || resultado?.fecha_entrega || new Date().toISOString();
   const tiempoUsado = resultado?.tiempoUsado || resultado?.tiempo_usado || 0;
   const violaciones = resultado?.violaciones || 0;
-  const esTrampa = resultado?.estado === 'TRAMPA' || violaciones >= 3;
+  // ✅ CORREGIDO: leer límite de violaciones de la config del examen, no hardcodear 3
+  const limiteViolaciones = examen?.configuracion?.limite_violaciones || 3;
+  const esTrampa = resultado?.estado === 'TRAMPA' || violaciones >= limiteViolaciones;
   const aprobacion = examen?.puntaje_aprobacion || 60;
   const aprobado = !esTrampa && calificacion >= aprobacion;
 

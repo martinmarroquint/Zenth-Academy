@@ -16,7 +16,7 @@ ROLES_SISTEMA = {
         'nombre': 'Docente',
         'nivel': 70,
         'color': '#2563EB',
-        'descripcion': 'Gestiona exámenes, cursos, cuestionarios, alumnos y carpeta.',
+        'descripcion': 'Gestiona exámenes, cursos, alumnos y carpeta.',
         'es_jefatura': True,
         'sistema': True,
     },

@@ -401,17 +401,20 @@ async def mis_solicitudes(
 @router.get("/solicitudes-pendientes", response_model=List[SolicitudAccesoResponse])
 async def solicitudes_pendientes(
     curso_id: Optional[str] = Query(None, description="Filtrar por curso específico"),
+    estado: Optional[str] = Query(None, description="Filtrar por estado: pendiente, aprobado, rechazado"),
     db: Session = Depends(get_db),
     current_user: Usuario = Depends(require_docente)
 ):
-    """Docente: Lista todas las solicitudes de acceso pendientes para sus cursos (opcional: filtrar por curso)"""
+    """Docente: Lista todas las solicitudes de acceso de sus cursos (pendientes, aprobadas y rechazadas)"""
     try:
         query = db.query(SolicitudAccesoCurso).join(
             Curso, SolicitudAccesoCurso.curso_id == Curso.id
         ).filter(
-            cast(Curso.docente_id, String) == str(current_user.id),
-            SolicitudAccesoCurso.estado == "pendiente"
+            cast(Curso.docente_id, String) == str(current_user.id)
         )
+        
+        if estado:
+            query = query.filter(SolicitudAccesoCurso.estado == estado)
         
         if curso_id:
             query = query.filter(cast(SolicitudAccesoCurso.curso_id, String) == curso_id)

@@ -91,7 +91,7 @@ const PanelPizarras = ({ usuarioId, onAbrirPizarra, onCrearPizarra }) => {
         </div>
         <button
           onClick={onCrearPizarra}
-          className="px-4 py-2 bg-gray-900 text-white rounded-lg hover:bg-gray-800 transition-colors flex items-center gap-2"
+          className="px-4 py-2.5 bg-gray-900 text-white rounded-lg hover:bg-gray-800 transition-colors flex items-center gap-2 min-h-[44px]"
         >
           <Plus className="w-4 h-4" />
           Nueva Pizarra
@@ -122,13 +122,13 @@ const PanelPizarras = ({ usuarioId, onAbrirPizarra, onCrearPizarra }) => {
         <div className="flex border border-gray-200 rounded-lg overflow-hidden">
           <button
             onClick={() => setVista('grid')}
-            className={`p-2 ${vista === 'grid' ? 'bg-gray-900 text-white' : 'bg-white text-gray-400 hover:bg-gray-50'}`}
+            className={`p-2.5 min-w-[44px] min-h-[44px] flex items-center justify-center ${vista === 'grid' ? 'bg-gray-900 text-white' : 'bg-white text-gray-400 hover:bg-gray-50'}`}
           >
             <Grid className="w-4 h-4" />
           </button>
           <button
             onClick={() => setVista('list')}
-            className={`p-2 ${vista === 'list' ? 'bg-gray-900 text-white' : 'bg-white text-gray-400 hover:bg-gray-50'}`}
+            className={`p-2.5 min-w-[44px] min-h-[44px] flex items-center justify-center ${vista === 'list' ? 'bg-gray-900 text-white' : 'bg-white text-gray-400 hover:bg-gray-50'}`}
           >
             <LayoutGrid className="w-4 h-4" />
           </button>
@@ -196,15 +196,15 @@ const PanelPizarras = ({ usuarioId, onAbrirPizarra, onCrearPizarra }) => {
                   <div className="flex items-center gap-1">
                     <button
                       onClick={(e) => { e.stopPropagation(); copiarEnlace(pizarra.id); }}
-                      className="p-1 hover:bg-gray-100 rounded text-gray-400 hover:text-gray-600"
+                      className="p-2 hover:bg-gray-100 rounded text-gray-400 hover:text-gray-600 min-w-[44px] min-h-[44px] flex items-center justify-center"
                     >
-                      <LinkIcon className="w-3.5 h-3.5" />
+                      <LinkIcon className="w-4 h-4" />
                     </button>
                     <button
                       onClick={(e) => { e.stopPropagation(); eliminarPizarra(pizarra.id); }}
-                      className="p-1 hover:bg-red-50 rounded text-gray-400 hover:text-red-500"
+                      className="p-2 hover:bg-red-50 rounded text-gray-400 hover:text-red-500 min-w-[44px] min-h-[44px] flex items-center justify-center"
                     >
-                      <Trash2 className="w-3.5 h-3.5" />
+                      <Trash2 className="w-4 h-4" />
                     </button>
                     <ChevronRight className="w-4 h-4 text-gray-300 group-hover:text-gray-500" />
                   </div>
@@ -219,34 +219,34 @@ const PanelPizarras = ({ usuarioId, onAbrirPizarra, onCrearPizarra }) => {
             {pizarrasFiltradas.map((pizarra) => (
               <div
                 key={pizarra.id}
-                className="flex items-center gap-4 px-4 py-3 hover:bg-gray-50/50 cursor-pointer"
+                className="flex items-center gap-3 sm:gap-4 px-3 sm:px-4 py-3 hover:bg-gray-50/50 cursor-pointer"
                 onClick={() => onAbrirPizarra(pizarra.id)}
               >
-                <div className={`p-2 rounded-lg ${getTipoColor(pizarra.tipo)}`}>
+                <div className={`p-2 rounded-lg flex-shrink-0 ${getTipoColor(pizarra.tipo)}`}>
                   {getTipoIcon(pizarra.tipo)}
                 </div>
                 <div className="flex-1 min-w-0">
                   <h3 className="font-medium text-gray-900 truncate">{pizarra.titulo}</h3>
                   <p className="text-xs text-gray-400 truncate">{pizarra.descripcion || 'Sin descripción'}</p>
                 </div>
-                <span className={`px-2 py-0.5 text-xs font-medium rounded-full ${getTipoColor(pizarra.tipo)}`}>
+                <span className={`px-2 py-0.5 text-xs font-medium rounded-full flex-shrink-0 hidden sm:inline ${getTipoColor(pizarra.tipo)}`}>
                   {tiposLabels[pizarra.tipo] || pizarra.tipo}
                 </span>
-                <span className="text-xs text-gray-400">
+                <span className="text-xs text-gray-400 flex-shrink-0 hidden md:inline">
                   {new Date(pizarra.ultima_actividad || pizarra.created_at).toLocaleDateString()}
                 </span>
-                <div className="flex items-center gap-1">
+                <div className="flex items-center gap-1 flex-shrink-0">
                   <button
                     onClick={(e) => { e.stopPropagation(); copiarEnlace(pizarra.id); }}
-                    className="p-1 hover:bg-gray-100 rounded text-gray-400 hover:text-gray-600"
+                    className="p-2 hover:bg-gray-100 rounded text-gray-400 hover:text-gray-600 min-w-[44px] min-h-[44px] flex items-center justify-center"
                   >
-                    <LinkIcon className="w-3.5 h-3.5" />
+                    <LinkIcon className="w-4 h-4" />
                   </button>
                   <button
                     onClick={(e) => { e.stopPropagation(); eliminarPizarra(pizarra.id); }}
-                    className="p-1 hover:bg-red-50 rounded text-gray-400 hover:text-red-500"
+                    className="p-2 hover:bg-red-50 rounded text-gray-400 hover:text-red-500 min-w-[44px] min-h-[44px] flex items-center justify-center"
                   >
-                    <Trash2 className="w-3.5 h-3.5" />
+                    <Trash2 className="w-4 h-4" />
                   </button>
                   <ChevronRight className="w-4 h-4 text-gray-300" />
                 </div>

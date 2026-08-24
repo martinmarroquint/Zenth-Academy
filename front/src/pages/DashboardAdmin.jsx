@@ -229,7 +229,7 @@ const AdminUsuarios = () => {
           onChange={setFiltroRol}
           placeholder="Filtrar por rol"
           size="sm"
-          className="min-w-[180px]"
+          className="w-full sm:w-auto sm:min-w-[180px]"
         />
         <Button
           variant="primary"
@@ -552,8 +552,8 @@ const AdminPromociones = () => {
 
   return (
     <div>
-      <div className="flex items-center justify-between mb-6">
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 flex-1 mr-4">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between mb-6 gap-4">
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 flex-1">
           <div className="bg-white rounded-xl border border-gray-200 p-4">
             <p className="text-xl font-semibold text-gray-900">{totalPromociones}</p>
             <Badge variant="default">Total promociones</Badge>
@@ -571,7 +571,7 @@ const AdminPromociones = () => {
             <Badge variant="primary">Cursos con descuento</Badge>
           </div>
         </div>
-        <Button variant="primary">
+        <Button variant="primary" className="self-start">
           <Plus className="w-4 h-4 mr-1" />
           Nueva promoción
         </Button>

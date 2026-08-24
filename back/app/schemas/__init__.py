@@ -3,7 +3,6 @@
 
 from app.schemas.auth import *
 from app.schemas.examenes import *
-from app.schemas.cuestionarios import *
 from app.schemas.pizarra import *
 from app.schemas.integracion_edm import *
 from app.schemas.curso import *
@@ -36,16 +35,6 @@ __all__ = [
     "HistorialComparticionResponse",
     "CompartirAlumnosRequest",
     "AlumnoConectadoResponse",
-
-    # CUESTIONARIOS
-    "CuestionarioCreate",
-    "CuestionarioUpdate",
-    "CuestionarioResponse",
-    "CuestionarioDetailResponse",
-    "PreguntaCuestionarioCreate",
-    "PreguntaCuestionarioResponse",
-    "RespuestaCuestionarioCreate",
-    "RespuestaCuestionarioResponse",
 
     # PIZARRA
     "PizarraCreate",

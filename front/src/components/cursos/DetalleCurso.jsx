@@ -17,12 +17,14 @@ import {
 } from 'lucide-react';
 import cursosService from '../../services/cursosService';
 import certificadosService from '../../services/certificadosService';
+import examenesService from '../../services/examenesService';
 import { authService } from '../../services/authService';
 import { Badge, Button } from '../ui';
 import ForoCurso from './ForoCurso';
 import CalificacionesEstudiante from './CalificacionesEstudiante';
 import EstudiantesCurso from './EstudiantesCurso';
 import PanelSolicitudes from '../docente/PanelSolicitudes';
+import ExamenActivo from '../examenes/ExamenActivo';
 
 // ============================================================
 // VIDEO PLAYER
@@ -876,6 +878,10 @@ const getLeccionesDeModulo = (modulo) => {
 };
 
 const getTipoLeccion = (leccion) => {
+  // ✅ CORREGIDO: Primero verificar tipo directo en la lección (para examenes/cuestionarios asignados)
+  if (leccion.tipo && leccion.tipo !== 'bloque') {
+    return leccion.tipo;
+  }
   const bloques = getBloquesDeLeccion(leccion);
   if (bloques.length > 0) {
     return bloques[0].tipo || 'texto';
@@ -1056,6 +1062,11 @@ const DetalleCurso = ({
   const [seccionLeccion, setSeccionLeccion] = useState('contenido');
   const [videoCompletado, setVideoCompletado] = useState(false);
   const [marcando, setMarcando] = useState(false);
+
+  // ✅ ESTADOS PARA EXAMEN
+  const [examenActivo, setExamenActivo] = useState(null);
+  const [cargandoExamen, setCargandoExamen] = useState(false);
+  const [errorExamen, setErrorExamen] = useState('');
 
   const [certificado, setCertificado] = useState(null);
   const [cursoCompletado, setCursoCompletado] = useState(false);
@@ -1253,9 +1264,97 @@ const DetalleCurso = ({
     if (!leccionActual) return null;
     
     const bloques = getBloquesDeLeccion(leccionActual);
+    const tipoLeccion = getTipoLeccion(leccionActual);
     const estaBloqueado = curso?.precio_tipo === 'pago' && !tieneAcceso && !esDocente;
 
+    // ✅ CORREGIDO: Lecciones tipo examen o quiz no tienen bloques — manejar directamente
     if (bloques.length === 0) {
+      // Si hay examen activo cargado, mostrar ExamenActivo
+      if (tipoLeccion === 'examen' && examenActivo) {
+        return (
+          <div className="bg-white rounded-xl border border-gray-200 overflow-hidden" style={{ minHeight: '600px' }}>
+            <ExamenActivo
+              examen={examenActivo}
+              alumno={{ id: usuario?.id || usuarioId }}
+              onFinalizar={(resultado) => {
+                setExamenActivo(null);
+                setSeccionLeccion('contenido');
+                // Marcar lección como completada
+                if (curso?.id && leccionActual?.id && usuarioId) {
+                  cursosService.completarLeccion(curso.id, leccionActual.id, usuarioId).catch(() => {});
+                }
+              }}
+              onAbandonar={() => {
+                setExamenActivo(null);
+                setSeccionLeccion('contenido');
+              }}
+            />
+          </div>
+        );
+      }
+
+      // Si hay examen cargando
+      if (tipoLeccion === 'examen' && cargandoExamen) {
+        return (
+          <div className="flex flex-col items-center justify-center min-h-[300px] bg-white rounded-xl border border-gray-200">
+            <Loader2 className="w-8 h-8 animate-spin text-[#0f766e] mx-auto mb-3" />
+            <p className="text-gray-500 text-sm">Cargando examen...</p>
+          </div>
+        );
+      }
+
+      // Si hubo error cargando examen
+      if (tipoLeccion === 'examen' && errorExamen) {
+        return (
+          <div className="text-center py-12 bg-white rounded-xl border border-gray-200">
+            <AlertCircle className="w-12 h-12 text-red-300 mx-auto mb-2" />
+            <p className="text-red-500 font-medium">{errorExamen}</p>
+            <button onClick={() => { setErrorExamen(''); setSeccionLeccion('contenido'); }}
+              className="mt-3 px-4 py-2 text-sm text-gray-600 hover:text-gray-800">
+              Volver
+            </button>
+          </div>
+        );
+      }
+
+      // Lecciones tipo examen sin cargar — mostrar botón para iniciar
+      if (tipoLeccion === 'examen') {
+        const contenidoLeccion = leccionActual.contenido || {};
+        return (
+          <div className="bg-white rounded-xl border border-gray-200 p-8 text-center">
+            <Award className="w-16 h-16 text-amber-500 mx-auto mb-4" />
+            <h3 className="text-xl font-semibold text-gray-900 mb-2">Examen</h3>
+            <p className="text-sm text-gray-500 mb-6 max-w-md mx-auto">
+              Responde todas las preguntas dentro del tiempo límite. Tu calificación se calculará automáticamente.
+            </p>
+            {contenidoLeccion.examen_id ? (
+              <button
+                onClick={async () => {
+                  if (!contenidoLeccion.examen_id) return;
+                  setCargandoExamen(true);
+                  setErrorExamen('');
+                  try {
+                    const datos = await examenesService.obtener(contenidoLeccion.examen_id);
+                    setExamenActivo(datos);
+                  } catch (e) {
+                    setErrorExamen('No se pudo cargar el examen. Intenta de nuevo.');
+                  } finally {
+                    setCargandoExamen(false);
+                  }
+                }}
+                disabled={estaBloqueado}
+                className="px-8 py-3 bg-[#0f766e] text-white rounded-lg hover:bg-[#0d5e57] transition-colors font-medium disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {estaBloqueado ? 'Examen bloqueado' : 'Comenzar examen'}
+              </button>
+            ) : (
+              <p className="text-sm text-gray-400">Sin examen asignado</p>
+            )}
+          </div>
+        );
+      }
+
+      // Para cualquier otro tipo sin bloques
       return (
         <div className="text-center py-12 text-gray-400 bg-white rounded-xl border border-gray-200">
           <FileText className="w-12 h-12 mx-auto mb-2 text-gray-300" />
@@ -1309,25 +1408,10 @@ const DetalleCurso = ({
         );
         
       case 'quiz':
-        if (estaBloqueado) {
-          return (
-            <div className="flex flex-col items-center justify-center min-h-[200px] bg-gray-50 rounded-xl border-2 border-dashed border-gray-300 p-8">
-              <Lock className="w-12 h-12 text-gray-300 mx-auto mb-3" />
-              <p className="text-gray-400 font-medium">Cuestionario bloqueado</p>
-              <p className="text-sm text-gray-300">Solicita acceso para realizar este cuestionario</p>
-            </div>
-          );
-        }
         return (
-          <div className="bg-white rounded-xl border border-gray-200 p-6 text-center">
-            <BookOpen className="w-12 h-12 text-indigo-500 mx-auto mb-3" />
-            <h3 className="text-lg font-semibold text-gray-900">Cuestionario</h3>
-            <p className="text-sm text-gray-500 mb-4">
-              {contenido.cuestionario_id ? 'Cuestionario asignado' : 'Sin cuestionario asignado'}
-            </p>
-            <button className="px-6 py-2 bg-[#0f766e] text-white rounded-lg hover:bg-[#0d5e57] transition-colors text-sm">
-              Comenzar cuestionario
-            </button>
+          <div className="text-center py-12 text-gray-400 bg-white rounded-xl border border-gray-200">
+            <BookOpen className="w-12 h-12 mx-auto mb-2 text-gray-300" />
+            <p>Los cuestionarios fueron integrados en el sistema de exámenes</p>
           </div>
         );
         
@@ -1476,30 +1560,28 @@ const DetalleCurso = ({
       <div className="bg-[#f8f9fa] min-h-screen">
         {/* Header */}
         <div className="sticky top-0 z-20 bg-white border-b border-gray-200/50">
-          <div className="max-w-6xl mx-auto px-4 sm:px-6 h-14 flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <button onClick={handleCerrarLeccion} className="p-2 hover:bg-gray-100 rounded-lg transition-colors text-gray-400 hover:text-gray-600">
+          <div className="max-w-6xl mx-auto px-4 sm:px-6 h-14 flex items-center justify-between gap-2">
+            <div className="flex items-center gap-2 sm:gap-3 min-w-0">
+              <button onClick={handleCerrarLeccion} className="p-2 hover:bg-gray-100 rounded-lg transition-colors text-gray-400 hover:text-gray-600 flex-shrink-0">
                 <ArrowLeft className="w-4 h-4" />
               </button>
-              <span className="text-sm font-medium text-gray-700 truncate max-w-[200px]">
+              <span className="text-sm font-medium text-gray-700 truncate min-w-0">
                 {leccionActual?.titulo || 'Lección'}
               </span>
-              {esBloqueada && (
-                <Badge variant="secondary" size="sm" className="gap-1">
-                  <Lock className="w-3 h-3" /> Vista previa
-                </Badge>
-              )}
-              {estaCompletada && !esBloqueada && (
-                <Badge variant="success" size="sm" className="gap-1">
-                  <Check className="w-3 h-3" /> Completada
-                </Badge>
-              )}
-              <Badge variant="secondary" size="sm" className="gap-1">
-                <Layers className="w-3 h-3" />
-                {bloques.length} bloques
-              </Badge>
+              <div className="hidden sm:flex items-center gap-2 flex-shrink-0">
+                {esBloqueada && (
+                  <Badge variant="secondary" size="sm" className="gap-1">
+                    <Lock className="w-3 h-3" /> Vista previa
+                  </Badge>
+                )}
+                {estaCompletada && !esBloqueada && (
+                  <Badge variant="success" size="sm" className="gap-1">
+                    <Check className="w-3 h-3" /> Completada
+                  </Badge>
+                )}
+              </div>
             </div>
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 flex-shrink-0">
               <span className="text-xs text-gray-400 hidden sm:block">
                 {progreso}% completado
               </span>
@@ -1537,7 +1619,7 @@ const DetalleCurso = ({
         <div className="max-w-6xl mx-auto px-4 sm:px-6 py-6 space-y-6">
           <div>
             <h1 className="text-2xl font-bold text-gray-900">{leccionActual?.titulo || 'Lección sin título'}</h1>
-            <div className="flex items-center gap-3 mt-2 text-xs text-gray-400">
+            <div className="flex items-center gap-3 mt-2 text-xs text-gray-400 flex-wrap">
               <span className="flex items-center gap-1"><Clock className="w-3.5 h-3.5" />{leccionActual?.duracion || 'Sin duración'}</span>
               <span className="flex items-center gap-1"><BookOpen className="w-3.5 h-3.5" />{moduloActual?.titulo || 'Módulo'}</span>
               <span className="flex items-center gap-1"><Layers className="w-3.5 h-3.5" />{bloques.length} bloques</span>
@@ -1555,7 +1637,7 @@ const DetalleCurso = ({
 
           {/* Tabs */}
           <div className="border-b border-gray-200">
-            <nav className="flex gap-6 overflow-x-auto">
+            <nav className="flex gap-4 sm:gap-6 overflow-x-auto">
               {[
                 { id: 'contenido', label: 'Contenido', icon: FileText },
                 { id: 'recursos', label: 'Recursos', icon: LinkIcon },
@@ -1830,7 +1912,7 @@ const DetalleCurso = ({
 
       {/* Tabs */}
       <div className="border-b border-gray-200">
-        <nav className="flex gap-6 overflow-x-auto">
+        <nav className="flex gap-4 sm:gap-6 overflow-x-auto">
           {tabs.map((tab) => {
             const Icon = tab.icon;
             const isActive = tabActiva === tab.id;

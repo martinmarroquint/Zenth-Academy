@@ -4,7 +4,7 @@ import {
   ListChecks, ToggleLeft, ArrowLeftRight, ArrowUpDown,
   PenLine, Type, AlignLeft, CheckCircle2, XCircle,
   Clock, Shield, Eye, RotateCcw, Lock, Calendar,
-  Settings, Award, AlertTriangle
+  Settings, Award, AlertTriangle, BarChart3, Star, Hash
 } from 'lucide-react';
 
 export const COLOR_PRIMARIO = '#188C5D';
@@ -23,7 +23,10 @@ export const TIPOS_PREGUNTA = {
   ENSAYO: 'ensayo',
   RELACIONAR: 'relacionar',
   ORDENAMIENTO: 'ordenamiento',
-  COMPLETAR: 'completar'
+  COMPLETAR: 'completar',
+  LIKERT: 'likert',
+  ESTRELLAS: 'estrellas',
+  ESCALA_NUMERICA: 'escala_numerica'
 };
 
 // Configuracion de tipos de preguntas
@@ -106,6 +109,39 @@ export const TIPOS_PREGUNTA_CONFIG = [
     requiereOpciones: false,
     requiereTexto: true,
     textoExtenso: true
+  },
+  {
+    id: TIPOS_PREGUNTA.LIKERT,
+    nombre: 'Likert (Encuesta)',
+    icon: BarChart3,
+    descripcion: 'Escala de acuerdo/entendimiento (sin calificacion)',
+    color: '#0D9488',
+    bgColor: 'bg-teal-100',
+    textColor: 'text-teal-700',
+    requiereOpciones: false,
+    esEncuesta: true
+  },
+  {
+    id: TIPOS_PREGUNTA.ESTRELLAS,
+    nombre: 'Calificacion con Estrellas',
+    icon: Star,
+    descripcion: 'Del 1 al 5 estrellas (sin calificacion)',
+    color: '#D97706',
+    bgColor: 'bg-amber-100',
+    textColor: 'text-amber-700',
+    requiereOpciones: false,
+    esEncuesta: true
+  },
+  {
+    id: TIPOS_PREGUNTA.ESCALA_NUMERICA,
+    nombre: 'Escala Numerica',
+    icon: Hash,
+    descripcion: 'Rango numerico personalizado (sin calificacion)',
+    color: '#7C3AED',
+    bgColor: 'bg-purple-100',
+    textColor: 'text-purple-700',
+    requiereOpciones: false,
+    esEncuesta: true
   }
 ];
 
@@ -168,7 +204,9 @@ export const CONFIGURACION_EXAMEN_DEFAULT = {
   navegacion_libre: true,
   fecha_inicio: null,
   fecha_fin: null,
-  password_examen: null
+  password_examen: null,
+  acceso_publico: false,
+  anonimo: false
 };
 
 // Grados academicos reconocidos para parseo (opcional)
@@ -227,6 +265,10 @@ export const formatearFecha = (fecha) => {
 export const calcularTotalPuntos = (preguntas) => {
   if (!preguntas || !preguntas.length) return 0;
   return preguntas.reduce((sum, p) => {
+    // Tipos de encuesta no suman puntos (sin calificacion)
+    if ([TIPOS_PREGUNTA.LIKERT, TIPOS_PREGUNTA.ESTRELLAS, TIPOS_PREGUNTA.ESCALA_NUMERICA].includes(p.tipo)) {
+      return sum;
+    }
     if (p.tipo === TIPOS_PREGUNTA.VERDADERO_FALSO) {
       return sum + ((p.afirmaciones?.length || 0) * (p.puntos || 1));
     }
@@ -289,6 +331,11 @@ export const validarPregunta = (pregunta, index) => {
       if (!pregunta.respuesta_corta?.trim()) {
         return `La pregunta ${num} no tiene respuesta correcta definida`;
       }
+      break;
+    case TIPOS_PREGUNTA.LIKERT:
+    case TIPOS_PREGUNTA.ESTRELLAS:
+    case TIPOS_PREGUNTA.ESCALA_NUMERICA:
+      // Tipos de encuesta: solo requieren enunciado
       break;
   }
   return null;

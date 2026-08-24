@@ -85,13 +85,20 @@ const EstudianteCursos = () => {
     cargar();
   }, [cargar]);
 
-  const handleInscribirse = async (cursoId) => {
-    setInscribiendo(cursoId);
+  const handleInscribirse = async (curso) => {
+    setInscribiendo(curso.id);
     try {
-      await cursosService.inscribirme(cursoId);
+      if (curso.precio_tipo === 'pago') {
+        // Curso de pago → enviar solicitud de acceso
+        await cursosService.solicitarAcceso(curso.id, {});
+        alert('Solicitud enviada. El docente revisará tu acceso.');
+      } else {
+        // Curso gratuito → inscripción directa
+        await cursosService.inscribirme(curso.id);
+      }
       await cargar();
     } catch (e) {
-      alert('No se pudo inscribir: ' + (e.message || ''));
+      alert('No se pudo completar: ' + (e.message || ''));
     } finally {
       setInscribiendo(null);
     }
@@ -678,7 +685,7 @@ const EstudianteCursos = () => {
                       </button>
                     ) : (
                       <button
-                        onClick={() => handleInscribirse(curso.id)}
+                        onClick={() => handleInscribirse(curso)}
                         disabled={inscribiendo === curso.id}
                         className="flex-1 px-3 py-2 text-xs font-medium text-white rounded-lg transition-colors disabled:opacity-50 flex items-center justify-center gap-1"
                         style={{ backgroundColor: '#0f766e' }}

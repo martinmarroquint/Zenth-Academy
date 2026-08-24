@@ -83,6 +83,13 @@ class PreguntaBase(BaseModel):
     respuestas_alternativas: Optional[List[str]] = None
     longitud_minima: Optional[int] = 100
     rubrica: Optional[str] = ""
+    # Campos para tipos de encuesta (likert, estrellas, escala_numerica)
+    escala_opciones: Optional[int] = 5
+    escala_max: Optional[int] = 5
+    escala_min: Optional[int] = 1
+    escala_paso: Optional[int] = 1
+    escala_min_label: Optional[str] = ""
+    escala_max_label: Optional[str] = ""
 
 class PreguntaCreate(PreguntaBase):
     pass
@@ -114,6 +121,8 @@ class ConfiguracionExamen(BaseModel):
     password_examen: Optional[str] = None
     modoEstricto: bool = True
     umbralTrampa: int = 3
+    acceso_publico: bool = False
+    anonimo: bool = False
 
 class ExamenCreate(BaseModel):
     titulo: str

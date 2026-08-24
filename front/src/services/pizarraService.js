@@ -27,6 +27,7 @@ class PizarraService {
   
   listar(filtros = {}) {
     const params = new URLSearchParams();
+    if (filtros.creado_por) params.append('creado_por', filtros.creado_por);
     if (filtros.tipo) params.append('tipo', filtros.tipo);
     if (filtros.estado) params.append('estado', filtros.estado);
     if (filtros.grupo_id) params.append('grupo_id', filtros.grupo_id);

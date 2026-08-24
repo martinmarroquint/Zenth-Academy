@@ -9,6 +9,7 @@ import Home from './pages/Home';
 import Login from './pages/Login';
 import Registro from './pages/Registro';
 import UiDemo from './pages/UiDemo';
+import ExamenPublicoPage from './pages/ExamenPublicoPage';
 import MainLayout from './components/layout/MainLayout';
 import ProtectedRoute from './components/layout/ProtectedRoute';
 import { authService } from './services/authService';
@@ -23,7 +24,6 @@ import DashboardAdmin from './pages/DashboardAdmin';
 // =============================================
 import PanelAdminExamenes from './components/examenes/PanelAdminExamenes';
 import PanelAlumnos from './components/alumnos/PanelAlumnos';
-import CuestionariosPage from './pages/modulos/CuestionariosPage';
 import CursosPage from './pages/modulos/CursosPage';
 import PizarrasPage from './pages/modulos/PizarrasPage';
 import ForoPage from './pages/modulos/ForoPage';
@@ -33,7 +33,6 @@ import MaterialesPage from './pages/modulos/MaterialesPage';
 import EstudianteCursos from './pages/EstudianteCursos';
 import EstudianteCursoDetalle from './pages/EstudianteCursoDetalle';
 import EstudianteCertificados from './pages/EstudianteCertificados';
-import ResponderCuestionarioPage from './pages/ResponderCuestionarioPage';
 import CompartirSala from './pages/CompartirSala';
 import PanelSolicitudes from './components/docente/PanelSolicitudes';
 
@@ -43,7 +42,6 @@ import PanelSolicitudes from './components/docente/PanelSolicitudes';
 const rutasModulos = (
   <>
     <Route path="examenes" element={<PanelAdminExamenes />} />
-    <Route path="cuestionarios" element={<CuestionariosPage />} />
     <Route path="cursos" element={<CursosPage />} />
     <Route path="alumnos" element={<PanelAlumnos />} />
     <Route path="materiales" element={<MaterialesPage />} />
@@ -78,15 +76,15 @@ function App() {
         <Route path="/registro" element={<Registro />} />
 
         {/* =============================================
-            RESPONDER CUESTIONARIO (enlace compartido, PÚBLICO)
-        ============================================= */}
-        <Route path="/cuestionario/:id" element={<ResponderCuestionarioPage />} />
-
-        {/* =============================================
             COMPARTIR EN CLASE — PANTALLA DEL AULA (PÚBLICO, sin login)
             El QR SIEMPRE visible aquí (como WhatsApp Web)
         ============================================= */}
         <Route path="/compartir/:codigo" element={<CompartirSala />} />
+
+        {/* =============================================
+            EXAMEN PUBLICO — SIN LOGIN (acceso con codigo)
+        ============================================= */}
+        <Route path="/examen/:codigo" element={<ExamenPublicoPage />} />
 
         {/* =============================================
             PANEL DE ADMINISTRACIÓN

@@ -9,17 +9,56 @@ import { authService } from '../../services/authService';
 
 const PizarrasPage = () => {
   const [pizarraAbierta, setPizarraAbierta] = useState(null);
+  const [pizarraInfo, setPizarraInfo] = useState(null);
   const usuario = authService.getCurrentUser();
   const usuarioId = usuario?.id || 'default';
 
+  const abrirPizarra = async (id) => {
+    // Obtener info de la pizarra para tener el título
+    try {
+      const info = await pizarraService.obtener(id);
+      setPizarraInfo(info);
+    } catch (e) {
+      console.warn('No se pudo obtener info de la pizarra:', e);
+      setPizarraInfo(null);
+    }
+    setPizarraAbierta(id);
+  };
+
+  const crearPizarra = async () => {
+    try {
+      const creada = await pizarraService.crear({
+        titulo: 'Pizarra sin título',
+        descripcion: '',
+        tipo: 'blanca',
+        creado_por: usuarioId,
+        es_publica: false,
+      });
+      if (creada?.id) {
+        setPizarraInfo(creada);
+        setPizarraAbierta(creada.id);
+      } else {
+        // Si no retorna id, dejar que PizarraInteractiva la cree
+        setPizarraAbierta('nueva');
+      }
+    } catch (e) {
+      console.error('Error creando pizarra:', e);
+      setPizarraAbierta('nueva');
+    }
+  };
+
   if (pizarraAbierta) {
     return (
-      <div className="h-[calc(100vh-58px)]">
+      <div className="h-[calc(100vh-3.5rem)]">
         <PizarraInteractiva
           pizarraId={pizarraAbierta === 'nueva' ? null : pizarraAbierta}
           usuario={{ id: usuarioId, nombre: usuario?.nombres || 'Docente' }}
           rol="EDITOR"
-          onCerrar={() => setPizarraAbierta(null)}
+          titulo={pizarraInfo?.titulo || 'Pizarra sin título'}
+          onCerrar={() => {
+            setPizarraAbierta(null);
+            setPizarraInfo(null);
+          }}
         />
       </div>
     );
@@ -28,22 +67,8 @@ const PizarrasPage = () => {
   return (
     <PanelPizarras
       usuarioId={usuarioId}
-      onAbrirPizarra={(id) => setPizarraAbierta(id)}
-      onCrearPizarra={async () => {
-        try {
-          const creada = await pizarraService.crear({
-            titulo: 'Pizarra sin título',
-            descripcion: '',
-            tipo: 'blanca',
-            creado_por: usuarioId,
-            es_publica: false,
-          });
-          setPizarraAbierta(creada?.id || 'nueva');
-        } catch (e) {
-          console.error('Error creando pizarra:', e);
-          setPizarraAbierta('nueva');
-        }
-      }}
+      onAbrirPizarra={abrirPizarra}
+      onCrearPizarra={crearPizarra}
     />
   );
 };

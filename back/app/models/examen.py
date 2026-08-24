@@ -75,6 +75,13 @@ class Pregunta(Base):
     respuestas_alternativas = Column(JSON, nullable=True)
     longitud_minima = Column(Integer, nullable=True)
     rubrica = Column(JSON, nullable=True)
+    # Campos para tipos de encuesta (likert, estrellas, escala_numerica)
+    escala_opciones = Column(Integer, nullable=True)
+    escala_max = Column(Integer, nullable=True)
+    escala_min = Column(Integer, nullable=True)
+    escala_paso = Column(Integer, nullable=True)
+    escala_min_label = Column(String(100), nullable=True)
+    escala_max_label = Column(String(100), nullable=True)
     
     created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
 

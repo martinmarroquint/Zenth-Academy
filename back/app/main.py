@@ -1,6 +1,6 @@
 # app/main.py
 # VERSION COMPLETA CON TODOS LOS MÓDULOS - ECOSISTEMA ZENTH ACADEMY
-# ✅ ACTUALIZADO: Verificación y recarga forzada de metadatos en startup
+# ✅ ACTUALIZADO: CORS con dominios de Firebase, verificación y recarga forzada de metadatos en startup
 
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
@@ -83,16 +83,24 @@ app.mount("/static", StaticFiles(directory="static"), name="static")
 app.mount("/uploads", StaticFiles(directory="uploads"), name="uploads")
 
 # =====================================================
-# CONFIGURACION CORS
+# CONFIGURACION CORS - ACTUALIZADA CON FIREBASE
 # =====================================================
 
 ALLOWED_ORIGINS = [
+    # Desarrollo local
     "http://localhost:3000",
     "http://localhost:5173",
     "http://localhost:8000",
     "http://127.0.0.1:3000",
     "http://127.0.0.1:5173",
     "http://127.0.0.1:8000",
+    # Firebase Hosting
+    "https://zenth-academy.web.app",
+    "https://zenth-academy.firebaseapp.com",
+    # Render.com (si el frontend también está ahí)
+    "https://zenth-academy.onrender.com",
+    # Dominio personalizado (si tienes uno)
+    # "https://zenthacademy.com",
 ]
 
 if settings.BACKEND_CORS_ORIGINS:
@@ -111,12 +119,23 @@ app.add_middleware(
     allow_origins=ALLOWED_ORIGINS,
     allow_credentials=True,
     allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH", "HEAD"],
-    allow_headers=["Content-Type", "Authorization", "X-Requested-With", "Accept", "X-Empresa-ID", "X-Cliente-ID"],
+    allow_headers=[
+        "Content-Type",
+        "Authorization",
+        "X-Requested-With",
+        "Accept",
+        "X-Empresa-ID",
+        "X-Cliente-ID",
+        "Origin",
+        "Access-Control-Request-Method",
+        "Access-Control-Request-Headers",
+    ],
     expose_headers=["X-Process-Time"],
     max_age=86400,
 )
 
 logger.info(f"CORS configurado con {len(ALLOWED_ORIGINS)} origenes")
+logger.info(f"Origenes permitidos: {ALLOWED_ORIGINS}")
 
 # =====================================================
 # OTROS MIDDLEWARES

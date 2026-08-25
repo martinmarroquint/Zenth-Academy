@@ -2,7 +2,7 @@
 # ROUTER DE CURSOS - COMPLETO CON SISTEMA DE BLOQUEO Y SOLICITUDES
 # VERSIÓN CORREGIDA - CON CAST A STRING PARA EVITAR ERRORES DE TIPO
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status, Body, Response
+from fastapi import APIRouter, Depends, HTTPException, Query, status, Body, Response, UploadFile, File
 from sqlalchemy import func, cast, String
 from sqlalchemy.orm import Session
 from typing import List, Optional
@@ -10,6 +10,7 @@ import uuid
 import logging
 import csv
 import io
+import os
 from datetime import datetime, timezone
 
 from app.database import get_db
@@ -1995,4 +1996,212 @@ async def eliminar_curso(
     except Exception as e:
         db.rollback()
         logger.error(f"Error eliminando curso: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# =============================================
+# ENDPOINT DE SUBIDA DE IMAGEN DE PORTADA
+# =============================================
+
+# Constantes para imágenes de portada
+ALLOWED_IMAGE_EXTENSIONS = {".jpg", ".jpeg", ".png", ".webp"}
+MAX_IMAGE_SIZE = 5 * 1024 * 1024  # 5MB
+# Dimensiones recomendadas para portada: 1200x628 (landscape, ratio 1.91:1)
+# Mínimo: 800x420 | Máximo: 2400x1256
+RECOMMENDED_WIDTH = 1200
+RECOMMENDED_HEIGHT = 628
+
+
+@router.post("/{id}/imagen")
+async def subir_imagen_curso(
+    id: str,
+    archivo: UploadFile = File(...),
+    db: Session = Depends(get_db),
+    current_user: Usuario = Depends(require_docente)
+):
+    """
+    Sube una imagen de portada para un curso.
+    
+    - Formatos permitidos: JPG, JPEG, PNG, WebP
+    - Tamaño máximo: 5MB
+    - Dimensiones recomendadas: 1200x628 px (ratio 1.91:1)
+    - Dimensiones mínimas: 800x420 px
+    - Dimensiones máximas: 2400x1256 px
+    """
+    try:
+        # 1. Verificar que el curso existe
+        curso = db.query(Curso).filter(Curso.id == id).first()
+        if not curso:
+            raise HTTPException(status_code=404, detail="Curso no encontrado")
+        
+        # 2. Verificar permisos
+        if str(curso.docente_id) != str(current_user.id) and current_user.rol != "admin":
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="No tienes permiso para editar este curso"
+            )
+        
+        # 3. Validar extensión
+        if not archivo.filename:
+            raise HTTPException(status_code=400, detail="Nombre de archivo no válido")
+        
+        extension = os.path.splitext(archivo.filename)[1].lower()
+        if extension not in ALLOWED_IMAGE_EXTENSIONS:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Formato no permitido. Usa: {', '.join(ALLOWED_IMAGE_EXTENSIONS)}"
+            )
+        
+        # 4. Validar tipo MIME
+        allowed_mimes = {"image/jpeg", "image/png", "image/webp"}
+        if archivo.content_type not in allowed_mimes:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Tipo de archivo no permitido: {archivo.content_type}"
+            )
+        
+        # 5. Leer contenido y validar tamaño
+        contenido = await archivo.read()
+        if len(contenido) > MAX_IMAGE_SIZE:
+            size_mb = len(contenido) / (1024 * 1024)
+            max_mb = MAX_IMAGE_SIZE / (1024 * 1024)
+            raise HTTPException(
+                status_code=400,
+                detail=f"La imagen pesa {size_mb:.1f}MB. Máximo permitido: {max_mb}MB"
+            )
+        
+        # 6. Validar dimensiones con Pillow
+        try:
+            from PIL import Image
+            import io as _io
+            img = Image.open(_io.BytesIO(contenido))
+            width, height = img.size
+            
+            if width < 800 or height < 420:
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"Dimensiones mínimas: 800x420 px. Tu imagen: {width}x{height} px"
+                )
+            
+            if width > 2400 or height > 1256:
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"Dimensiones máximas: 2400x1256 px. Tu imagen: {width}x{height} px"
+                )
+            
+            # Si es muy grande, redimensionar al máximo recomendado
+            max_width, max_height = 1200, 628
+            if width > max_width or height > max_height:
+                ratio = min(max_width / width, max_height / height)
+                new_width = int(width * ratio)
+                new_height = int(height * ratio)
+                img = img.resize((new_width, new_height), Image.LANCZOS)
+                
+                # Re-convertir a bytes
+                buffer = _io.BytesIO()
+                if extension in {".jpg", ".jpeg"}:
+                    img = img.convert("RGB")
+                    img.save(buffer, format="JPEG", quality=85, optimize=True)
+                elif extension == ".png":
+                    img.save(buffer, format="PNG", optimize=True)
+                elif extension == ".webp":
+                    img.save(buffer, format="WEBP", quality=85, optimize=True)
+                
+                contenido = buffer.getvalue()
+                
+        except ImportError:
+            logger.warning("Pillow no instalado - validación de dimensiones omitida")
+        except HTTPException:
+            raise
+        except Exception as e:
+            logger.warning(f"Error validando imagen: {e}")
+            # Si Pillow falla, continuar con la imagen original
+        
+        # 7. Generar nombre único y guardar
+        nombre_archivo = f"{id}_{uuid.uuid4().hex[:8]}{extension}"
+        ruta_directorio = os.path.join("uploads", "cursos")
+        os.makedirs(ruta_directorio, exist_ok=True)
+        ruta_completa = os.path.join(ruta_directorio, nombre_archivo)
+        
+        # Eliminar imagen anterior si existe
+        if curso.imagen_url and "/uploads/cursos/" in str(curso.imagen_url):
+            imagen_anterior = curso.imagen_url.split("/uploads/cursos/")[-1]
+            ruta_anterior = os.path.join(ruta_directorio, imagen_anterior)
+            if os.path.exists(ruta_anterior):
+                try:
+                    os.remove(ruta_anterior)
+                except Exception:
+                    pass
+        
+        # Guardar archivo (import lazy de aiofiles)
+        try:
+            import aiofiles as _af
+            async with _af.open(ruta_completa, 'wb') as f:
+                await f.write(contenido)
+        except ImportError:
+            # Fallback: escritura síncrona si aiofiles no está instalado
+            with open(ruta_completa, 'wb') as f:
+                f.write(contenido)
+            logger.info("aiofiles no disponible — archivo guardado de forma síncrona")
+        
+        # 8. Actualizar URL en la base de datos
+        imagen_url = f"/uploads/cursos/{nombre_archivo}"
+        curso.imagen_url = imagen_url
+        db.commit()
+        db.refresh(curso)
+        
+        logger.info(f"Imagen subida para curso {id}: {nombre_archivo} ({len(contenido)} bytes)")
+        
+        return {
+            "mensaje": "Imagen subida correctamente",
+            "imagen_url": imagen_url,
+            "nombre_archivo": nombre_archivo,
+            "ok": True
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        db.rollback()
+        logger.error(f"Error subiendo imagen de curso: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.delete("/{id}/imagen")
+async def eliminar_imagen_curso(
+    id: str,
+    db: Session = Depends(get_db),
+    current_user: Usuario = Depends(require_docente)
+):
+    """Elimina la imagen de portada de un curso"""
+    try:
+        curso = db.query(Curso).filter(Curso.id == id).first()
+        if not curso:
+            raise HTTPException(status_code=404, detail="Curso no encontrado")
+        
+        if str(curso.docente_id) != str(current_user.id) and current_user.rol != "admin":
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="No tienes permiso para editar este curso"
+            )
+        
+        # Eliminar archivo físico
+        if curso.imagen_url and "/uploads/cursos/" in str(curso.imagen_url):
+            nombre_archivo = curso.imagen_url.split("/uploads/cursos/")[-1]
+            ruta_archivo = os.path.join("uploads", "cursos", nombre_archivo)
+            if os.path.exists(ruta_archivo):
+                try:
+                    os.remove(ruta_archivo)
+                except Exception:
+                    pass
+        
+        curso.imagen_url = None
+        db.commit()
+        
+        return {"mensaje": "Imagen eliminada correctamente", "ok": True}
+    except HTTPException:
+        raise
+    except Exception as e:
+        db.rollback()
+        logger.error(f"Error eliminando imagen de curso: {e}")
         raise HTTPException(status_code=500, detail=str(e))

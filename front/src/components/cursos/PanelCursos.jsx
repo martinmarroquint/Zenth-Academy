@@ -13,6 +13,7 @@ import {
 import { Button, Input, Dropdown, Badge } from '../ui';
 import cursosService from '../../services/cursosService';
 import { authService } from '../../services/authService';
+import { resolveImageUrl } from '../../config/api.config';
 
 const PanelCursos = ({ onCrearCurso, onVerCurso, onEditarCurso }) => {
   const usuario = authService.getCurrentUser();
@@ -304,14 +305,22 @@ const PanelCursos = ({ onCrearCurso, onVerCurso, onEditarCurso }) => {
             >
               {/* Header con imagen y estado */}
               <div 
-                className="relative h-36 bg-gradient-to-br flex items-center justify-center overflow-hidden"
+                className="relative h-36 flex items-center justify-center overflow-hidden"
                 style={{ 
-                  backgroundImage: `linear-gradient(to bottom right, ${curso.imagen_url ? `url(${curso.imagen_url})` : '#e6f4f2'}, ${curso.imagen_url ? 'rgba(0,0,0,0.3)' : '#d1e8e5'})`,
-                  backgroundSize: 'cover',
-                  backgroundPosition: 'center'
+                  background: !curso.imagen_url ? 'linear-gradient(135deg, #e6f4f2, #d1e8e5)' : 'transparent'
                 }}
               >
-                {!curso.imagen_url && (
+                {curso.imagen_url ? (
+                  <img 
+                    src={resolveImageUrl(curso.imagen_url)} 
+                    alt={curso.titulo}
+                    className="w-full h-full object-cover"
+                    onError={(e) => {
+                      e.target.style.display = 'none';
+                      e.target.parentElement.style.background = 'linear-gradient(135deg, #e6f4f2, #d1e8e5)';
+                    }}
+                  />
+                ) : (
                   <BookOpen className="w-20 h-20 text-[#0f766e]/20" />
                 )}
                 
@@ -394,11 +403,11 @@ const PanelCursos = ({ onCrearCurso, onVerCurso, onEditarCurso }) => {
                   <div className="flex items-center gap-2">
                     <div className="w-6 h-6 rounded-full bg-[#e6f4f2] flex items-center justify-center">
                       <span className="text-[10px] font-semibold text-[#0f766e]">
-                        {curso.instructor ? curso.instructor.charAt(0).toUpperCase() : 'I'}
+                        {(curso.docente_nombre || curso.instructor) ? (curso.docente_nombre || curso.instructor).charAt(0).toUpperCase() : 'I'}
                       </span>
                     </div>
                     <span className="text-xs text-gray-600 truncate max-w-[100px]">
-                      {curso.instructor || 'Sin instructor'}
+                      {curso.docente_nombre || curso.instructor || 'Sin instructor'}
                     </span>
                   </div>
                   <div className="flex items-center gap-3 text-xs text-gray-400">

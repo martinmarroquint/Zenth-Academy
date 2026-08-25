@@ -18,6 +18,7 @@ from app.models.empresa import Empresa
 from app.models.cliente import Cliente
 from app.models.personal import Personal
 from app.models.material_compartido import MaterialCompartido  # ✅ NUEVO
+from app.models.solicitud_docente import SolicitudDocente  # ✅ SOLICITUDES DOCENTE
 
 
 __all__ = [
@@ -32,4 +33,5 @@ __all__ = [
     "IntegracionEDM", "EventoIntegracion",
     "HistorialComparticion", "CarpetaDocente",
     "MaterialCompartido",  # ✅ NUEVO
+    "SolicitudDocente",  # ✅ SOLICITUDES DOCENTE
 ]

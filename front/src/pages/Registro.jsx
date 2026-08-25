@@ -1,12 +1,11 @@
 // front/src/pages/Registro.jsx
-// PÁGINA DE REGISTRO DE USUARIOS
+// PÁGINA DE REGISTRO DE USUARIOS - SOLO ESTUDIANTES
 
 import React, { useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { 
   GraduationCap, Lock, Mail, Eye, EyeOff, 
-  Loader2, AlertCircle, User, Users, Shield,
-  CheckCircle
+  Loader2, AlertCircle, User, CheckCircle
 } from 'lucide-react';
 import { authService } from '../services/authService';
 
@@ -22,9 +21,7 @@ const Registro = () => {
     nombres: '',
     apellidos: '',
     telefono: '',
-    rol: 'estudiante',
     institucion: '',
-    especialidad: '',
   });
 
   const handleChange = (e) => {
@@ -38,18 +35,17 @@ const Registro = () => {
     setLoading(true);
 
     try {
-      const result = await authService.register(formData);
+      // Siempre registrar como estudiante
+      const dataToSend = {
+        ...formData,
+        rol: 'estudiante'
+      };
+      
+      const result = await authService.register(dataToSend);
       if (result.success) {
         setSuccess(true);
         setTimeout(() => {
-          const rol = authService.getRol();
-          if (rol === 'admin') {
-            navigate('/admin');
-          } else if (rol === 'docente') {
-            navigate('/docente');
-          } else {
-            navigate('/estudiante');
-          }
+          navigate('/estudiante');
         }, 1500);
       } else {
         setError(result.error || 'Error en el registro');
@@ -186,71 +182,18 @@ const Registro = () => {
 
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Tipo de cuenta
+                  Institución (opcional)
                 </label>
-                <div className="grid grid-cols-2 gap-2">
-                  <button
-                    type="button"
-                    onClick={() => setFormData({ ...formData, rol: 'estudiante' })}
-                    className={`flex items-center justify-center gap-2 p-3 rounded-xl border-2 transition-colors ${
-                      formData.rol === 'estudiante'
-                        ? 'border-teal-700 bg-teal-50 text-teal-700'
-                        : 'border-gray-200 hover:border-gray-300 text-gray-600'
-                    }`}
-                    style={formData.rol === 'estudiante' ? { borderColor: '#0f766e', backgroundColor: '#e6f4f2', color: '#0f766e' } : {}}
-                  >
-                    <Users className="w-4 h-4" />
-                    <span className="text-sm font-medium">Estudiante</span>
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setFormData({ ...formData, rol: 'docente' })}
-                    className={`flex items-center justify-center gap-2 p-3 rounded-xl border-2 transition-colors ${
-                      formData.rol === 'docente'
-                        ? 'border-teal-700 bg-teal-50 text-teal-700'
-                        : 'border-gray-200 hover:border-gray-300 text-gray-600'
-                    }`}
-                    style={formData.rol === 'docente' ? { borderColor: '#0f766e', backgroundColor: '#e6f4f2', color: '#0f766e' } : {}}
-                  >
-                    <Shield className="w-4 h-4" />
-                    <span className="text-sm font-medium">Docente</span>
-                  </button>
-                </div>
+                <input
+                  type="text"
+                  name="institucion"
+                  value={formData.institucion}
+                  onChange={handleChange}
+                  placeholder="Nombre de tu institución"
+                  className="w-full px-3 py-2.5 text-sm border border-gray-200 rounded-xl outline-none focus:border-teal-700 focus:ring-2 focus:ring-teal-200 transition-all bg-white"
+                  style={{ '--tw-ring-color': '#0f766e' }}
+                />
               </div>
-
-              {formData.rol === 'docente' && (
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Especialidad
-                  </label>
-                  <input
-                    type="text"
-                    name="especialidad"
-                    value={formData.especialidad}
-                    onChange={handleChange}
-                    placeholder="Ej: Matemáticas, Programación..."
-                    className="w-full px-3 py-2.5 text-sm border border-gray-200 rounded-xl outline-none focus:border-teal-700 focus:ring-2 focus:ring-teal-200 transition-all bg-white"
-                    style={{ '--tw-ring-color': '#0f766e' }}
-                  />
-                </div>
-              )}
-
-              {formData.rol === 'estudiante' && (
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Institución (opcional)
-                  </label>
-                  <input
-                    type="text"
-                    name="institucion"
-                    value={formData.institucion}
-                    onChange={handleChange}
-                    placeholder="Nombre de tu institución"
-                    className="w-full px-3 py-2.5 text-sm border border-gray-200 rounded-xl outline-none focus:border-teal-700 focus:ring-2 focus:ring-teal-200 transition-all bg-white"
-                    style={{ '--tw-ring-color': '#0f766e' }}
-                  />
-                </div>
-              )}
 
               <button
                 type="submit"
@@ -269,6 +212,10 @@ const Registro = () => {
                   'Crear cuenta'
                 )}
               </button>
+
+              <p className="text-xs text-gray-400 text-center mt-2">
+                Al registrarte, aceptas los términos y condiciones.
+              </p>
             </form>
           )}
 
@@ -277,6 +224,15 @@ const Registro = () => {
               ¿Ya tienes cuenta?{' '}
               <Link to="/login" className="font-medium transition-colors hover:underline" style={{ color: '#0f766e' }}>
                 Inicia sesión
+              </Link>
+            </p>
+          </div>
+
+          <div className="mt-3 text-center">
+            <p className="text-xs text-gray-400">
+              ¿Quieres ser docente?{' '}
+              <Link to="/solicitar-docente" className="font-medium transition-colors hover:underline" style={{ color: '#0f766e' }}>
+                Solicita acceso
               </Link>
             </p>
           </div>

@@ -12,6 +12,7 @@ import {
 } from 'lucide-react';
 import { authService } from '../../services/authService';
 import cursosService from '../../services/cursosService';
+import ModalSolicitudDocente from '../modals/ModalSolicitudDocente';
 
 const ICONOS_NAV = {
   dashboard: LayoutDashboard,
@@ -146,6 +147,8 @@ const MainLayout = () => {
   const [menuMovil, setMenuMovil] = useState(false);
   const [solicitudesPendientes, setSolicitudesPendientes] = useState(0);
   const [hoverExpand, setHoverExpand] = useState(false);
+  const [modalSolicitudAbierto, setModalSolicitudAbierto] = useState(false);
+  const [solicitudPendiente, setSolicitudPendiente] = useState(false);
 
   useEffect(() => {
     setMenuMovil(false);
@@ -210,6 +213,24 @@ const MainLayout = () => {
     cargarSolicitudes();
     const interval = setInterval(cargarSolicitudes, 60000);
     return () => clearInterval(interval);
+  }, [rol]);
+
+  // Verificar si el estudiante tiene solicitud pendiente
+  useEffect(() => {
+    const verificarSolicitud = async () => {
+      if (rol !== 'estudiante') return;
+      try {
+        const { default: solicitudesDocenteService } = await import('../../services/solicitudesDocenteService');
+        const solicitudes = await solicitudesDocenteService.misSolicitudes();
+        const pendiente = solicitudes.find(s => 
+          s.estado === 'pendiente' || s.estado === 'en_revision'
+        );
+        setSolicitudPendiente(!!pendiente);
+      } catch (e) {
+        // Silenciar errores
+      }
+    };
+    verificarSolicitud();
   }, [rol]);
 
   const toggleSidebar = () => {
@@ -347,8 +368,28 @@ const MainLayout = () => {
           ))}
         </nav>
 
-        {/* Footer - Salir */}
+        {/* Footer - Botón Ser Docente (solo estudiantes) + Salir */}
         <div className="border-t border-gray-200 p-2 space-y-0.5 flex-shrink-0">
+          {/* Botón Ser Docente - solo para estudiantes */}
+          {rol === 'estudiante' && (
+            <button
+              onClick={() => setModalSolicitudAbierto(true)}
+              className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg transition-colors min-h-[44px] ${
+                solicitudPendiente
+                  ? 'text-amber-600 bg-amber-50 hover:bg-amber-100'
+                  : 'text-[#0f766e] bg-[#e6f4f2] hover:bg-[#d1ece8]'
+              } ${!sidebarAbierto && 'lg:justify-center'}`}
+              title={!sidebarAbierto ? (solicitudPendiente ? 'Solicitud en proceso' : 'Ser Docente') : ''}
+            >
+              <GraduationCap className="w-5 h-5 flex-shrink-0" />
+              {sidebarAbierto && (
+                <span className="text-sm font-medium whitespace-nowrap">
+                  {solicitudPendiente ? 'Solicitud en proceso' : 'Ser Docente'}
+                </span>
+              )}
+            </button>
+          )}
+
           <button
             onClick={handleLogout}
             className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-gray-400 hover:bg-red-50 hover:text-red-600 transition-colors min-h-[44px] ${
@@ -453,6 +494,16 @@ const MainLayout = () => {
           <Outlet />
         </main>
       </div>
+
+      {/* Modal Solicitud Docente */}
+      <ModalSolicitudDocente
+        abierto={modalSolicitudAbierto}
+        onCerrar={() => setModalSolicitudAbierto(false)}
+        onSolicitudEnviada={() => {
+          setSolicitudPendiente(true);
+          setModalSolicitudAbierto(false);
+        }}
+      />
     </div>
   );
 };

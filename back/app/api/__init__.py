@@ -15,6 +15,7 @@ from app.api import (
     carpeta_docente,
     materiales,
     compartir,
+    solicitudes_docente,
 )
 
 # Configuracion publica de cliente (marca Zenth Academy)
@@ -116,6 +117,15 @@ api_router.include_router(
     compartir.router,
     prefix="/compartir",
     tags=["Compartir en clase"]
+)
+
+# =============================================
+# SOLICITUDES DE DOCENTE
+# =============================================
+api_router.include_router(
+    solicitudes_docente.router,
+    prefix="/solicitudes-docente",
+    tags=["Solicitudes Docente"]
 )
 
 # =============================================

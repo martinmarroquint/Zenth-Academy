@@ -35,6 +35,7 @@ import cursosService from '../services/cursosService';
 import certificadosService from '../services/certificadosService';
 import { authService } from '../services/authService';
 import Badge from '../components/ui/Badge';
+import { resolveImageUrl } from '../config/api.config';
 
 const EstudianteCursos = () => {
   const navigate = useNavigate();
@@ -489,10 +490,10 @@ const EstudianteCursos = () => {
                           {obtenerFecha(curso.fecha_inscripcion)}
                         </span>
                       )}
-                      {curso.instructor && (
+                      {(curso.docente_nombre || curso.instructor) && (
                         <span className="text-[10px] text-gray-400 flex items-center gap-1">
                           <User className="w-3 h-3" />
-                          {curso.instructor}
+                          {curso.docente_nombre || curso.instructor}
                         </span>
                       )}
                     </div>
@@ -611,10 +612,22 @@ const EstudianteCursos = () => {
                 key={curso.id}
                 className="bg-white border border-gray-200/60 rounded-xl overflow-hidden hover:border-[#0f766e]/30 hover:shadow-lg transition-all group"
               >
-                <div className="relative h-32 bg-gradient-to-br from-gray-50 to-gray-100 flex items-center justify-center">
-                  <div className="w-14 h-14 rounded-2xl bg-white/80 backdrop-blur-sm border border-gray-200 flex items-center justify-center shadow-sm">
-                    <GraduationCap className="w-7 h-7 text-[#0f766e]" />
-                  </div>
+                <div className="relative h-32 bg-gradient-to-br from-gray-50 to-gray-100 flex items-center justify-center overflow-hidden">
+                  {curso.imagen_url ? (
+                    <img 
+                      src={resolveImageUrl(curso.imagen_url)} 
+                      alt={curso.titulo}
+                      className="w-full h-full object-cover"
+                      onError={(e) => {
+                        e.target.style.display = 'none';
+                        e.target.parentElement.style.background = 'linear-gradient(135deg, #f9fafb, #f3f4f6)';
+                      }}
+                    />
+                  ) : (
+                    <div className="w-14 h-14 rounded-2xl bg-white/80 backdrop-blur-sm border border-gray-200 flex items-center justify-center shadow-sm">
+                      <GraduationCap className="w-7 h-7 text-[#0f766e]" />
+                    </div>
+                  )}
                   {curso.nivel && (
                     <span className="absolute top-3 right-3 px-2.5 py-0.5 text-[9px] font-medium rounded-full bg-white/90 backdrop-blur-sm border border-gray-200 text-gray-500">
                       {curso.nivel}
@@ -660,10 +673,10 @@ const EstudianteCursos = () => {
                         {curso.rating}
                       </span>
                     )}
-                    {curso.instructor && (
+                    {(curso.docente_nombre || curso.instructor) && (
                       <span className="inline-flex items-center gap-1">
                         <User className="w-3 h-3" />
-                        {curso.instructor}
+                        {curso.docente_nombre || curso.instructor}
                       </span>
                     )}
                   </div>

@@ -2,6 +2,7 @@
 // APP CON LAYOUT PRINCIPAL COMPARTIDO Y RUTAS ANIDADAS POR ROL
 // ✅ ACTUALIZADO: Home unificado (Login + QR) como página principal
 // ✅ AGREGADO: Ruta para UI Demo (/ui-demo) - ACCESO PÚBLICO
+// ✅ AGREGADO: Ruta para solicitud de docente
 
 import React from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
@@ -10,6 +11,8 @@ import Login from './pages/Login';
 import Registro from './pages/Registro';
 import UiDemo from './pages/UiDemo';
 import ExamenPublicoPage from './pages/ExamenPublicoPage';
+import SolicitarDocente from './pages/SolicitarDocente';
+import AdminSolicitudesDocente from './pages/AdminSolicitudesDocente';
 import MainLayout from './components/layout/MainLayout';
 import ProtectedRoute from './components/layout/ProtectedRoute';
 import { authService } from './services/authService';
@@ -74,6 +77,7 @@ function App() {
         ============================================= */}
         <Route path="/login" element={<Login />} />
         <Route path="/registro" element={<Registro />} />
+        <Route path="/solicitar-docente" element={<SolicitarDocente />} />
 
         {/* =============================================
             COMPARTIR EN CLASE — PANTALLA DEL AULA (PÚBLICO, sin login)
@@ -98,6 +102,7 @@ function App() {
           }
         >
           <Route index element={<DashboardAdmin />} />
+          <Route path="solicitudes-docente" element={<AdminSolicitudesDocente />} />
           {rutasModulos}
         </Route>
 

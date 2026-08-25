@@ -13,7 +13,7 @@ import {
   BarChart3, Eye, Download, ThumbsUp,
   Pause, FolderOpen, User, X, Layers,
   ChevronLeft, ChevronRight, Sparkles,
-  Globe, Target, Star, EyeOff, Info
+  Globe, Target, Star, EyeOff, Info, Edit3
 } from 'lucide-react';
 import cursosService from '../../services/cursosService';
 import certificadosService from '../../services/certificadosService';
@@ -23,8 +23,10 @@ import { Badge, Button } from '../ui';
 import ForoCurso from './ForoCurso';
 import CalificacionesEstudiante from './CalificacionesEstudiante';
 import EstudiantesCurso from './EstudiantesCurso';
+import VerCertificado from '../certificados/VerCertificado';
 import PanelSolicitudes from '../docente/PanelSolicitudes';
 import ExamenActivo from '../examenes/ExamenActivo';
+import { resolveImageUrl } from '../../config/api.config';
 
 // ============================================================
 // VIDEO PLAYER
@@ -1049,7 +1051,7 @@ const DetalleCurso = ({
   const [leccionesCompletadas, setLeccionesCompletadas] = useState([]);
   const [cargando, setCargando] = useState(true);
   const [error, setError] = useState('');
-  const [moduloAbierto, setModuloAbierto] = useState(null);
+  const [moduloAbierto, setModuloAbierto] = useState([]);
   const [tieneAcceso, setTieneAcceso] = useState(false);
   const [tieneSolicitudPendiente, setTieneSolicitudPendiente] = useState(false);
   const [solicitando, setSolicitando] = useState(false);
@@ -1072,6 +1074,7 @@ const DetalleCurso = ({
   const [cursoCompletado, setCursoCompletado] = useState(false);
   const [certificadosCurso, setCertificadosCurso] = useState([]);
   const [cargandoCertificados, setCargandoCertificados] = useState(false);
+  const [verCertificadoId, setVerCertificadoId] = useState(null);
 
   const usuario = authService.getCurrentUser();
   const esDocente = usuario?.rol === 'docente' || usuario?.rol === 'admin';
@@ -1121,7 +1124,7 @@ const DetalleCurso = ({
       try {
         const data = await cursosService.obtener(cursoId);
         setCurso(data);
-        setModuloAbierto(data?.modulos?.[0]?.id ?? null);
+        setModuloAbierto(data?.modulos?.[0]?.id ? [data.modulos[0].id] : []);
         setTieneAcceso(data?.tiene_acceso || false);
         setTieneSolicitudPendiente(data?.tiene_solicitud_pendiente || false);
 
@@ -1131,6 +1134,7 @@ const DetalleCurso = ({
               const prog = await cursosService.obtenerProgreso(cursoId, usuarioId);
               setProgreso(prog?.progreso || 0);
               setLeccionesCompletadas(prog?.lecciones_completadas || []);
+              setCursoCompletado(prog?.completado || false);
             } catch (e) {
               console.warn('No se pudo obtener progreso:', e);
             }
@@ -1156,18 +1160,9 @@ const DetalleCurso = ({
     cargarCurso();
   }, [cursoId, usuarioId, esDocente]);
 
-  // Calcular progreso
-  useEffect(() => {
-    if (!curso?.modulos) return;
-    const total = curso.modulos.reduce((acc, m) => {
-      const lecciones = getLeccionesDeModulo(m);
-      return acc + lecciones.length;
-    }, 0);
-    const completadas = leccionesCompletadas.length;
-    const pct = total > 0 ? Math.round((completadas / total) * 100) : 0;
-    setProgreso(pct);
-    setCursoCompletado(total > 0 && completadas >= total);
-  }, [curso, leccionesCompletadas]);
+  // El progreso y completado vienen del backend (inscripcion.progreso / inscripcion.completado)
+  // NO se recalcula localmente para evitar desincronización.
+  // Los valores se actualizan cuando se carga el curso o se completa una lección.
 
   // Handlers
   const handleAbrirLeccion = (modulo, leccion) => {
@@ -1205,7 +1200,21 @@ const DetalleCurso = ({
       const prog = await cursosService.obtenerProgreso(cursoId, usuarioId);
       setProgreso(prog?.progreso || 0);
       setLeccionesCompletadas(prog?.lecciones_completadas || []);
+      setCursoCompletado(prog?.completado || false);
       setVideoCompletado(true);
+      
+      // Si el curso se completó, cargar el certificado (puede tardar un momento en crearse)
+      if (prog?.completado) {
+        setTimeout(async () => {
+          try {
+            const certs = await certificadosService.listar({ curso_id: cursoId, estudiante_id: usuarioId });
+            const activos = (Array.isArray(certs) ? certs : []).filter(c => c.estado !== 'cancelado');
+            setCertificado(activos[0] || null);
+          } catch (e) {
+            console.warn('Certificado aún no disponible:', e);
+          }
+        }, 1000); // Esperar 1 segundo para que el backend cree el certificado
+      }
     } catch (error) {
       console.error('Error:', error);
     } finally {
@@ -1743,6 +1752,12 @@ const DetalleCurso = ({
   // ============================================================
   // RENDER: VISTA PRINCIPAL DEL CURSO
   // ============================================================
+  
+  // Si el docente seleccionó "Ver" un certificado específico
+  if (verCertificadoId) {
+    return <VerCertificado certificadoId={verCertificadoId} onVolver={() => setVerCertificadoId(null)} />;
+  }
+  
   return (
     <div className="max-w-6xl mx-auto px-4 sm:px-6 py-6 space-y-6">
       {/* Header - CON BOTÓN CORREGIDO */}
@@ -1762,11 +1777,28 @@ const DetalleCurso = ({
 
       {/* Info del curso */}
       <div className="bg-white rounded-2xl border border-gray-200/60 overflow-hidden shadow-sm">
+        {/* Imagen de portada */}
+        {curso.imagen_url && (
+          <div className="relative h-48 sm:h-56 bg-gradient-to-br from-gray-50 to-gray-100 overflow-hidden">
+            <img 
+              src={resolveImageUrl(curso.imagen_url)} 
+              alt={curso.titulo}
+              className="w-full h-full object-cover"
+              onError={(e) => {
+                e.target.style.display = 'none';
+              }}
+            />
+            <div className="absolute inset-0 bg-gradient-to-t from-black/20 to-transparent" />
+          </div>
+        )}
+        
         <div className="p-6 space-y-4">
           <div className="flex items-start gap-4">
-            <div className="w-14 h-14 rounded-2xl bg-[#0f766e]/10 flex items-center justify-center flex-shrink-0">
-              <GraduationCap className="w-7 h-7 text-[#0f766e]" />
-            </div>
+            {!curso.imagen_url && (
+              <div className="w-14 h-14 rounded-2xl bg-[#0f766e]/10 flex items-center justify-center flex-shrink-0">
+                <GraduationCap className="w-7 h-7 text-[#0f766e]" />
+              </div>
+            )}
             <div className="flex-1 min-w-0">
               <h1 className="text-2xl font-bold text-gray-900">{curso.titulo}</h1>
               <p className="text-sm text-gray-500 mt-1">{curso.descripcion}</p>
@@ -1781,7 +1813,7 @@ const DetalleCurso = ({
             </Badge>
             <Badge variant="secondary" size="sm" className="gap-1">
               <Clock className="w-3 h-3" />
-              {curso.duracion || 'Sin duración'}
+              {curso.duracion ? `Duración: ${curso.duracion}` : 'Sin duración definida'}
             </Badge>
             <Badge variant="secondary" size="sm" className="gap-1">
               <Users className="w-3 h-3" />
@@ -1792,9 +1824,9 @@ const DetalleCurso = ({
             </Badge>
             {curso.nivel && <Badge variant="secondary" size="sm">{curso.nivel}</Badge>}
             {curso.categoria && <Badge variant="secondary" size="sm">{curso.categoria}</Badge>}
-            {curso.instructor && (
+            {(curso.docente_nombre || curso.instructor) && (
               <span className="text-xs text-gray-400 flex items-center gap-1">
-                <User className="w-3 h-3" /> {curso.instructor}
+                <User className="w-3 h-3" /> {curso.docente_nombre || curso.instructor}
               </span>
             )}
           </div>
@@ -1947,7 +1979,11 @@ const DetalleCurso = ({
               return (
                 <div key={modulo.id} className="bg-white rounded-xl border border-gray-200/60 overflow-hidden shadow-sm">
                   <button
-                    onClick={() => setModuloAbierto(moduloAbierto === modulo.id ? null : modulo.id)}
+                    onClick={() => setModuloAbierto(prev => 
+                      prev.includes(modulo.id) 
+                        ? prev.filter(id => id !== modulo.id) 
+                        : [...prev, modulo.id]
+                    )}
                     className="w-full flex items-center justify-between px-5 py-3.5 hover:bg-gray-50/50 transition-colors"
                   >
                     <div className="flex items-center gap-3">
@@ -1964,10 +2000,10 @@ const DetalleCurso = ({
                         </span>
                       )}
                     </div>
-                    <ChevronDown className={`w-5 h-5 text-gray-400 transition-transform ${moduloAbierto === modulo.id ? 'rotate-180' : ''}`} />
+                    <ChevronDown className={`w-5 h-5 text-gray-400 transition-transform ${moduloAbierto.includes(modulo.id) ? 'rotate-180' : ''}`} />
                   </button>
 
-                  {moduloAbierto === modulo.id && (
+                  {moduloAbierto.includes(modulo.id) && (
                     <div className="px-5 pb-4 space-y-1.5 border-t border-gray-100 pt-3">
                       {leccionesModulo.map((leccion, index) => {
                         const isCompletada = leccionesCompletadas.includes(leccion.id);
@@ -2029,7 +2065,7 @@ const DetalleCurso = ({
                 {certificadosCurso.map((cert) => (
                   <div key={cert.id} className="px-6 py-3 flex items-center justify-between">
                     <div><p className="text-sm font-medium text-gray-800">{cert.estudiante_nombre || cert.estudiante_id}</p><p className="text-xs text-gray-400">{cert.codigo}</p></div>
-                    <button onClick={() => handleCertificado(curso.id)} className="px-3 py-1 text-xs text-[#0f766e] border border-[#0f766e]/20 rounded-lg hover:bg-[#e6f4f2] transition-colors">Ver</button>
+                    <button onClick={() => setVerCertificadoId(cert.id)} className="px-3 py-1 text-xs text-[#0f766e] border border-[#0f766e]/20 rounded-lg hover:bg-[#e6f4f2] transition-colors">Ver</button>
                   </div>
                 ))}
               </div>
@@ -2038,7 +2074,7 @@ const DetalleCurso = ({
         )}
         {esDocente && tabActiva === 'configuracion' && onEditarCurso && (
           <div className="bg-white rounded-xl border border-gray-200/60 p-6">
-            <h3 className="text-sm font-medium text-gray-900 mb-4">Configuración</h3>
+            <h3 className="text-sm font-medium text-gray-900 mb-4">Configuración del curso</h3>
             <div className="space-y-3">
               <div className="flex items-center justify-between py-2 border-b border-gray-100">
                 <span className="text-sm text-gray-600">Estado</span>
@@ -2050,8 +2086,18 @@ const DetalleCurso = ({
                 <span className="text-sm text-gray-600">Nivel</span>
                 <span className="text-sm text-gray-900">{curso.nivel || 'No definido'}</span>
               </div>
-              <button onClick={() => onEditarCurso(curso)} className="mt-2 px-4 py-2 bg-[#0f766e] text-white rounded-lg hover:bg-[#0d5e57] transition-colors text-sm">
-                Editar curso
+              <div className="flex items-center justify-between py-2 border-b border-gray-100">
+                <span className="text-sm text-gray-600">Categoría</span>
+                <span className="text-sm text-gray-900">{curso.categoria || 'Sin categoría'}</span>
+              </div>
+              <div className="flex items-center justify-between py-2 border-b border-gray-100">
+                <span className="text-sm text-gray-600">Precio</span>
+                <span className="text-sm text-gray-900">
+                  {curso.precio_tipo === 'pago' ? `${curso.moneda} ${curso.precio_monto}` : 'Gratis'}
+                </span>
+              </div>
+              <button onClick={() => onEditarCurso(curso)} className="mt-2 px-4 py-2 bg-[#0f766e] text-white rounded-lg hover:bg-[#0d5e57] transition-colors text-sm flex items-center gap-2">
+                <Edit3 className="w-4 h-4" /> Editar curso completo
               </button>
             </div>
           </div>

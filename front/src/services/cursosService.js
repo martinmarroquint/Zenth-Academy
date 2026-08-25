@@ -64,6 +64,30 @@ const cursosService = {
   },
 
   // =============================================
+  // IMAGEN DE PORTADA
+  // =============================================
+
+  subirImagen: async (cursoId, archivo) => {
+    try {
+      const formData = new FormData();
+      formData.append('archivo', archivo);
+      return await api.post(`/cursos/${cursoId}/imagen`, formData);
+    } catch (error) {
+      console.error('Error subiendo imagen:', error);
+      throw error;
+    }
+  },
+
+  eliminarImagen: async (cursoId) => {
+    try {
+      return await api.delete(`/cursos/${cursoId}/imagen`);
+    } catch (error) {
+      console.error('Error eliminando imagen:', error);
+      throw error;
+    }
+  },
+
+  // =============================================
   // INSCRIPCIÓN Y PROGRESO
   // =============================================
 

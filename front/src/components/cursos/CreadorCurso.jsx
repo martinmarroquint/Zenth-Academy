@@ -1,7 +1,7 @@
 // front/src/components/cursos/CreadorCurso.jsx
 // VERSIÓN ACTUALIZADA - CON MODAL DE EXAMEN COMPLETO
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   ArrowLeft, Save, Plus, Trash2, GripVertical,
   Video, FileText, BookOpen, X,
@@ -10,12 +10,13 @@ import {
   DollarSign, Lock as LockIcon, FileCheck,
   Settings, CheckCircle, AlertCircle,
   Globe, Target, Clock, User, Image as ImageIcon,
-  Layout, Layers, MoveUp, MoveDown
+  Layout, Layers, MoveUp, MoveDown, Upload
 } from 'lucide-react';
 import cursosService from '../../services/cursosService';
 import examenesService from '../../services/examenesService';
 import EditorTexto from './EditorTexto';
 import ModalCrearExamenRapido from './ModalCrearExamenRapido';
+import { resolveImageUrl, isGoogleDriveUrl, convertGoogleDriveUrl } from '../../config/api.config';
 
 // =============================================
 // COMPONENTES UI
@@ -417,9 +418,25 @@ const BloqueContenido = ({
 // =============================================
 // BARRA DE HERRAMIENTAS PROFESIONAL
 // =============================================
+
 const Toolbar = ({ datos, setDatos }) => {
   const [pagoActivo, setPagoActivo] = useState(datos.precio_tipo === 'pago');
   const [certificadoActivo, setCertificadoActivo] = useState(datos.certificado_habilitado);
+  const [subiendoImagen, setSubiendoImagen] = useState(false);
+  const [errorImagen, setErrorImagen] = useState('');
+  const fileInputRef = useRef(null);
+  const [dragOver, setDragOver] = useState(false);
+
+  // Constantes para imagen de portada
+  const IMAGE_CONFIG = {
+    maxSize: 5 * 1024 * 1024, // 5MB
+    allowedTypes: ['image/jpeg', 'image/png', 'image/webp'],
+    allowedExtensions: ['.jpg', '.jpeg', '.png', '.webp'],
+    recommendedWidth: 1200,
+    recommendedHeight: 628,
+    minWidth: 800,
+    minHeight: 420,
+  };
 
   const handlePagoToggle = (checked) => {
     setPagoActivo(checked);
@@ -438,6 +455,75 @@ const Toolbar = ({ datos, setDatos }) => {
       certificado_nota_minima: checked ? datos.certificado_nota_minima || '' : '',
     });
   };
+
+  const validarArchivo = (file) => {
+    // Validar tipo MIME
+    if (!IMAGE_CONFIG.allowedTypes.includes(file.type)) {
+      return 'Formato no permitido. Usa JPG, PNG o WebP';
+    }
+    // Validar extensión
+    const ext = '.' + file.name.split('.').pop().toLowerCase();
+    if (!IMAGE_CONFIG.allowedExtensions.includes(ext)) {
+      return 'Extensión no permitida. Usa .jpg, .png o .webp';
+    }
+    // Validar tamaño
+    if (file.size > IMAGE_CONFIG.maxSize) {
+      const sizeMB = (file.size / (1024 * 1024)).toFixed(1);
+      return `La imagen pesa ${sizeMB}MB. Máximo: 5MB`;
+    }
+    return null;
+  };
+
+  const handleFileSelect = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    
+    const error = validarArchivo(file);
+    if (error) {
+      setErrorImagen(error);
+      return;
+    }
+    
+    setErrorImagen('');
+    // Vista previa local inmediata
+    const previewUrl = URL.createObjectURL(file);
+    setDatos({ ...datos, imagen_url: previewUrl, _imagenFile: file });
+  };
+
+  const handleDrop = async (e) => {
+    e.preventDefault();
+    setDragOver(false);
+    const file = e.dataTransfer.files?.[0];
+    if (!file) return;
+    
+    const error = validarArchivo(file);
+    if (error) {
+      setErrorImagen(error);
+      return;
+    }
+    
+    setErrorImagen('');
+    const previewUrl = URL.createObjectURL(file);
+    setDatos({ ...datos, imagen_url: previewUrl, _imagenFile: file });
+  };
+
+  const handleDragOver = (e) => {
+    e.preventDefault();
+    setDragOver(true);
+  };
+
+  const handleDragLeave = (e) => {
+    e.preventDefault();
+    setDragOver(false);
+  };
+
+  const eliminarImagen = () => {
+    setDatos({ ...datos, imagen_url: '', _imagenFile: null });
+    setErrorImagen('');
+    if (fileInputRef.current) fileInputRef.current.value = '';
+  };
+
+  const imagenUrl = resolveImageUrl(datos.imagen_url);
 
   return (
     <div className="bg-white rounded-xl border border-gray-200/60 shadow-sm">
@@ -473,8 +559,9 @@ const Toolbar = ({ datos, setDatos }) => {
         </div>
       </div>
 
-      <div className="p-3 flex items-center gap-4 flex-wrap overflow-visible">
-        <div className="flex items-center gap-3 overflow-visible">
+      <div className="p-3 space-y-3">
+        {/* Primera fila: categoría, nivel, duración, instructor */}
+        <div className="flex items-center gap-4 flex-wrap">
           <div className="flex items-center gap-1 overflow-visible">
             <Globe className="w-3.5 h-3.5 text-gray-400 flex-shrink-0" />
             <Dropdown
@@ -509,11 +596,9 @@ const Toolbar = ({ datos, setDatos }) => {
               size="sm"
             />
           </div>
-        </div>
 
-        <div className="w-px h-6 bg-gray-200 flex-shrink-0" />
+          <div className="w-px h-6 bg-gray-200 flex-shrink-0" />
 
-        <div className="flex items-center gap-3 overflow-visible">
           <div className="flex items-center gap-1">
             <User className="w-3.5 h-3.5 text-gray-400 flex-shrink-0" />
             <Input
@@ -524,92 +609,218 @@ const Toolbar = ({ datos, setDatos }) => {
               size="sm"
             />
           </div>
-          
-          <div className="flex items-center gap-1">
-            <ImageIcon className="w-3.5 h-3.5 text-gray-400 flex-shrink-0" />
-            <Input
-              value={datos.imagen_url}
-              onChange={(e) => setDatos({ ...datos, imagen_url: e.target.value })}
-              placeholder="URL imagen"
-              className="w-40"
-              size="sm"
-            />
+
+          <div className="w-px h-6 bg-gray-200 flex-shrink-0" />
+
+          <div className="flex items-center gap-4 overflow-visible">
+            <div className="flex items-center gap-2 overflow-visible">
+              <Switch
+                checked={pagoActivo}
+                onChange={handlePagoToggle}
+                size="sm"
+              />
+              <span className="text-xs text-gray-600 flex-shrink-0">Pago</span>
+              {pagoActivo && (
+                <div className="flex items-center gap-1 ml-1 overflow-visible">
+                  <Input
+                    type="number"
+                    value={datos.precio_monto}
+                    onChange={(e) => setDatos({ ...datos, precio_monto: e.target.value })}
+                    placeholder="49.99"
+                    className="w-16"
+                    size="sm"
+                  />
+                  <Dropdown
+                    value={datos.moneda}
+                    onChange={(value) => setDatos({ ...datos, moneda: value })}
+                    options={MONEDAS}
+                    className="w-16"
+                    size="sm"
+                  />
+                  <Input
+                    value={datos.numero_pago}
+                    onChange={(e) => setDatos({ ...datos, numero_pago: e.target.value })}
+                    placeholder="Yape/Plin"
+                    className="w-24"
+                    size="sm"
+                  />
+                </div>
+              )}
+            </div>
+
+            <div className="flex items-center gap-2 overflow-visible">
+              <Switch
+                checked={certificadoActivo}
+                onChange={handleCertificadoToggle}
+                size="sm"
+              />
+              <span className="text-xs text-gray-600 flex-shrink-0">Certificado</span>
+              {certificadoActivo && (
+                <div className="flex items-center gap-1 ml-1 overflow-visible">
+                  <span className="text-xs text-gray-400 flex-shrink-0">Nota:</span>
+                  <Input
+                    type="number"
+                    min="0"
+                    max="20"
+                    step="0.5"
+                    value={datos.certificado_nota_minima}
+                    onChange={(e) => setDatos({ ...datos, certificado_nota_minima: e.target.value })}
+                    placeholder="11"
+                    className="w-14"
+                    size="sm"
+                  />
+                </div>
+              )}
+            </div>
+
+            <div className="flex items-center gap-2 overflow-visible">
+              <LockIcon className="w-3.5 h-3.5 text-gray-400 flex-shrink-0" />
+              <Dropdown
+                value={datos.tipo_bloqueo}
+                onChange={(value) => setDatos({ ...datos, tipo_bloqueo: value })}
+                options={TIPOS_BLOQUEO}
+                placeholder="Bloqueo"
+                className="w-28"
+                size="sm"
+              />
+            </div>
           </div>
         </div>
 
-        <div className="w-px h-6 bg-gray-200 flex-shrink-0" />
-
-        <div className="flex items-center gap-4 overflow-visible">
-          <div className="flex items-center gap-2 overflow-visible">
-            <Switch
-              checked={pagoActivo}
-              onChange={handlePagoToggle}
-              size="sm"
-            />
-            <span className="text-xs text-gray-600 flex-shrink-0">Pago</span>
-            {pagoActivo && (
-              <div className="flex items-center gap-1 ml-1 overflow-visible">
-                <Input
-                  type="number"
-                  value={datos.precio_monto}
-                  onChange={(e) => setDatos({ ...datos, precio_monto: e.target.value })}
-                  placeholder="49.99"
-                  className="w-16"
-                  size="sm"
-                />
-                <Dropdown
-                  value={datos.moneda}
-                  onChange={(value) => setDatos({ ...datos, moneda: value })}
-                  options={MONEDAS}
-                  className="w-16"
-                  size="sm"
-                />
-                <Input
-                  value={datos.numero_pago}
-                  onChange={(e) => setDatos({ ...datos, numero_pago: e.target.value })}
-                  placeholder="Yape/Plin"
-                  className="w-24"
-                  size="sm"
-                />
-              </div>
-            )}
+        {/* Segunda fila: Imagen de portada */}
+        <div className="border-t border-gray-100 pt-3">
+          <div className="flex items-center gap-2 mb-2">
+            <ImageIcon className="w-3.5 h-3.5 text-gray-400" />
+            <span className="text-xs font-medium text-gray-600">Imagen de portada</span>
+            <span className="text-[10px] text-gray-400">•</span>
+            <span className="text-[10px] text-gray-400">Recomendado: 1200x628 px (mín. 800x420, máx. 2400x1256)</span>
           </div>
-
-          <div className="flex items-center gap-2 overflow-visible">
-            <Switch
-              checked={certificadoActivo}
-              onChange={handleCertificadoToggle}
-              size="sm"
-            />
-            <span className="text-xs text-gray-600 flex-shrink-0">Certificado</span>
-            {certificadoActivo && (
-              <div className="flex items-center gap-1 ml-1 overflow-visible">
-                <span className="text-xs text-gray-400 flex-shrink-0">Nota:</span>
-                <Input
-                  type="number"
-                  min="0"
-                  max="20"
-                  step="0.5"
-                  value={datos.certificado_nota_minima}
-                  onChange={(e) => setDatos({ ...datos, certificado_nota_minima: e.target.value })}
-                  placeholder="11"
-                  className="w-14"
-                  size="sm"
-                />
+          
+          <div className="flex items-start gap-4">
+            {/* Zona de drop/preview */}
+            <div 
+              className={`relative flex-shrink-0 w-48 h-28 rounded-lg border-2 border-dashed overflow-hidden transition-all cursor-pointer ${
+                dragOver 
+                  ? 'border-[#0f766e] bg-[#e6f4f2]/50' 
+                  : imagenUrl 
+                    ? 'border-gray-200 hover:border-gray-300' 
+                    : 'border-gray-300 hover:border-gray-400 bg-gray-50'
+              }`}
+              onClick={() => !imagenUrl && fileInputRef.current?.click()}
+              onDrop={handleDrop}
+              onDragOver={handleDragOver}
+              onDragLeave={handleDragLeave}
+            >
+              {imagenUrl ? (
+                <>
+                  <img 
+                    src={imagenUrl} 
+                    alt="Portada del curso" 
+                    className="w-full h-full object-cover"
+                    onError={(e) => {
+                      e.target.style.display = 'none';
+                    }}
+                  />
+                  <div className="absolute inset-0 bg-black/0 hover:bg-black/30 transition-colors flex items-center justify-center opacity-0 hover:opacity-100">
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        fileInputRef.current?.click();
+                      }}
+                      className="p-1.5 bg-white/90 rounded-lg hover:bg-white transition-colors mr-1"
+                      title="Cambiar imagen"
+                    >
+                      <Edit3 className="w-3.5 h-3.5 text-gray-700" />
+                    </button>
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        eliminarImagen();
+                      }}
+                      className="p-1.5 bg-white/90 rounded-lg hover:bg-red-50 transition-colors"
+                      title="Eliminar imagen"
+                    >
+                      <X className="w-3.5 h-3.5 text-red-500" />
+                    </button>
+                  </div>
+                  {/* Badge de estado */}
+                  {datos._imagenFile && (
+                    <div className="absolute bottom-1 left-1">
+                      <span className="px-1.5 py-0.5 text-[9px] font-medium bg-amber-500 text-white rounded flex items-center gap-0.5">
+                        <Upload className="w-2.5 h-2.5" />
+                        Pendiente
+                      </span>
+                    </div>
+                  )}
+                </>
+              ) : (
+                <div className="w-full h-full flex flex-col items-center justify-center text-gray-400">
+                  <Upload className={`w-6 h-6 mb-1 ${dragOver ? 'text-[#0f766e]' : ''}`} />
+                  <span className="text-[10px] text-center px-1">
+                    Arrastra o haz clic<br/>para subir imagen
+                  </span>
+                </div>
+              )}
+              
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept=".jpg,.jpeg,.png,.webp"
+                onChange={handleFileSelect}
+                className="hidden"
+              />
+            </div>
+            
+            {/* Info y URL alternativa */}
+            <div className="flex-1 space-y-2">
+              <div className="text-[10px] text-gray-400 space-y-0.5">
+                <p>• <strong>Formatos locales:</strong> JPG, PNG, WebP (máx. 5 MB)</p>
+                <p>• <strong>Dimensiones ideales:</strong> 1200 x 628 px (landscape)</p>
+                <p>• <strong>Google Drive:</strong> Pega el link de compartir directamente</p>
+                <p>• <strong>Otros:</strong> Imgur, Unsplash, Flickr, etc.</p>
+                <p className="text-emerald-600 font-medium">💡 Recomendado: Usa Google Drive para no ocupar espacio en el servidor</p>
               </div>
-            )}
-          </div>
-
-          <div className="flex items-center gap-2 overflow-visible">
-            <LockIcon className="w-3.5 h-3.5 text-gray-400 flex-shrink-0" />
-            <Dropdown
-              value={datos.tipo_bloqueo}
-              onChange={(value) => setDatos({ ...datos, tipo_bloqueo: value })}
-              options={TIPOS_BLOQUEO}
-              placeholder="Bloqueo"
-              className="w-28"
-              size="sm"
-            />
+              
+              {/* Campo de URL - incluye Google Drive */}
+              <div>
+                <label className="text-[10px] text-gray-400 mb-1 block">URL de imagen (Google Drive, Flickr, etc.):</label>
+                <div className="flex items-center gap-1">
+                  <ImageIcon className="w-3 h-3 text-gray-400 flex-shrink-0" />
+                  <Input
+                    value={datos.imagen_url || ''}
+                    onChange={(e) => {
+                      let url = e.target.value;
+                      // Si es link de Google Drive, convertir automáticamente
+                      if (isGoogleDriveUrl(url)) {
+                        url = convertGoogleDriveUrl(url);
+                      }
+                      setDatos({ ...datos, imagen_url: url, _imagenFile: null });
+                    }}
+                    placeholder="https://drive.google.com/file/d/... o https://ejemplo.com/imagen.jpg"
+                    className="flex-1"
+                    size="sm"
+                  />
+                </div>
+                {isGoogleDriveUrl(datos.imagen_url) && (
+                  <p className="text-[9px] text-emerald-600 mt-1 flex items-center gap-1">
+                    <CheckCircle className="w-2.5 h-2.5" />
+                    Link de Google Drive detectado y convertido para vista previa
+                  </p>
+                )}
+                {datos.imagen_url && !isGoogleDriveUrl(datos.imagen_url) && !datos.imagen_url.startsWith('/') && (
+                  <p className="text-[9px] text-gray-400 mt-1">
+                    También puedes pegar links de Imgur, Flickr, Unsplash, etc.
+                  </p>
+                )}
+              </div>
+              
+              {errorImagen && (
+                <p className="text-[10px] text-red-500 flex items-center gap-1">
+                  <AlertCircle className="w-3 h-3" />
+                  {errorImagen}
+                </p>
+              )}
+            </div>
           </div>
         </div>
       </div>
@@ -863,7 +1074,7 @@ const CreadorCurso = ({ cursoInicial = null, onGuardar, onVolver }) => {
       nivel: datos.nivel,
       duracion: datos.duracion,
       instructor: datos.instructor,
-      imagen_url: datos.imagen_url,
+      imagen_url: datos._imagenFile ? datos.imagen_url : datos.imagen_url,
       precio_tipo: datos.precio_tipo || 'gratis',
       precio_monto: datos.precio_tipo === 'pago' && datos.precio_monto ? parseFloat(datos.precio_monto) : null,
       moneda: datos.moneda || 'PEN',
@@ -886,12 +1097,29 @@ const CreadorCurso = ({ cursoInicial = null, onGuardar, onVolver }) => {
       }))
     };
     
+    let resultado;
     if (cursoInicial?.id) {
       await cursosService.actualizar(cursoInicial.id, cursoData);
-      return { ...cursoData, id: cursoInicial.id };
+      resultado = { ...cursoData, id: cursoInicial.id };
+    } else {
+      const creado = await cursosService.crear(cursoData);
+      resultado = creado?.id ? { ...cursoData, ...creado } : { ...cursoData };
     }
-    const creado = await cursosService.crear(cursoData);
-    return creado?.id ? { ...cursoData, ...creado } : { ...cursoData };
+    
+    // Subir imagen si hay archivo pendiente
+    if (datos._imagenFile && resultado?.id) {
+      try {
+        const imgResult = await cursosService.subirImagen(resultado.id, datos._imagenFile);
+        if (imgResult?.imagen_url) {
+          resultado.imagen_url = imgResult.imagen_url;
+        }
+      } catch (imgError) {
+        console.warn('Error subiendo imagen (no crítico):', imgError);
+        // No fallar el guardado por error de imagen
+      }
+    }
+    
+    return resultado;
   };
 
   const handleGuardar = async () => {

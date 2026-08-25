@@ -151,7 +151,8 @@ async def register(
     _rate_limited = Depends(rate_limit(5, 60))
 ):
     """
-    Registra un nuevo usuario
+    Registra un nuevo usuario como estudiante.
+    Los usuarios deben solicitar ser docente desde su perfil.
     """
     existing = db.query(Usuario).filter(
         Usuario.email == data.email,
@@ -163,11 +164,9 @@ async def register(
             detail="El email ya está registrado"
         )
     
-    if data.rol not in ["estudiante", "docente"]:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Rol no permitido para registro público"
-        )
+    # ✅ SIEMPRE REGISTRAR COMO ESTUDIANTE
+    # Los usuarios deben solicitar ser docente desde /solicitar-docente
+    rol = "estudiante"
     
     user = Usuario(
         id=str(uuid.uuid4()),
@@ -175,10 +174,10 @@ async def register(
         nombres=data.nombres,
         apellidos=data.apellidos,
         telefono=data.telefono,
-        rol=data.rol,
+        rol=rol,
         empresa_id=EMPRESA_ID_DEFAULT,
         institucion=data.institucion,
-        especialidad=data.especialidad if data.rol == "docente" else None,
+        especialidad=None,
         activo=True,
         email_verificado=False,
         fecha_registro=datetime.now(timezone.utc)

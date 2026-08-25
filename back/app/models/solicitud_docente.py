@@ -1,7 +1,7 @@
 # app/models/solicitud_docente.py
 # MODELO DE SOLICITUDES PARA SER DOCENTE
 
-from sqlalchemy import Column, String, DateTime, Text, ForeignKey
+from sqlalchemy import Column, String, DateTime, Text
 from app.database import Base
 from datetime import datetime, timezone
 import uuid
@@ -13,8 +13,8 @@ class SolicitudDocente(Base):
 
     id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
     
-    # Relación con usuario
-    usuario_id = Column(String, ForeignKey("usuarios.id"), nullable=False, index=True)
+    # Relación con usuario - Sin ForeignKey para compatibilidad con UUID de Supabase
+    usuario_id = Column(String, nullable=False, index=True)
     
     # Datos de la solicitud
     especialidad = Column(String(200), nullable=False)  # Ej: "Matemáticas, Programación"

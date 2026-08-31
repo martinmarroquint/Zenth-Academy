@@ -28,7 +28,6 @@ class Curso(Base):
     nivel = Column(String(50), default="principiante")
     docente_id = Column(String, nullable=True)
     docente_nombre = Column(String(200), nullable=True)
-    instructor = Column(String(200), nullable=True)  # Nombre del instructor (ingresado manualmente)
     duracion = Column(String(100), nullable=True)
     
     # SISTEMA DE PAGOS

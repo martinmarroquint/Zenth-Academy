@@ -753,6 +753,60 @@ def eliminar_alumnos_por_grupo(
     return {"mensaje": f"Alumnos del grupo {grupo_id} desvinculados", "ok": True}
 
 
+def _actualizar_progreso_por_examen(db, examen_id, alumno_id, calificacion):
+    """
+    Cuando un alumno rinde un examen asociado a una leccion de curso,
+    marca la leccion como completada y actualiza el progreso del curso.
+    """
+    from app.models.curso import Curso, InscripcionCurso
+    from app.models.examen import Examen
+    
+    examen = db.query(Examen).filter(Examen.id == examen_id).first()
+    if not examen:
+        return
+    
+    cursos = db.query(Curso).all()
+    for curso in cursos:
+        modulos = curso.modulos or []
+        for modulo in modulos:
+            lecciones = modulo.get('lecciones', [])
+            for leccion in lecciones:
+                if leccion.get('tipo') == 'examen':
+                    contenido = leccion.get('contenido', {})
+                    if contenido.get('examen_id') == examen_id:
+                        leccion_id = leccion.get('id')
+                        if not leccion_id:
+                            continue
+                        
+                        inscripcion = db.query(InscripcionCurso).filter(
+                            InscripcionCurso.curso_id == str(curso.id),
+                            InscripcionCurso.alumno_id == alumno_id
+                        ).first()
+                        
+                        if not inscripcion:
+                            continue
+                        
+                        lecciones_completadas = inscripcion.lecciones_completadas or []
+                        if leccion_id not in lecciones_completadas and calificacion >= 60:
+                            lecciones_completadas.append(leccion_id)
+                            inscripcion.lecciones_completadas = lecciones_completadas
+                            
+                            total_lecciones = sum(
+                                len(m.get('lecciones', [])) 
+                                for m in modulos
+                            )
+                            if total_lecciones > 0:
+                                inscripcion.progreso = round(
+                                    len(lecciones_completadas) / total_lecciones * 100, 2
+                                )
+                            
+                            if inscripcion.progreso >= 100:
+                                inscripcion.completado = True
+                            
+                            db.commit()
+                        return
+
+
 # =============================================
 # RESULTADOS
 # =============================================
@@ -837,6 +891,16 @@ def guardar_resultado(
     db.add(resultado)
     db.commit()
     db.refresh(resultado)
+    
+    # ACTUALIZAR PROGRESO DEL CURSO: Si el examen esta asociado a una leccion de curso,
+    # marcar la leccion como completada y actualizar progreso
+    try:
+        _actualizar_progreso_por_examen(db, data.examen_id, data.alumno_id, calificacion)
+    except Exception as e:
+        # No fallar el guardado del resultado por error en progreso
+        import logging
+        logging.getLogger(__name__).warning(f"Error actualizando progreso por examen: {e}")
+    
     return resultado
 
 

@@ -14,6 +14,7 @@ import {
 } from 'lucide-react';
 import cursosService from '../../services/cursosService';
 import examenesService from '../../services/examenesService';
+import { authService } from '../../services/authService';
 import EditorTexto from './EditorTexto';
 import ModalCrearExamenRapido from './ModalCrearExamenRapido';
 import { resolveImageUrl, isGoogleDriveUrl, convertGoogleDriveUrl } from '../../config/api.config';
@@ -605,10 +606,10 @@ const Toolbar = ({ datos, setDatos }) => {
             <User className="w-3.5 h-3.5 text-gray-400 flex-shrink-0" />
             <Input
               value={datos.instructor}
-              onChange={(e) => setDatos({ ...datos, instructor: e.target.value })}
-              placeholder="Instructor"
-              className="w-32"
+              readOnly
+              className="w-48 bg-gray-50 cursor-not-allowed"
               size="sm"
+              title="Instructor: nombre del docente que creo el curso"
             />
           </div>
 
@@ -837,6 +838,10 @@ const CreadorCurso = ({ cursoInicial = null, onGuardar, onVolver }) => {
   const [cargando, setCargando] = useState(false);
   const [error, setError] = useState('');
   const [examenesDisponibles, setExamenesDisponibles] = useState([]);
+  
+  // Obtener datos del docente logueado
+  const usuario = authService.getCurrentUser();
+  const nombreDocente = [usuario?.nombres, usuario?.apellidos].filter(Boolean).join(' ') || usuario?.email || '';
 
   useEffect(() => {
     let activo = true;
@@ -872,7 +877,7 @@ const CreadorCurso = ({ cursoInicial = null, onGuardar, onVolver }) => {
     moneda: cursoInicial?.moneda || 'PEN',
     numero_pago: cursoInicial?.numero_pago || '',
     duracion: cursoInicial?.duracion || '',
-    instructor: cursoInicial?.instructor || '',
+    instructor: cursoInicial?.instructor || cursoInicial?.docente_nombre || nombreDocente,
     imagen_url: cursoInicial?.imagen_url || '',
     tipo_bloqueo: cursoInicial?.tipo_bloqueo || 'ninguno',
     bloqueo_config: cursoInicial?.bloqueo_config || {},
@@ -1065,10 +1070,6 @@ const CreadorCurso = ({ cursoInicial = null, onGuardar, onVolver }) => {
   const guardarCurso = async () => {
     if (!datos.titulo.trim()) {
       setError('El título del curso es obligatorio');
-      return null;
-    }
-    if (!datos.instructor.trim()) {
-      setError('El nombre del instructor es obligatorio');
       return null;
     }
     setError('');

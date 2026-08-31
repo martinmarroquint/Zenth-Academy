@@ -44,18 +44,18 @@ const UiDemo = () => {
   ];
 
   const opcionesConIconos = [
-    { value: 'usuario', label: '👤 Usuario' },
-    { value: 'admin', label: '👑 Administrador' },
-    { value: 'docente', label: '📚 Docente' },
-    { value: 'estudiante', label: '🎓 Estudiante' },
+    { value: 'usuario', label: 'Usuario' },
+    { value: 'admin', label: 'Administrador' },
+    { value: 'docente', label: 'Docente' },
+    { value: 'estudiante', label: 'Estudiante' },
   ];
 
   const opcionesPaises = [
-    { value: 'pe', label: '🇵🇪 Perú' },
-    { value: 'mx', label: '🇲🇽 México' },
-    { value: 'ar', label: '🇦🇷 Argentina' },
-    { value: 'cl', label: '🇨🇱 Chile' },
-    { value: 'co', label: '🇨🇴 Colombia' },
+    { value: 'pe', label: 'Peru' },
+    { value: 'mx', label: 'Mexico' },
+    { value: 'ar', label: 'Argentina' },
+    { value: 'cl', label: 'Chile' },
+    { value: 'co', label: 'Colombia' },
     { value: 'es', label: '🇪🇸 España' },
   ];
 
@@ -81,7 +81,7 @@ const UiDemo = () => {
       <div className="max-w-7xl mx-auto">
         {/* Header */}
         <div className="mb-8">
-          <h1 className="text-2xl font-bold text-gray-900">🎨 Sistema de Componentes UI</h1>
+          <h1 className="text-2xl font-bold text-gray-900">Sistema de Componentes UI</h1>
           <p className="text-sm text-gray-500 mt-1">
             Demostración de todos los componentes disponibles en la aplicación
           </p>
@@ -422,7 +422,7 @@ const UiDemo = () => {
             </div>
 
             <p className="text-xs text-gray-400">
-              Estado del switch: {switchValue ? '✅ Activado' : '⭕ Desactivado'}
+              Estado del switch: {switchValue ? 'Activado' : 'Desactivado'}
             </p>
           </div>
         </section>
@@ -667,7 +667,7 @@ const UiDemo = () => {
         {/* FOOTER */}
         {/* ============================================================ */}
         <div className="text-center py-6 text-xs text-gray-400 border-t border-gray-200">
-          <p>✅ Todos los componentes UI están disponibles y funcionando correctamente</p>
+          <p>Todos los componentes UI estan disponibles y funcionando correctamente</p>
           <p className="mt-1">Color primario: <span className="inline-block w-3 h-3 rounded-full align-middle" style={{ backgroundColor: '#0f766e' }} /> #0f766e</p>
         </div>
       </div>

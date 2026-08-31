@@ -1,6 +1,6 @@
 // front/src/pages/CompartirSala.jsx
-// 🖥️ PANTALLA DEL AULA - Vista pública (SIN login)
-// QR DINÁMICO CON EXPIRACIÓN (como WhatsApp Web)
+// PANTALLA DEL AULA - Vista publica (SIN login)
+// QR DINAMICO CON EXPIRACION (como WhatsApp Web)
 
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useParams, Link } from 'react-router-dom';

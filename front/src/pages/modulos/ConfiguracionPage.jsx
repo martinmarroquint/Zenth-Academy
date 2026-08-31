@@ -1,5 +1,5 @@
 // front/src/pages/modulos/ConfiguracionPage.jsx
-// ⚙️ CONFIGURACIÓN (pilar 3): Perfil, Notificaciones, Preferencias
+// CONFIGURACION (pilar 3): Perfil, Notificaciones, Preferencias
 
 import React, { useState, useEffect } from 'react';
 import {

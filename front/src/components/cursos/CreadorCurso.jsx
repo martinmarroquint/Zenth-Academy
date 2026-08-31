@@ -778,7 +778,7 @@ const Toolbar = ({ datos, setDatos }) => {
                 <p>• <strong>Dimensiones ideales:</strong> 1200 x 628 px (landscape)</p>
                 <p>• <strong>Google Drive:</strong> Pega el link de compartir directamente</p>
                 <p>• <strong>Otros:</strong> Imgur, Unsplash, Flickr, etc.</p>
-                <p className="text-emerald-600 font-medium">💡 Recomendado: Usa Google Drive para no ocupar espacio en el servidor</p>
+                <p className="text-emerald-600 font-medium">Recomendado: Usa Google Drive para no ocupar espacio en el servidor</p>
               </div>
               
               {/* Campo de URL - incluye Google Drive */}

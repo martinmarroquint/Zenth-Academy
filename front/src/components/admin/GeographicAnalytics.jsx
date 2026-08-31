@@ -321,7 +321,7 @@ const StatCard = ({ icon, label, value, color }) => {
 
 // Funcion para convertir codigo de pais a emoji de bandera
 function getFlagEmoji(countryCode) {
-  if (!countryCode || countryCode === 'LOCAL') return '🏠';
+  if (!countryCode || countryCode === 'LOCAL') return 'Local';
   const codePoints = countryCode
     .toUpperCase()
     .split('')

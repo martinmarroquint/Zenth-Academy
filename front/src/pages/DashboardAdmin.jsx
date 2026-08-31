@@ -523,8 +523,8 @@ const AdminPagos = () => {
                       pago.estado === 'completado' ? 'success' :
                       pago.estado === 'pendiente' ? 'warning' : 'danger'
                     }>
-                      {pago.estado === 'completado' ? '✅ Completado' :
-                       pago.estado === 'pendiente' ? '⏳ Pendiente' : '❌ Fallido'}
+                      {pago.estado === 'completado' ? 'Completado' :
+                       pago.estado === 'pendiente' ? 'Pendiente' : 'Fallido'}
                     </Badge>
                   </td>
                 </tr>
@@ -609,7 +609,7 @@ const AdminPromociones = () => {
                   </td>
                   <td className="px-4 py-3">
                     <Badge variant={p.activo ? 'success' : 'default'}>
-                      {p.activo ? '✅ Activo' : '⏸ Inactivo'}
+                      {p.activo ? 'Activo' : 'Inactivo'}
                     </Badge>
                   </td>
                 </tr>

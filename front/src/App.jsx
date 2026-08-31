@@ -61,16 +61,12 @@ function App() {
   return (
     <BrowserRouter>
       <Routes>
-        {/* =============================================
-            🏠 PÁGINA PRINCIPAL UNIFICADA (Login + QR)
-            Como WhatsApp Web: login a la izquierda, QR a la derecha
-        ============================================= */}
+            {/* PAGINA PRINCIPAL UNIFICADA (Login + QR) */}
+            {/* Como WhatsApp Web: login a la izquierda, QR a la derecha */}
         <Route path="/" element={<Home />} />
 
-        {/* =============================================
-            🎨 UI DEMO - PÁGINA DE DEMOSTRACIÓN DE COMPONENTES
-            ACCESO PÚBLICO - PARA DESARROLLO Y REVISIÓN
-        ============================================= */}
+            {/* UI DEMO - PAGINA DE DEMOSTRACION DE COMPONENTES */}
+            {/* ACCESO PUBLICO - PARA DESARROLLO Y REVISION */}
         <Route path="/ui-demo" element={<UiDemo />} />
 
         {/* =============================================

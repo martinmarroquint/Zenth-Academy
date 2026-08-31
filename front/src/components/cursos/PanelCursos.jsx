@@ -371,9 +371,9 @@ const PanelCursos = ({ onCrearCurso, onVerCurso, onEditarCurso }) => {
                 {/* Categoría */}
                 {curso.categoria && (
                   <div className="absolute bottom-3 left-3">
-                    <Badge variant="secondary" size="sm" className="bg-black/40 text-white border-0 backdrop-blur-sm">
+                    <span className="inline-flex items-center px-2 py-0.5 text-[10px] font-medium rounded-full bg-gray-900/75 text-white backdrop-blur-sm">
                       {categoriasOptions.find(c => c.value === curso.categoria)?.label || curso.categoria}
-                    </Badge>
+                    </span>
                   </div>
                 )}
               </div>

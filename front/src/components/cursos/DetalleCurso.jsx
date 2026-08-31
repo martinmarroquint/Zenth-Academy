@@ -1064,6 +1064,7 @@ const DetalleCurso = ({
   const [seccionLeccion, setSeccionLeccion] = useState('contenido');
   const [videoCompletado, setVideoCompletado] = useState(false);
   const [marcando, setMarcando] = useState(false);
+  const [tiempoEnLeccion, setTiempoEnLeccion] = useState(0);
 
   // ✅ ESTADOS PARA EXAMEN
   const [examenActivo, setExamenActivo] = useState(null);
@@ -1161,16 +1162,73 @@ const DetalleCurso = ({
   }, [cursoId, usuarioId, esDocente]);
 
   // El progreso y completado vienen del backend (inscripcion.progreso / inscripcion.completado)
-  // NO se recalcula localmente para evitar desincronización.
-  // Los valores se actualizan cuando se carga el curso o se completa una lección.
+  // NO se recalcula localmente para evitar desincronizacion.
+  // Los valores se actualizan cuando se carga el curso o se completa una leccion.
+
+  // Timer para trackear tiempo en la leccion
+  useEffect(() => {
+    if (!mostrandoLeccion || !leccionActual) return;
+    
+    const interval = setInterval(() => {
+      setTiempoEnLeccion(prev => prev + 1000);
+    }, 1000);
+    
+    return () => clearInterval(interval);
+  }, [mostrandoLeccion, leccionActual?.id]);
+
+  // Helpers para bloqueo secuencial de modulos
+  const getLeccionesDeModulo = (modulo) => {
+    if (!modulo?.lecciones) return [];
+    return modulo.lecciones.filter(l => l && l.id);
+  };
+
+  const isModuloCompleto = (modulo) => {
+    const lecciones = getLeccionesDeModulo(modulo);
+    if (lecciones.length === 0) return false;
+    return lecciones.every(l => leccionesCompletadas.includes(l.id));
+  };
+
+  const isModuloBloqueado = (modulo) => {
+    // Si es docente o admin, nunca bloquear
+    if (esDocente) return false;
+    
+    // Si el curso es de pago y no tiene acceso, bloquear todo
+    if (curso?.precio_tipo === 'pago' && !tieneAcceso) return true;
+    
+    // Si tipo_bloqueo es 'ninguno', no bloquear
+    if (curso?.tipo_bloqueo === 'ninguno' || !curso?.tipo_bloqueo) return false;
+    
+    // Si tipo_bloqueo es 'secuencial' o 'mixto', verificar modulo anterior
+    if (curso?.tipo_bloqueo === 'secuencial' || curso?.tipo_bloqueo === 'mixto') {
+      const modulos = curso?.modulos || [];
+      const idxActual = modulos.findIndex(m => m.id === modulo.id);
+      
+      // El primer modulo nunca esta bloqueado
+      if (idxActual <= 0) return false;
+      
+      // Verificar que todos los modulos anteriores esten completos
+      for (let i = 0; i < idxActual; i++) {
+        if (!isModuloCompleto(modulos[i])) return true;
+      }
+    }
+    
+    return false;
+  };
 
   // Handlers
   const handleAbrirLeccion = (modulo, leccion) => {
+    // Verificar bloqueo secuencial
+    if (isModuloBloqueado(modulo)) {
+      alert('Debes completar el modulo anterior antes de acceder a este contenido.');
+      return;
+    }
+    
     if (curso?.precio_tipo === 'pago' && !tieneAcceso && !esDocente) {
       setModuloActual(modulo);
       setLeccionActual(leccion);
       setMostrandoLeccion(true);
       setVideoCompletado(false);
+      setTiempoEnLeccion(0);
       setSeccionLeccion('contenido');
       window.scrollTo({ top: 0, behavior: 'smooth' });
       return;
@@ -1180,6 +1238,7 @@ const DetalleCurso = ({
     setLeccionActual(leccion);
     setMostrandoLeccion(true);
     setVideoCompletado(false);
+    setTiempoEnLeccion(0);
     setSeccionLeccion('contenido');
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
@@ -1194,6 +1253,27 @@ const DetalleCurso = ({
     if (!usuarioId || !curso?.id || !leccionActual?.id) return;
     if (leccionesCompletadas.includes(leccionActual.id)) return;
 
+    // Verificar que el contenido fue consumido realmente
+    const tieneVideo = leccionActual?.bloques?.some(b => b.tipo === 'video');
+    const tieneTexto = leccionActual?.bloques?.some(b => b.tipo === 'texto');
+    
+    // Si tiene video, exigir que este marcado como completado
+    if (tieneVideo && !videoCompletado) {
+      alert('Debes ver el video completo antes de marcar la leccion como completada.');
+      return;
+    }
+    
+    // Si tiene solo texto (sin video), minimum time check
+    if (tieneTexto && !tieneVideo) {
+      // Para texto, dar 3 segundos minimo de lectura
+      const tiempoMinimo = 3000;
+      if (tiempoEnLeccion < tiempoMinimo) {
+        const segundos = Math.ceil((tiempoMinimo - tiempoEnLeccion) / 1000);
+        alert(`Debes al menos ${segundos} segundo(s) mas leyendo el contenido antes de marcar como completada.`);
+        return;
+      }
+    }
+
     setMarcando(true);
     try {
       await cursosService.completarLeccion(curso.id, leccionActual.id, usuarioId);
@@ -1203,7 +1283,7 @@ const DetalleCurso = ({
       setCursoCompletado(prog?.completado || false);
       setVideoCompletado(true);
       
-      // Si el curso se completó, cargar el certificado (puede tardar un momento en crearse)
+      // Si el curso se completo, cargar el certificado
       if (prog?.completado) {
         setTimeout(async () => {
           try {
@@ -1211,9 +1291,9 @@ const DetalleCurso = ({
             const activos = (Array.isArray(certs) ? certs : []).filter(c => c.estado !== 'cancelado');
             setCertificado(activos[0] || null);
           } catch (e) {
-            console.warn('Certificado aún no disponible:', e);
+            console.warn('Certificado aun no disponible:', e);
           }
-        }, 1000); // Esperar 1 segundo para que el backend cree el certificado
+        }, 1000);
       }
     } catch (error) {
       console.error('Error:', error);
@@ -1377,7 +1457,11 @@ const DetalleCurso = ({
 
     switch (bloquePrincipal.tipo) {
       case 'video':
-        return <VideoPlayer videoId={contenido.video_url} isBlocked={estaBloqueado} />;
+        return <VideoPlayer 
+          videoId={contenido.video_url} 
+          isBlocked={estaBloqueado}
+          onComplete={() => setVideoCompletado(true)}
+        />;
         
       case 'texto':
         return (
@@ -1992,7 +2076,7 @@ const DetalleCurso = ({
               const leccionesModulo = getLeccionesDeModulo(modulo);
               const completadasModulo = leccionesModulo.filter(l => leccionesCompletadas.includes(l.id)).length;
               const totalModulo = leccionesModulo.length;
-              const moduloBloqueado = curso.precio_tipo === 'pago' && !tieneAcceso && !esDocente;
+              const moduloBloqueado = isModuloBloqueado(modulo);
 
               return (
                 <div key={modulo.id} className="bg-white rounded-xl border border-gray-200/60 overflow-hidden shadow-sm">

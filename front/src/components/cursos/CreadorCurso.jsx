@@ -68,8 +68,10 @@ const MONEDAS = [
 
 const TIPOS_BLOQUEO = [
   { value: 'ninguno', label: 'Sin bloqueo' },
-  { value: 'secuencial', label: 'Secuencial' },
+  { value: 'secuencial', label: 'Secuencial (aprobar modulo anterior)' },
   { value: 'fecha', label: 'Por fecha' },
+  { value: 'desempeno', label: 'Por desempeno (nota minima)' },
+  { value: 'mixto', label: 'Mixto (secuencial + desempeno)' },
 ];
 
 const TIPOS_BLOQUE = [

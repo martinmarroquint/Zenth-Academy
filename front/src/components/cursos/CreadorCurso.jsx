@@ -1067,6 +1067,10 @@ const CreadorCurso = ({ cursoInicial = null, onGuardar, onVolver }) => {
       setError('El título del curso es obligatorio');
       return null;
     }
+    if (!datos.instructor.trim()) {
+      setError('El nombre del instructor es obligatorio');
+      return null;
+    }
     setError('');
     
     const cursoData = {

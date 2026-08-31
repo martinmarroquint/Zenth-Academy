@@ -21,6 +21,7 @@ import { authService } from './services/authService';
 // DASHBOARDS PRINCIPALES
 // =============================================
 import DashboardAdmin from './pages/DashboardAdmin';
+import GeographicAnalytics from './components/admin/GeographicAnalytics';
 
 // =============================================
 // MÓDULOS (se renderizan dentro del MainLayout)
@@ -103,6 +104,7 @@ function App() {
         >
           <Route index element={<DashboardAdmin />} />
           <Route path="solicitudes-docente" element={<AdminSolicitudesDocente />} />
+          <Route path="analytics-geografico" element={<GeographicAnalytics />} />
           {rutasModulos}
         </Route>
 

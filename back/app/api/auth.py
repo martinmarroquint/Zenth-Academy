@@ -8,6 +8,7 @@ from typing import Optional
 import uuid
 import logging
 import os
+import asyncio
 
 from app.database import get_db
 from app.models.usuario import Usuario
@@ -28,6 +29,7 @@ from app.core.ratelimit import rate_limit
 from app.core.security_logger import (
     log_login_attempt, log_unauthorized_access, log_password_change
 )
+from app.core.geo_service import log_login_geo
 from datetime import timedelta, datetime, timezone
 
 logger = logging.getLogger(__name__)
@@ -182,9 +184,20 @@ async def login(
         user_agent=user_agent
     )
     
-    # Actualizar último acceso
+    # Actualizar ultimo acceso
     user.ultimo_acceso = datetime.now(timezone.utc)
     db.commit()
+    
+    # Geolocalizacion fire-and-forget (no bloquea el login)
+    asyncio.create_task(
+        log_login_geo(
+            db_session=db,
+            user_id=str(user.id),
+            email=user.email,
+            ip_address=client_ip,
+            user_agent=user_agent
+        )
+    )
     
     tokens = _crear_tokens(db, user)
     return {

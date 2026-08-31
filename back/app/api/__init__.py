@@ -16,6 +16,7 @@ from app.api import (
     materiales,
     compartir,
     solicitudes_docente,
+    geo_analytics,
 )
 
 # Configuracion publica de cliente (marca Zenth Academy)
@@ -126,6 +127,15 @@ api_router.include_router(
     solicitudes_docente.router,
     prefix="/solicitudes-docente",
     tags=["Solicitudes Docente"]
+)
+
+# =============================================
+# ANALYTICS GEOGRAFICOS (admin)
+# =============================================
+api_router.include_router(
+    geo_analytics.router,
+    prefix="/geo-analytics",
+    tags=["Geolocalizacion"]
 )
 
 # =============================================

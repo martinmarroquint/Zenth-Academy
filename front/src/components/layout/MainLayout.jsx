@@ -8,7 +8,7 @@ import {
   PenTool, MessageCircle, Award, LogOut, ChevronLeft,
   ChevronRight, HelpCircle, LayoutDashboard, Send, Settings,
   Home, GraduationCap, Calendar, Bell, UserCircle, Menu, X,
-  PanelLeftClose, PanelLeftOpen, GripVertical
+  PanelLeftClose, PanelLeftOpen, GripVertical, Globe
 } from 'lucide-react';
 import { authService } from '../../services/authService';
 import cursosService from '../../services/cursosService';
@@ -18,6 +18,7 @@ const ICONOS_NAV = {
   dashboard: LayoutDashboard,
   usuarios: Users,
   examenes: FileText,
+  'analytics-geografico': Globe,
   cursos: BookOpen,
   alumnos: Users,
   pizarra: PenTool,
@@ -63,9 +64,10 @@ const MENU_POR_ROL = {
       ],
     },
     {
-      seccion: 'CONFIGURACIÓN',
+      seccion: 'CONFIGURACION',
       items: [
-        { id: 'configuracion', label: 'Configuración', to: 'configuracion' },
+        { id: 'configuracion', label: 'Configuracion', to: 'configuracion' },
+        { id: 'analytics-geografico', label: 'Analytics Geografico', to: 'analytics-geografico' },
       ],
     },
   ],

@@ -19,6 +19,7 @@ from app.models.cliente import Cliente
 from app.models.personal import Personal
 from app.models.material_compartido import MaterialCompartido  # ✅ NUEVO
 from app.models.solicitud_docente import SolicitudDocente  # ✅ SOLICITUDES DOCENTE
+from app.models.login_geo_log import LoginGeoLog  # ✅ GEOLOCALIZACION
 
 
 __all__ = [
@@ -34,4 +35,5 @@ __all__ = [
     "HistorialComparticion", "CarpetaDocente",
     "MaterialCompartido",  # ✅ NUEVO
     "SolicitudDocente",  # ✅ SOLICITUDES DOCENTE
+    "LoginGeoLog",  # ✅ GEOLOCALIZACION
 ]

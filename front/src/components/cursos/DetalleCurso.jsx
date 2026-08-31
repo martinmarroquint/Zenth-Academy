@@ -1343,7 +1343,7 @@ const DetalleCurso = ({
                   setCargandoExamen(true);
                   setErrorExamen('');
                   try {
-                    const datos = await examenesService.obtener(contenidoLeccion.examen_id);
+                    const datos = await examenesService.obtenerExamen(contenidoLeccion.examen_id);
                     setExamenActivo(datos);
                   } catch (e) {
                     setErrorExamen('No se pudo cargar el examen. Intenta de nuevo.');
@@ -1410,9 +1410,27 @@ const DetalleCurso = ({
             <p className="text-sm text-gray-500 mb-4">
               {contenido.examen_id ? 'Examen asignado' : 'Sin examen asignado'}
             </p>
-            <button className="px-6 py-2 bg-[#0f766e] text-white rounded-lg hover:bg-[#0d5e57] transition-colors text-sm">
-              Comenzar examen
-            </button>
+            {contenido.examen_id ? (
+              <button
+                onClick={async () => {
+                  setCargandoExamen(true);
+                  setErrorExamen('');
+                  try {
+                    const datos = await examenesService.obtenerExamen(contenido.examen_id);
+                    setExamenActivo(datos);
+                  } catch (e) {
+                    setErrorExamen('No se pudo cargar el examen. Intenta de nuevo.');
+                  } finally {
+                    setCargandoExamen(false);
+                  }
+                }}
+                className="px-6 py-2 bg-[#0f766e] text-white rounded-lg hover:bg-[#0d5e57] transition-colors text-sm"
+              >
+                Comenzar examen
+              </button>
+            ) : (
+              <p className="text-sm text-gray-400">Sin examen asignado</p>
+            )}
           </div>
         );
         

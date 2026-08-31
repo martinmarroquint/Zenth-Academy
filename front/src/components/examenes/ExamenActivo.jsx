@@ -32,8 +32,8 @@ const ExamenActivo = ({ examen, alumno, onFinalizar, onAbandonar }) => {
 
   // ✅ USAR CONFIGURACION REAL
   const LIMITE_VIOLACIONES = configExamen.limite_violaciones || 3;
-  const MODO_ESTRICTO = configExamen.modoEstricto !== undefined ? configExamen.modoEstricto : true;
-  const UMBRAL_TRAMPA = configExamen.umbralTrampa || 3;
+  const MODO_ESTRICTO = configExamen.modo_estricto !== undefined ? configExamen.modo_estricto : true;
+  const UMBRAL_TRAMPA = configExamen.umbral_trampa || 3;
 
   // =============================================
   // INICIALIZACION
@@ -50,16 +50,16 @@ const ExamenActivo = ({ examen, alumno, onFinalizar, onAbandonar }) => {
         _elementosOriginales: [...(p.elementos || [])]
       }));
       
-      if (configExamen.aleatorizarPreguntas) { 
+      if (configExamen.aleatorizar_preguntas) { 
         preguntas = shuffleArray(preguntas); 
       }
       
-      if (configExamen.preguntasPorExamen > 0 && configExamen.preguntasPorExamen < preguntas.length) {
-        preguntas = preguntas.slice(0, configExamen.preguntasPorExamen);
+      if (configExamen.preguntas_por_examen > 0 && configExamen.preguntas_por_examen < preguntas.length) {
+        preguntas = preguntas.slice(0, configExamen.preguntas_por_examen);
       }
       
       preguntas = preguntas.map(p => {
-        if (p.tipo === 'opcion_multiple' && configExamen.aleatorizarOpciones) {
+        if (p.tipo === 'opcion_multiple' && configExamen.aleatorizar_opciones) {
           const opciones = [
             { letra: 'A', original: 0, texto: p.opcion_a },
             { letra: 'B', original: 1, texto: p.opcion_b },
@@ -136,8 +136,8 @@ const ExamenActivo = ({ examen, alumno, onFinalizar, onAbandonar }) => {
   // ✅ CORREGIDO: primer parámetro es examenActivo (boolean), no MODO_ESTRICTO
   const examenActivo = !entregado && preguntasExamen.length > 0;
   const seguridad = useExamenSeguridad(examenActivo, { 
-    limiteViolaciones: LIMITE_VIOLACIONES, 
-    modoEstricto: MODO_ESTRICTO
+    limite_violaciones: LIMITE_VIOLACIONES, 
+    modo_estricto: MODO_ESTRICTO
   });
 
   useEffect(() => { seguridad.setOnViolacionMaxima(manejarViolacionMaxima); }, [manejarViolacionMaxima]);
@@ -174,7 +174,7 @@ const ExamenActivo = ({ examen, alumno, onFinalizar, onAbandonar }) => {
   };
 
   const irPregunta = (i) => { 
-    if (i >= 0 && i < totalPreguntas && !configExamen.mostrarUnaSolaPregunta) setPreguntaActual(i); 
+    if (i >= 0 && i < totalPreguntas && !configExamen.mostrar_una_sola_pregunta) setPreguntaActual(i); 
   };
 
   const siguientePregunta = () => { 
@@ -182,7 +182,7 @@ const ExamenActivo = ({ examen, alumno, onFinalizar, onAbandonar }) => {
   };
 
   const anteriorPregunta = () => { 
-    if (preguntaActual > 0 && !configExamen.mostrarUnaSolaPregunta) setPreguntaActual(prev => prev - 1); 
+    if (preguntaActual > 0 && !configExamen.mostrar_una_sola_pregunta) setPreguntaActual(prev => prev - 1); 
   };
 
   const toggleMarcarRevision = (i) => { 
@@ -234,7 +234,7 @@ const ExamenActivo = ({ examen, alumno, onFinalizar, onAbandonar }) => {
       
       if (!pregunta) { respuestasFinales[key] = value; return; }
       
-      if (pregunta.tipo === 'opcion_multiple' && configExamen.aleatorizarOpciones) {
+      if (pregunta.tipo === 'opcion_multiple' && configExamen.aleatorizar_opciones) {
         const mapeo = mapeoOpciones[pregunta.id];
         if (mapeo && mapeo.opciones && typeof value === 'number' && value >= 0 && value < mapeo.opciones.length) {
           respuestasFinales[key] = mapeo.opciones[value].original;
@@ -384,7 +384,7 @@ const ExamenActivo = ({ examen, alumno, onFinalizar, onAbandonar }) => {
           <div className="flex items-center justify-between h-12 sm:h-16">
             <div className="flex items-center gap-2 min-w-0 flex-1 mr-2">
               <h1 className="text-xs sm:text-base font-bold text-gray-900 truncate">{examen?.titulo}</h1>
-              {!configExamen.mostrarUnaSolaPregunta && (
+              {!configExamen.mostrar_una_sola_pregunta && (
                 <span className="text-xs text-gray-500">{preguntaActual + 1}/{totalPreguntas}</span>
               )}
             </div>
@@ -636,7 +636,7 @@ const ExamenActivo = ({ examen, alumno, onFinalizar, onAbandonar }) => {
               </div>
 
               <div className="flex items-center justify-between mt-6 pt-4 border-t border-gray-100">
-                {!configExamen.mostrarUnaSolaPregunta ? (
+                {!configExamen.mostrar_una_sola_pregunta ? (
                   <>
                     <button onClick={anteriorPregunta} disabled={preguntaActual===0} className="flex items-center gap-1 px-3 py-2.5 text-sm text-gray-600 hover:bg-gray-100 rounded-lg disabled:opacity-30 min-h-[44px]">
                       <ChevronLeft className="w-4 h-4"/> Anterior
@@ -667,7 +667,7 @@ const ExamenActivo = ({ examen, alumno, onFinalizar, onAbandonar }) => {
               </div>
             </div>
           </div>
-          {!configExamen.mostrarUnaSolaPregunta && (
+          {!configExamen.mostrar_una_sola_pregunta && (
             <div className="lg:col-span-1">
               <div className="sticky top-20 space-y-4">
                 <NavegadorPreguntas 

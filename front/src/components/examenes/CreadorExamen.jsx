@@ -281,9 +281,9 @@ const CreadorExamen = ({
   };
 
   const chips = [
-    { campo: 'aleatorizarPreguntas', icon: Shuffle, label: 'Aleatorizar preguntas' },
-    { campo: 'aleatorizarOpciones', icon: Shuffle, label: 'Aleatorizar opciones' },
-    { campo: 'mostrarUnaSolaPregunta', icon: Eye, label: 'Una pregunta a la vez' },
+    { campo: 'aleatorizar_preguntas', icon: Shuffle, label: 'Aleatorizar preguntas' },
+    { campo: 'aleatorizar_opciones', icon: Shuffle, label: 'Aleatorizar opciones' },
+    { campo: 'mostrar_una_sola_pregunta', icon: Eye, label: 'Una pregunta a la vez' },
     { campo: 'mostrar_resultados', icon: CheckCircle2, label: 'Mostrar resultados' },
     { campo: 'mostrar_respuestas', icon: Eye, label: 'Mostrar respuestas' },
     { campo: 'detectar_copy_paste', icon: Copy, label: 'Detectar copia' },
@@ -480,8 +480,8 @@ const CreadorExamen = ({
                   <label className="block text-[10px] font-medium text-gray-400 mb-1">Pregs por examen</label>
                   <input 
                     type="number" 
-                    value={datos.configuracion.preguntasPorExamen || 0} 
-                    onChange={e => updateConfig('preguntasPorExamen', parseInt(e.target.value) || 0)} 
+                    value={datos.configuracion.preguntas_por_examen || 0} 
+                    onChange={e => updateConfig('preguntas_por_examen', parseInt(e.target.value) || 0)} 
                     min={0} max={preguntas.length || 50} 
                     className="w-full px-2.5 py-2 text-xs border border-gray-200 rounded-lg text-center outline-none focus:border-gray-300 transition-colors"
                   />

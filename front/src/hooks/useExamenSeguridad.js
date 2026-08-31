@@ -19,12 +19,12 @@ const useExamenSeguridad = (examenActivo, configuracion = {}) => {
   const fullscreenChangeRef = useRef(false);
   
   // ✅ REF para límite de violaciones (se actualiza dinámicamente)
-  const limiteViolacionesRef = useRef(configuracion.limiteViolaciones || MAX_VIOLACIONES);
+  const limiteViolacionesRef = useRef(configuracion.limite_violaciones || MAX_VIOLACIONES);
 
   // ✅ Actualizar límite cuando cambia la configuración
   useEffect(() => {
-    limiteViolacionesRef.current = configuracion.limiteViolaciones || MAX_VIOLACIONES;
-  }, [configuracion.limiteViolaciones]);
+    limiteViolacionesRef.current = configuracion.limite_violaciones || MAX_VIOLACIONES;
+  }, [configuracion.limite_violaciones]);
 
   const soportaFullscreen = () => {
     const doc = document.documentElement;
@@ -254,7 +254,7 @@ const useExamenSeguridad = (examenActivo, configuracion = {}) => {
     window.addEventListener('offline', handleOffline);
 
     // ✅ Activar pantalla completa solo en desktop (una sola vez)
-    if (configRef.current.modoEstricto !== false && !fullscreenIntentadoRef.current) {
+    if (configRef.current.modo_estricto !== false && !fullscreenIntentadoRef.current) {
       fullscreenIntentadoRef.current = true;
       if (!esDispositivoMovil() && soportaFullscreen()) {
         setTimeout(() => reingresarFullscreen(), 500);

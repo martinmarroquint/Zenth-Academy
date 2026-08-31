@@ -1076,6 +1076,9 @@ const DetalleCurso = ({
   const [certificadosCurso, setCertificadosCurso] = useState([]);
   const [cargandoCertificados, setCargandoCertificados] = useState(false);
   const [verCertificadoId, setVerCertificadoId] = useState(null);
+  
+  // Estado de bloqueo de leccion individual (consultado al backend)
+  const [leccionBloqueadaInfo, setLeccionBloqueadaInfo] = useState(null);
 
   const usuario = authService.getCurrentUser();
   const esDocente = usuario?.rol === 'docente' || usuario?.rol === 'admin';
@@ -1216,22 +1219,30 @@ const DetalleCurso = ({
   };
 
   // Handlers
-  const handleAbrirLeccion = (modulo, leccion) => {
-    // Verificar bloqueo secuencial
-    if (isModuloBloqueado(modulo)) {
-      alert('Debes completar el modulo anterior antes de acceder a este contenido.');
+  const handleAbrirLeccion = async (modulo, leccion) => {
+    // Verificar bloqueo de pago
+    if (curso?.precio_tipo === 'pago' && !tieneAcceso && !esDocente) {
+      alert('Este curso requiere acceso. Solicita acceso al docente.');
       return;
     }
     
-    if (curso?.precio_tipo === 'pago' && !tieneAcceso && !esDocente) {
-      setModuloActual(modulo);
-      setLeccionActual(leccion);
-      setMostrandoLeccion(true);
-      setVideoCompletado(false);
-      setTiempoEnLeccion(0);
-      setSeccionLeccion('contenido');
-      window.scrollTo({ top: 0, behavior: 'smooth' });
-      return;
+    // Verificar bloqueo a nivel de leccion via backend (secuencial, fecha, desempeno)
+    if (esEstudiante && curso?.tipo_bloqueo && curso.tipo_bloqueo !== 'ninguno') {
+      try {
+        const estadoBloqueo = await cursosService.verificarBloqueoLeccion(curso.id, leccion.id);
+        if (estadoBloqueo?.bloqueada) {
+          setLeccionBloqueadaInfo(estadoBloqueo);
+          alert(estadoBloqueo.razon || 'Esta leccion esta bloqueada. Completa las lecciones anteriores primero.');
+          return;
+        }
+        setLeccionBloqueadaInfo(null);
+      } catch (e) {
+        // Si el endpoint falla, permitir acceso pero registrar el error
+        console.warn('Error verificando bloqueo:', e);
+        setLeccionBloqueadaInfo(null);
+      }
+    } else {
+      setLeccionBloqueadaInfo(null);
     }
     
     setModuloActual(modulo);
@@ -1296,7 +1307,9 @@ const DetalleCurso = ({
         }, 1000);
       }
     } catch (error) {
-      console.error('Error:', error);
+      const mensaje = error?.response?.data?.detail || error?.message || 'Error al completar la leccion';
+      alert(mensaje);
+      console.error('Error completando leccion:', error);
     } finally {
       setMarcando(false);
     }
@@ -1665,7 +1678,10 @@ const DetalleCurso = ({
     const leccionesDelModulo = getLeccionesDeModulo(moduloActual || {});
     const indexActual = leccionesDelModulo.findIndex(l => l.id === leccionActual.id);
     const bloques = getBloquesDeLeccion(leccionActual);
-    const esBloqueada = curso?.precio_tipo === 'pago' && !tieneAcceso && !esDocente;
+    const esBloqueadaPorPago = curso?.precio_tipo === 'pago' && !tieneAcceso && !esDocente;
+    const esBloqueadaSecuencial = leccionBloqueadaInfo?.bloqueada || false;
+    const esBloqueada = esBloqueadaPorPago || esBloqueadaSecuencial;
+    const razonBloqueo = leccionBloqueadaInfo?.razon || '';
 
     return (
       <div className="bg-[#f8f9fa] min-h-screen">
@@ -1682,7 +1698,7 @@ const DetalleCurso = ({
               <div className="hidden sm:flex items-center gap-2 flex-shrink-0">
                 {esBloqueada && (
                   <Badge variant="secondary" size="sm" className="gap-1">
-                    <Lock className="w-3 h-3" /> Vista previa
+                    <Lock className="w-3 h-3" /> {esBloqueadaPorPago ? 'Vista previa' : 'Bloqueada'}
                   </Badge>
                 )}
                 {estaCompletada && !esBloqueada && (
@@ -1737,7 +1753,7 @@ const DetalleCurso = ({
               {esBloqueada && (
                 <span className="flex items-center gap-1 text-amber-600">
                   <Lock className="w-3.5 h-3.5" />
-                  Vista previa
+                  {esBloqueadaPorPago ? 'Vista previa' : razonBloqueo || 'Bloqueada'}
                 </span>
               )}
             </div>

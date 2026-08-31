@@ -239,6 +239,7 @@ def _verificar_bloqueo_leccion_internal(
     """
     resultado = {
         "bloqueada": False,
+        "tipo_bloqueo": (curso.tipo_bloqueo or "ninguno").lower(),
         "razon": None,
         "fecha_liberacion": None,
         "evaluacion_pendiente": False,

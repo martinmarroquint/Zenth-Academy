@@ -20,7 +20,8 @@ from app.schemas.auth import (
     RefreshRequest, TokenRefreshResponse
 )
 from app.core.security import (
-    create_access_token, create_refresh_token, decode_token, hash_token
+    create_access_token, create_refresh_token, decode_token, hash_token,
+    ACCESS_TOKEN_EXPIRE_MINUTES, REFRESH_TOKEN_EXPIRE_MINUTES
 )
 from app.core.dependencies import get_current_user, get_current_active_user, require_admin
 from app.core.ratelimit import rate_limit

@@ -151,6 +151,14 @@ app.add_middleware(EmpresaContextMiddleware)
 logger.info("Middleware multi-empresa registrado")
 
 # =====================================================
+# MIDDLEWARE DE SEGURIDAD - HEADERS
+# =====================================================
+
+from app.core.security_headers import SecurityHeadersMiddleware
+app.add_middleware(SecurityHeadersMiddleware, environment=settings.ENVIRONMENT)
+logger.info("Middleware de headers de seguridad registrado")
+
+# =====================================================
 # MIDDLEWARE DE MONITOREO
 # =====================================================
 

@@ -4,16 +4,29 @@
 import os
 import uuid
 import hashlib
+import secrets
 from datetime import datetime, timedelta, timezone
 from jose import jwt
 from typing import Optional
 
 # =============================================
-# CONFIGURACIÓN
+# CONFIGURACIÓN - UNIFICADA Y SEGURA
 # =============================================
 
-SECRET_KEY = os.getenv("SECRET_KEY", "zenthacademy-secret-key-change-in-production-2024")
+# Usar JWT_SECRET_KEY de config (requerido) o generar uno seguro
+# En producción, SIEMPRE debe estar definido en .env
+_jwt_secret = os.getenv("JWT_SECRET_KEY")
+
+if not _jwt_secret:
+    # En desarrollo, generar uno temporal (se pierde al reiniciar)
+    _jwt_secret = secrets.token_hex(32)
+    import sys
+    print("ADVERTENCIA: JWT_SECRET_KEY no definido. Usando clave temporal.", file=sys.stderr)
+    print("  Define JWT_SECRET_KEY en .env para produccion.", file=sys.stderr)
+
+SECRET_KEY = _jwt_secret
 ALGORITHM = "HS256"
+
 # Access token de corta duración (por defecto 60 min)
 ACCESS_TOKEN_EXPIRE_MINUTES = int(os.getenv("ACCESS_TOKEN_EXPIRE_MINUTES", "60"))
 # Refresh token de larga duración (por defecto 7 días)

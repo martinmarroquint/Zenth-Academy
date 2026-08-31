@@ -1,7 +1,7 @@
 # app/core/dependencies.py
 # DEPENDENCIAS DE AUTENTICACIÓN - CON EMPRESA
 
-from fastapi import Depends, HTTPException, status
+from fastapi import Depends, HTTPException, status, Request
 from fastapi.security import OAuth2PasswordBearer
 from sqlalchemy.orm import Session
 from jose import JWTError, jwt
@@ -10,13 +10,15 @@ from typing import Optional
 from app.database import get_db
 from app.models.usuario import Usuario
 from app.core.security import SECRET_KEY, ALGORITHM
+from app.core.security_logger import log_unauthorized_access, log_role_escalation_attempt
 
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/v1/auth/login")
 
 
 def get_current_user(
     token: str = Depends(oauth2_scheme),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    request: Request = None
 ) -> Usuario:
     """
     Obtiene el usuario actual a partir del token JWT
@@ -61,12 +63,20 @@ def get_current_active_user(
 # =============================================
 
 def require_admin(
-    current_user: Usuario = Depends(get_current_active_user)
+    current_user: Usuario = Depends(get_current_active_user),
+    request: Request = None
 ) -> Usuario:
     """
     Requiere rol de administrador
     """
     if current_user.rol != "admin":
+        client_ip = request.client.host if request and request.client else "unknown"
+        log_role_escalation_attempt(
+            user_id=str(current_user.id),
+            attempted_role="admin",
+            current_role=current_user.rol,
+            ip_address=client_ip
+        )
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Se requiere rol de administrador"
@@ -75,12 +85,20 @@ def require_admin(
 
 
 def require_docente(
-    current_user: Usuario = Depends(get_current_active_user)
+    current_user: Usuario = Depends(get_current_active_user),
+    request: Request = None
 ) -> Usuario:
     """
     Requiere rol de docente o admin
     """
     if current_user.rol not in ["admin", "docente"]:
+        client_ip = request.client.host if request and request.client else "unknown"
+        log_role_escalation_attempt(
+            user_id=str(current_user.id),
+            attempted_role="docente",
+            current_role=current_user.rol,
+            ip_address=client_ip
+        )
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Se requiere rol de docente"
@@ -107,9 +125,17 @@ def require_roles(allowed_roles: list):
     Factory para requerir múltiples roles
     """
     def dependency(
-        current_user: Usuario = Depends(get_current_active_user)
+        current_user: Usuario = Depends(get_current_active_user),
+        request: Request = None
     ) -> Usuario:
         if current_user.rol not in allowed_roles:
+            client_ip = request.client.host if request and request.client else "unknown"
+            log_role_escalation_attempt(
+                user_id=str(current_user.id),
+                attempted_role=str(allowed_roles),
+                current_role=current_user.rol,
+                ip_address=client_ip
+            )
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail=f"Permisos insuficientes. Roles requeridos: {', '.join(allowed_roles)}"

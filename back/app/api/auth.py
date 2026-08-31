@@ -19,15 +19,14 @@ from app.schemas.auth import (
     UserCreateRequest, UserListResponse, MensajeResponse,
     RefreshRequest, TokenRefreshResponse
 )
-from app.core.dependencies import (
-    get_current_user, get_current_active_user,
-    require_admin, require_docente
-)
 from app.core.security import (
-    create_access_token, create_refresh_token, decode_token, hash_token,
-    ACCESS_TOKEN_EXPIRE_MINUTES, REFRESH_TOKEN_EXPIRE_MINUTES
+    create_access_token, create_refresh_token, decode_token, hash_token
 )
+from app.core.dependencies import get_current_user, get_current_active_user, require_admin
 from app.core.ratelimit import rate_limit
+from app.core.security_logger import (
+    log_login_attempt, log_unauthorized_access, log_password_change
+)
 from datetime import timedelta, datetime, timezone
 
 logger = logging.getLogger(__name__)
@@ -99,11 +98,22 @@ def _crear_tokens(db: Session, user: Usuario) -> dict:
 async def login(
     form_data: OAuth2PasswordRequestForm = Depends(),
     db: Session = Depends(get_db),
-    _rate_limited = Depends(rate_limit(10, 60))
+    _rate_limited = Depends(rate_limit(10, 60)),
+    request: Request = None
 ):
     """
-    Inicia sesión con email y contraseña
+    Inicia sesión con email y contraseña.
+    Incluye protección contra fuerza bruta y logging de seguridad.
     """
+    from app.core.login_attempts import check_login_allowed, record_failed_attempt, record_successful_login
+    
+    # Obtener IP del cliente
+    client_ip = request.client.host if request and request.client else "unknown"
+    user_agent = request.headers.get("user-agent", "unknown") if request else "unknown"
+    
+    # Verificar si está bloqueado
+    check_login_allowed(form_data.username)
+    
     # ✅ FILTRAR POR EMAIL Y EMPRESA (UUID)
     user = db.query(Usuario).filter(
         Usuario.email == form_data.username,
@@ -111,6 +121,15 @@ async def login(
     ).first()
     
     if not user:
+        # Registrar intento fallido y log de seguridad
+        record_failed_attempt(form_data.username)
+        log_login_attempt(
+            email=form_data.username,
+            success=False,
+            ip_address=client_ip,
+            user_agent=user_agent,
+            reason="Usuario no encontrado"
+        )
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Credenciales incorrectas",
@@ -118,17 +137,49 @@ async def login(
         )
     
     if not user.verify_password(form_data.password):
+        # Registrar intento fallido y log de seguridad
+        result = record_failed_attempt(form_data.username)
+        log_login_attempt(
+            email=form_data.username,
+            success=False,
+            ip_address=client_ip,
+            user_agent=user_agent,
+            reason="Contraseña incorrecta"
+        )
+        
+        detail = "Credenciales incorrectas"
+        if result.get("blocked"):
+            detail = result["message"]
+        elif result.get("remaining_attempts", 10) <= 2:
+            detail = f"Credenciales incorrectas. Te quedan {result['remaining_attempts']} intento(s)."
+        
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Credenciales incorrectas",
+            detail=detail,
             headers={"WWW-Authenticate": "Bearer"},
         )
     
     if not user.activo:
+        log_login_attempt(
+            email=form_data.username,
+            success=False,
+            ip_address=client_ip,
+            user_agent=user_agent,
+            reason="Usuario inactivo"
+        )
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Usuario inactivo"
         )
+    
+    # Login exitoso - resetear contador y log
+    record_successful_login(form_data.username)
+    log_login_attempt(
+        email=form_data.username,
+        success=True,
+        ip_address=client_ip,
+        user_agent=user_agent
+    )
     
     # Actualizar último acceso
     user.ultimo_acceso = datetime.now(timezone.utc)

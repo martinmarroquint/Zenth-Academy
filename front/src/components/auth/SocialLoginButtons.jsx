@@ -6,10 +6,12 @@
 //   El backend valida el token y emite NUESTRO JWT.
 // - Microsoft: usa el flujo de redirección del backend (si está configurado).
 //
-// Si no hay ningún proveedor disponible, no renderiza nada.
+// El botón de Google se muestra de inmediato (no espera al backend). Tras
+// validar, navega al panel por rol SIN recargar toda la página.
 // =====================================================
 
 import React, { useCallback, useEffect, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { Loader2 } from 'lucide-react';
 import { authService } from '../../services/authService';
 import GoogleIdentityButton from './GoogleIdentityButton';
@@ -35,6 +37,7 @@ const MicrosoftLogo = () => (
 );
 
 const SocialLoginButtons = ({ onError, texto = 'o continúa con' }) => {
+  const navigate = useNavigate();
   const [proveedores, setProveedores] = useState({ google: false, microsoft: false });
   const [cargando, setCargando] = useState(false);
   const [listo, setListo] = useState(false);
@@ -52,22 +55,19 @@ const SocialLoginButtons = ({ onError, texto = 'o continúa con' }) => {
     return () => { activo = false; };
   }, []);
 
-  const redirigirPorRol = () => {
-    const rol = authService.getRol();
-    const destino = rol === 'admin' ? '/admin' : rol === 'docente' ? '/docente' : '/estudiante';
-    window.location.href = destino;
-  };
-
   const handleGoogleCredential = useCallback(async (credential) => {
     setCargando(true);
     const res = await authService.loginConGoogle(credential);
     if (res.success) {
-      redirigirPorRol();
+      // ✅ Navegación SPA (sin recargar la página) → ingreso inmediato
+      const rol = authService.getRol();
+      const destino = rol === 'admin' ? '/admin' : rol === 'docente' ? '/docente' : '/estudiante';
+      navigate(destino, { replace: true });
     } else {
       setCargando(false);
       onError?.(res.error || 'No se pudo iniciar sesión con Google');
     }
-  }, [onError]);
+  }, [navigate, onError]);
 
   const handleGoogleError = useCallback((msg) => {
     onError?.(msg);
@@ -84,14 +84,24 @@ const SocialLoginButtons = ({ onError, texto = 'o continúa con' }) => {
   };
 
   const muestraGoogleRedirect = !usaGoogleGis && proveedores.google;
-  const hayAlguno = usaGoogleGis || muestraGoogleRedirect || proveedores.microsoft;
-  if (!listo || !hayAlguno) return null;
+  // ✅ El botón de Google aparece de inmediato (no espera a /oauth/providers).
+  const hayAlguno = usaGoogleGis || (listo && (muestraGoogleRedirect || proveedores.microsoft));
+  if (!hayAlguno) return null;
 
   const baseBtn =
     'flex-1 flex items-center justify-center gap-2.5 px-4 py-3 text-sm font-medium rounded-xl border transition-all disabled:opacity-50 disabled:cursor-not-allowed';
 
   return (
     <div className="mt-6">
+      {/* Overlay mientras el backend valida el token de Google */}
+      {cargando === 'google' && usaGoogleGis && (
+        <div className="fixed inset-0 z-[9999] bg-white/85 backdrop-blur-sm flex flex-col items-center justify-center gap-3">
+          <Loader2 className="w-8 h-8 animate-spin text-[#0f766e]" />
+          <p className="text-sm font-medium text-gray-700">Iniciando sesión con Google…</p>
+          <p className="text-xs text-gray-400">Validando tus credenciales</p>
+        </div>
+      )}
+
       <div className="relative mb-4">
         <div className="absolute inset-0 flex items-center">
           <div className="w-full border-t border-gray-200" />
@@ -104,15 +114,11 @@ const SocialLoginButtons = ({ onError, texto = 'o continúa con' }) => {
       <div className="flex flex-col items-stretch gap-3">
         {usaGoogleGis && (
           <div className="flex justify-center">
-            {cargando === 'google' ? (
-              <Loader2 className="w-6 h-6 animate-spin text-gray-400" />
-            ) : (
-              <GoogleIdentityButton
-                clientId={GOOGLE_CLIENT_ID}
-                onCredential={handleGoogleCredential}
-                onError={handleGoogleError}
-              />
-            )}
+            <GoogleIdentityButton
+              clientId={GOOGLE_CLIENT_ID}
+              onCredential={handleGoogleCredential}
+              onError={handleGoogleError}
+            />
           </div>
         )}
 

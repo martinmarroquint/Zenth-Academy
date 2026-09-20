@@ -146,6 +146,8 @@ class AuthService {
       const response = await api.request('/auth/google', {
         method: 'POST',
         body: JSON.stringify({ credential }),
+        // ✅ Margen amplio: el backend en Render puede "despertar" (cold start)
+        timeout: 60000,
       });
       if (response?.access_token) {
         this.setAuthData(response.access_token, response.user, response.refresh_token);

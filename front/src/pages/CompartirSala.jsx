@@ -70,6 +70,17 @@ const CompartirSala = () => {
   const [qrKey, setQrKey] = useState(0);
   const [segundosRestantes, setSegundosRestantes] = useState(30);
   const [_expirando, setExpirando] = useState(false);
+
+  // ✅ Tamaño del QR responsive (evita desbordes en móvil)
+  const [qrSize, setQrSize] = useState(() => {
+    if (typeof window === 'undefined') return 240;
+    return Math.min(240, Math.max(160, window.innerWidth - 120));
+  });
+  useEffect(() => {
+    const onResize = () => setQrSize(Math.min(240, Math.max(160, window.innerWidth - 120)));
+    window.addEventListener('resize', onResize);
+    return () => window.removeEventListener('resize', onResize);
+  }, []);
   const pollRef = useRef(null);
   const timerRef = useRef(null);
 
@@ -271,7 +282,7 @@ const CompartirSala = () => {
               <QRCodeSVG 
                 key={qrKey}
                 value={qrToken ? `${urlVinculacion}?token=${qrToken}` : urlVinculacion}
-                size={240} 
+                size={qrSize} 
                 level="M" 
                 bgColor="#fff" 
                 fgColor="#0f172a" 

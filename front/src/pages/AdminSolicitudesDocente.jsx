@@ -126,7 +126,7 @@ const AdminSolicitudesDocente = () => {
               <ArrowLeft className="w-4 h-4" /> Volver a solicitudes
             </button>
             
-            <div className="flex items-center justify-between">
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
               <div className="flex items-center gap-3">
                 <div className="w-12 h-12 rounded-xl flex items-center justify-center bg-amber-50">
                   <GraduationCap className="w-6 h-6 text-amber-600" />
@@ -153,7 +153,7 @@ const AdminSolicitudesDocente = () => {
                 Información del Solicitante
               </h3>
               
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
                   <p className="text-xs text-gray-400 mb-1">Nombre</p>
                   <p className="text-sm text-gray-700">{sol.usuario_nombre || '—'}</p>
@@ -178,7 +178,7 @@ const AdminSolicitudesDocente = () => {
                   <p className="text-sm text-gray-700">{sol.especialidad}</p>
                 </div>
                 
-                <div className="grid grid-cols-2 gap-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div>
                     <p className="text-xs text-gray-400 mb-1">Institución</p>
                     <p className="text-sm text-gray-700">{sol.institucion || '—'}</p>
@@ -279,7 +279,7 @@ const AdminSolicitudesDocente = () => {
                     />
                   </div>
 
-                  <div className="flex gap-3">
+                  <div className="flex flex-col sm:flex-row gap-3">
                     <button
                       onClick={() => handleMarcarEnRevision(sol.id)}
                       className="flex-1 py-2.5 text-sm font-medium text-blue-700 bg-blue-50 rounded-xl hover:bg-blue-100 transition-colors flex items-center justify-center gap-2"
@@ -401,7 +401,7 @@ const AdminSolicitudesDocente = () => {
                   className="bg-white rounded-xl border border-gray-200 p-4 hover:shadow-md transition-all cursor-pointer"
                   onClick={() => setSolicitudSeleccionada(sol)}
                 >
-                  <div className="flex items-center justify-between">
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
                     <div className="flex items-center gap-4">
                       <div className="w-10 h-10 rounded-xl bg-amber-50 flex items-center justify-center flex-shrink-0">
                         <User className="w-5 h-5 text-amber-600" />

@@ -266,11 +266,11 @@ const ResultadosExamen = ({ examenId, examenes, alumnos, onVolver }) => {
 
                   {expandido && (
                     <div className="border-t border-gray-100 bg-gray-50/50 overflow-x-auto">
-                      <div className="px-4 py-2 grid grid-cols-3 sm:grid-cols-6 gap-2 text-[10px] font-medium text-gray-400 uppercase tracking-wider min-w-[260px] sm:min-w-[520px]">
+                      <div className="px-4 py-2 grid grid-cols-4 sm:grid-cols-6 gap-2 text-[10px] font-medium text-gray-400 uppercase tracking-wider min-w-[260px] sm:min-w-[520px]">
                         <span>Intento</span><span>Puntos</span><span>Nota</span><span className="hidden sm:block">Tiempo</span><span className="hidden sm:block">Viol.</span><span>Fecha</span>
                       </div>
                       {grupo.intentos.map((intento, i) => (
-                        <div key={intento.id || i} className={`px-4 py-2 grid grid-cols-3 sm:grid-cols-6 gap-2 text-xs items-center min-w-[260px] sm:min-w-[520px] ${i % 2 === 0 ? 'bg-white' : 'bg-gray-50/50'}`}>
+                        <div key={intento.id || i} className={`px-4 py-2 grid grid-cols-4 sm:grid-cols-6 gap-2 text-xs items-center min-w-[260px] sm:min-w-[520px] ${i % 2 === 0 ? 'bg-white' : 'bg-gray-50/50'}`}>
                           <span className="font-medium text-gray-600">{i + 1}</span>
                           <span className="font-semibold text-gray-700">{intento.puntos_obtenidos || 0}/{intento.total_puntos || 0}</span>
                           <span className={`font-semibold ${getColor(intento.calificacion)}`}>{(intento.calificacion || 0).toFixed(1)}%</span>

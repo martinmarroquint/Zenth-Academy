@@ -254,7 +254,7 @@ const PanelCursos = ({ onCrearCurso, onVerCurso, onEditarCurso }) => {
             className="w-full pl-10 pr-4 py-2 text-sm border border-gray-200 rounded-xl outline-none focus:border-[#0f766e] focus:ring-2 focus:ring-[#0f766e]/20 transition-all bg-white"
           />
         </div>
-        <div className="flex gap-2">
+        <div className="flex flex-wrap gap-2">
           <Dropdown
             options={categoriasOptions}
             value={filtro}
@@ -332,8 +332,8 @@ const PanelCursos = ({ onCrearCurso, onVerCurso, onEditarCurso }) => {
                   )}
                 </div>
 
-                {/* Acciones rápidas - hover */}
-                <div className="absolute top-3 right-3 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                {/* Acciones rápidas - visibles en móvil, hover en desktop */}
+                <div className="absolute top-3 right-3 flex gap-1 opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity">
                   {String(curso.estado || '').toUpperCase() !== 'PUBLICADO' && (esAdmin || curso.docente_id === usuarioId) && (
                     <button
                       onClick={(e) => { e.stopPropagation(); handlePublicar(curso.id, curso.titulo); }}

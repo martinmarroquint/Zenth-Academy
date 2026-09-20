@@ -83,7 +83,7 @@ const ModalCrearExamenRapido = ({
     return (
       <div className="fixed inset-0 z-[9999] bg-white flex flex-col">
         {/* Header */}
-        <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200 bg-white flex-shrink-0">
+        <div className="flex items-center justify-between px-4 sm:px-6 py-4 border-b border-gray-200 bg-white flex-shrink-0">
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 rounded-xl bg-emerald-100 flex items-center justify-center">
               <CheckCircle2 className="w-6 h-6 text-emerald-600" />
@@ -98,7 +98,7 @@ const ModalCrearExamenRapido = ({
         </div>
 
         {/* Contenido central */}
-        <div className="flex-1 flex flex-col items-center justify-center px-6">
+        <div className="flex-1 flex flex-col items-center justify-center px-4 sm:px-6">
           <div className="max-w-md text-center">
             <div className="w-24 h-24 rounded-full bg-emerald-50 flex items-center justify-center mx-auto mb-6">
               <CheckCircle2 className="w-12 h-12 text-emerald-500" />
@@ -131,7 +131,7 @@ const ModalCrearExamenRapido = ({
   return (
     <div className="fixed inset-0 z-[9999] bg-white flex flex-col">
       {/* Header - Panel de examenes */}
-      <div className="flex items-center justify-between px-6 py-3 border-b border-gray-200 bg-white flex-shrink-0 shadow-sm">
+        <div className="flex items-center justify-between px-4 sm:px-6 py-3 border-b border-gray-200 bg-white flex-shrink-0 shadow-sm">
         <div className="flex items-center gap-4">
           <button
             onClick={handleVolver}

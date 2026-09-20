@@ -42,7 +42,7 @@ const Toast = ({ message, type = 'success', onClose }) => {
   };
 
   return (
-    <div className={`fixed bottom-4 right-4 z-[9999] flex items-center gap-3 px-4 py-3 rounded-xl border shadow-lg ${estilos[type]}`}>
+          <div className={`fixed bottom-4 right-4 z-[9999] flex items-center gap-3 px-4 py-3 rounded-xl border shadow-lg max-w-[calc(100vw-2rem)] ${estilos[type]}`}>
       {type === 'success' ? (
         <CheckCircle2 className="w-5 h-5 text-emerald-500" />
       ) : (

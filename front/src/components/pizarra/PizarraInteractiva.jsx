@@ -341,14 +341,14 @@ const PizarraInteractiva = ({
             <>
               <button
                 onClick={clearBoard}
-                className="p-2 rounded-lg hover:bg-red-50 text-gray-400 hover:text-red-500 transition-colors"
+                className="p-2 min-w-[40px] min-h-[40px] flex items-center justify-center rounded-lg hover:bg-red-50 text-gray-400 hover:text-red-500 transition-colors"
                 title="Limpiar pizarra"
               >
                 <Trash2 className="w-4 h-4" />
               </button>
               <button
                 onClick={exportImage}
-                className="p-2 rounded-lg hover:bg-gray-100 text-gray-400 hover:text-gray-600 transition-colors"
+                className="p-2 min-w-[40px] min-h-[40px] flex items-center justify-center rounded-lg hover:bg-gray-100 text-gray-400 hover:text-gray-600 transition-colors"
                 title="Exportar como imagen"
               >
                 <Download className="w-4 h-4" />
@@ -356,7 +356,7 @@ const PizarraInteractiva = ({
               <button
                 onClick={saveBoard}
                 disabled={isSaving || !pizarraId}
-                className="p-2 rounded-lg hover:bg-gray-100 text-gray-400 hover:text-gray-600 disabled:opacity-50 transition-colors"
+                className="p-2 min-w-[40px] min-h-[40px] flex items-center justify-center rounded-lg hover:bg-gray-100 text-gray-400 hover:text-gray-600 disabled:opacity-50 transition-colors"
                 title="Guardar pizarra"
               >
                 <Save className={`w-4 h-4 ${isSaving ? 'animate-spin' : ''}`} />
@@ -385,7 +385,7 @@ const PizarraInteractiva = ({
       {/* ============================================= */}
       {/* ÁREA DE EXCALIDRAW (toolbar nativa incluida)   */}
       {/* ============================================= */}
-      <div className="flex-1 relative" style={{ minHeight: '500px' }}>
+      <div className="flex-1 relative min-h-[320px] sm:min-h-[500px]">
         {/* Indicador de carga inicial */}
         {cargandoInicial && (
           <div className="absolute inset-0 z-10 flex items-center justify-center bg-white/80">

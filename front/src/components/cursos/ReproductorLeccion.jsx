@@ -7,7 +7,7 @@ import {
   CheckCircle, Circle, Clock, FileText, Video,
   Loader2, Maximize2, Minimize2, Volume2, VolumeX,
   Award, BookOpen, Link as LinkIcon,
-  Download, Check, AlertCircle, Layout
+  Download, Check, AlertCircle, Layout, Lock
 } from 'lucide-react';
 import cursosService from '../../services/cursosService';
 import examenesService from '../../services/examenesService';

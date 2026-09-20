@@ -651,7 +651,7 @@ const Toolbar = ({ datos, setDatos }) => {
 
           <div className="w-px h-6 bg-gray-200 flex-shrink-0" />
 
-          <div className="flex items-center gap-4 overflow-visible">
+          <div className="flex flex-wrap items-center gap-4 overflow-visible">
             <div className="flex items-center gap-2 overflow-visible">
               <Switch
                 checked={pagoActivo}
@@ -758,7 +758,7 @@ const Toolbar = ({ datos, setDatos }) => {
                     className="w-full h-full"
                     imgClassName="w-full h-full object-cover"
                   />
-                  <div className="absolute inset-0 bg-black/0 hover:bg-black/30 transition-colors flex items-center justify-center opacity-0 hover:opacity-100">
+                  <div className="absolute inset-0 bg-black/0 hover:bg-black/30 transition-colors flex items-center justify-center opacity-100 sm:opacity-0 sm:hover:opacity-100">
                     <button
                       onClick={(e) => {
                         e.stopPropagation();
@@ -1386,18 +1386,18 @@ const CreadorCurso = ({ cursoInicial = null, onGuardar, onVolver }) => {
     <div className="min-h-screen bg-[#fbfbfa]">
       <header className="sticky top-0 z-50 bg-white/80 backdrop-blur-sm border-b border-gray-200/50">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 h-14 flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <button onClick={handleVolver} className="p-2 hover:bg-gray-100 rounded-lg transition-colors text-gray-400 hover:text-gray-600">
+          <div className="flex items-center gap-3 min-w-0">
+            <button onClick={handleVolver} className="p-2 min-w-[40px] min-h-[40px] flex items-center justify-center hover:bg-gray-100 rounded-lg transition-colors text-gray-400 hover:text-gray-600">
               <ArrowLeft className="w-4 h-4" />
             </button>
-            <span className="text-sm font-medium text-gray-700">
+            <span className="text-sm font-medium text-gray-700 truncate">
               {cursoInicial?.id ? 'Editar Curso' : 'Nuevo Curso'}
             </span>
-            <Badge variant="secondary" size="sm" className="ml-2">
+            <Badge variant="secondary" size="sm" className="ml-2 hidden sm:inline-flex">
               {modulos.reduce((acc, m) => acc + m.lecciones.length, 0)} lecciones
             </Badge>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 flex-shrink-0">
             <Button
               variant="primary"
               size="md"

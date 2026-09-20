@@ -520,7 +520,7 @@ const PanelAdminExamenes = ({ onSalir: _onSalir }) => {
             <div className="p-4 sm:p-6">
               <div className="mb-4">
                 <p className="text-sm text-gray-500">{detalleExamen.descripcion || 'Sin descripcion'}</p>
-                <div className="flex items-center gap-4 mt-2 text-xs text-gray-400">
+                <div className="flex flex-wrap items-center gap-4 mt-2 text-xs text-gray-400">
                   <span>Total preguntas: {detalleExamen.preguntas?.length || 0}</span>
                   <span>Tiempo limite: {detalleExamen.tiempo_limite || 60} min</span>
                   <span>Aprobacion: {detalleExamen.puntaje_aprobacion || 60}%</span>

@@ -121,7 +121,7 @@ const DateRangePicker = ({ inicio, fin, onInicio, onFin }) => {
         {tieneFechas ? <span className="hidden sm:inline text-[11px]">{formatDisplay(inicio)} - {formatDisplay(fin)}</span> : <span className="hidden sm:inline text-[11px]">Fechas</span>}
       </button>
       {open && (
-        <div className="absolute top-full left-0 mt-1 bg-white rounded-lg shadow-lg border border-gray-200 p-4 w-72 z-[99999]">
+            <div className="absolute top-full left-0 mt-1 bg-white rounded-lg shadow-lg border border-gray-200 p-4 w-72 max-w-[calc(100vw-2rem)] z-[99999]">
           <div className="flex bg-gray-100 rounded-lg p-0.5 mb-3">
             <button type="button" onClick={() => setVista('inicio')} className={`flex-1 py-1.5 text-xs font-medium rounded-md transition-colors ${vista === 'inicio' ? 'bg-white text-gray-800 shadow-sm' : 'text-gray-500'}`}>Inicio</button>
             <button type="button" onClick={() => setVista('fin')} className={`flex-1 py-1.5 text-xs font-medium rounded-md transition-colors ${vista === 'fin' ? 'bg-white text-gray-800 shadow-sm' : 'text-gray-500'}`}>Cierre</button>
@@ -329,7 +329,7 @@ const CreadorExamen = ({
       
       {/* Header - Adaptado para modal y standalone */}
       <header className={`sticky top-0 z-30 bg-white border-b border-gray-200 ${esModal ? 'shadow-sm' : ''}`}>
-        <div className={`${esModal ? 'max-w-full px-4' : 'max-w-4xl mx-auto px-6'} h-12 sm:h-14 flex items-center justify-between`}>
+        <div className={`${esModal ? 'max-w-full px-4' : 'max-w-4xl mx-auto px-4 sm:px-6'} h-12 sm:h-14 flex items-center justify-between`}>
           <div className="flex items-center gap-2 sm:gap-3 min-w-0 flex-1">
             {!esModal && (
               <button onClick={onVolver} className="p-2 hover:bg-gray-100 rounded-lg flex-shrink-0 transition-colors">
@@ -362,7 +362,7 @@ const CreadorExamen = ({
         </div>
       </header>
 
-      <div className={`${esModal ? 'max-w-full px-4' : 'max-w-4xl mx-auto px-6'} py-4 sm:py-6 space-y-4 sm:space-y-6`}>
+      <div className={`${esModal ? 'max-w-full px-4' : 'max-w-4xl mx-auto px-4 sm:px-6'} py-4 sm:py-6 space-y-4 sm:space-y-6`}>
 
         {/* Información básica del examen */}
         <div className="bg-white rounded-lg border border-gray-200">

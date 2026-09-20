@@ -5,16 +5,26 @@
 // Carga el script oficial de Google y renderiza su botón. Al autenticarse,
 // Google devuelve un ID token (credential) que enviamos al backend para que
 // lo valide con las claves públicas de Google y emita NUESTRO JWT.
+//
+// ✅ Responsive: el ancho del botón se calcula según el contenedor (Google
+// exige un ancho en px), así no se desborda en celulares.
 // =====================================================
 
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useRef, useState, useCallback } from 'react';
 import { Loader2 } from 'lucide-react';
 
 const GSI_SRC = 'https://accounts.google.com/gsi/client';
 
 const GoogleIdentityButton = ({ clientId, onCredential, onError }) => {
+  const wrapperRef = useRef(null);
   const contenedorRef = useRef(null);
   const [cargando, setCargando] = useState(true);
+
+  const anchoDisponible = useCallback(() => {
+    const w = wrapperRef.current?.clientWidth || 320;
+    // Google acepta entre 200 y 400 px
+    return Math.max(200, Math.min(Math.floor(w), 400));
+  }, []);
 
   useEffect(() => {
     if (!clientId) return undefined;
@@ -52,7 +62,7 @@ const GoogleIdentityButton = ({ clientId, onCredential, onError }) => {
           shape: 'pill',
           text: 'continue_with',
           logo_alignment: 'left',
-          width: 320,
+          width: anchoDisponible(),
         });
       }
       setCargando(false);
@@ -76,12 +86,21 @@ const GoogleIdentityButton = ({ clientId, onCredential, onError }) => {
       document.head.appendChild(script);
     }
 
-    return () => { cancelado = true; };
-  }, [clientId, onCredential, onError]);
+    // Re-renderizar al cambiar el tamaño (el ancho depende del contenedor)
+    const onResize = () => {
+      if (!cancelado && window.google?.accounts?.id) renderizar();
+    };
+    window.addEventListener('resize', onResize);
+
+    return () => {
+      cancelado = true;
+      window.removeEventListener('resize', onResize);
+    };
+  }, [clientId, onCredential, onError, anchoDisponible]);
 
   return (
-    <div className="flex flex-col items-center gap-2">
-      <div ref={contenedorRef} />
+    <div ref={wrapperRef} className="w-full flex flex-col items-center gap-2">
+      <div ref={contenedorRef} className="max-w-full" />
       {cargando && <Loader2 className="w-4 h-4 animate-spin text-gray-400" />}
     </div>
   );

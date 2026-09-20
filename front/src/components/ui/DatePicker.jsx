@@ -224,7 +224,7 @@ const DatePicker = ({
       {error && <p className="mt-1 text-xs text-red-500">{error}</p>}
 
       {isOpen && !disabled && (
-        <div className="absolute z-50 w-full mt-1.5 bg-white border border-gray-200 rounded-xl shadow-lg p-4 animate-in fade-in slide-in-from-top-2 duration-200 min-w-[320px]">
+        <div className="absolute z-50 w-full mt-1.5 bg-white border border-gray-200 rounded-xl shadow-lg p-4 animate-in fade-in slide-in-from-top-2 duration-200 min-w-0 max-w-[calc(100vw-2rem)] sm:min-w-[320px]">
           <div className="flex items-center gap-2 mb-3">
             <button
               type="button"

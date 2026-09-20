@@ -46,7 +46,7 @@ const Toast = ({ message, type = 'success', onClose }) => {
   };
 
   return (
-    <div className={`fixed bottom-4 right-4 z-[9999] flex items-center gap-3 px-4 py-3 rounded-xl border shadow-lg ${styles[type]}`}>
+        <div className={`fixed bottom-4 right-4 z-[9999] flex items-center gap-3 px-4 py-3 rounded-xl border shadow-lg max-w-[calc(100vw-2rem)] ${styles[type]}`}>
       {icons[type]}
       <p className="text-sm font-medium">{message}</p>
       <button onClick={onClose} className="ml-2 p-1 hover:bg-black/5 rounded-lg transition-colors">

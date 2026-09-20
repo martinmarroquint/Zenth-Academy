@@ -294,7 +294,7 @@ const CargarAlumnos = ({ alumnos: alumnosIniciales, onGuardar, onVolver }) => {
                   <div className="col-span-1 flex justify-center">
                     <button 
                       onClick={() => handleEliminar(a.id)}
-                      className="p-1 hover:bg-red-50 rounded opacity-0 group-hover:opacity-100 transition-all"
+                      className="p-2 hover:bg-red-50 rounded opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-all"
                       style={{ WebkitTapHighlightColor: 'transparent' }}
                     >
                       <X className="w-3.5 h-3.5 text-gray-400 hover:text-red-500" />

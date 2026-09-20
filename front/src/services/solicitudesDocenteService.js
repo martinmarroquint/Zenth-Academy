@@ -1,7 +1,7 @@
 // front/src/services/solicitudesDocenteService.js
 // SERVICE PARA SOLICITUDES DE DOCENTE
 
-import api from '../config/api.config';
+import api from './api';
 
 const solicitudesDocenteService = {
   // =============================================

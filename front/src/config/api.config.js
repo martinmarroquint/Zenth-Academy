@@ -128,8 +128,21 @@ export const API_HOST = (API_CONFIG.BASE_URL || 'http://localhost:8000/api/v1')
 
 // =====================================================
 // CONVERSOR DE URLs DE GOOGLE DRIVE
-// Convierte links de compartir a URLs directas de imagen
+// Convierte links de compartir a URLs servidas por NUESTRO backend.
+//
+// ⚠️ POR QUÉ USAMOS UN PROXY:
+//   - `lh3.googleusercontent.com/d/{id}` → Google lo rate-limita (HTTP 429)
+//     y las imágenes desaparecen de forma intermitente.
+//   - `drive.google.com/thumbnail` → funciona, pero depende de la IP/red del
+//     usuario y puede fallar o tardar.
+//   - NUESTRO proxy (`/api/v1/media/drive/{id}`) descarga la imagen UNA vez,
+//     la cachea en disco y la sirve al instante. Sin dependencias externas.
 // =====================================================
+const DRIVE_THUMB_SIZE = 'w2000'; // calidad buena para portadas (≈200 KB)
+
+const _driveProxyUrl = (fileId) =>
+  `${API_CONFIG.BASE_URL}/media/drive/${fileId}?sz=${DRIVE_THUMB_SIZE}`;
+
 export const convertGoogleDriveUrl = (url) => {
   if (!url) return url;
   
@@ -139,27 +152,36 @@ export const convertGoogleDriveUrl = (url) => {
   const filePattern = /drive\.google\.com\/file\/d\/([a-zA-Z0-9_-]+)/;
   const fileMatch = trimmed.match(filePattern);
   if (fileMatch) {
-    const fileId = fileMatch[1];
-    return `https://lh3.googleusercontent.com/d/${fileId}`;
+    return _driveProxyUrl(fileMatch[1]);
   }
   
   // Patrón 2: https://drive.google.com/open?id={FILE_ID}
   const openPattern = /drive\.google\.com\/open\?id=([a-zA-Z0-9_-]+)/;
   const openMatch = trimmed.match(openPattern);
   if (openMatch) {
-    const fileId = openMatch[1];
-    return `https://lh3.googleusercontent.com/d/${fileId}`;
+    return _driveProxyUrl(openMatch[1]);
   }
   
   // Patrón 3: https://drive.google.com/uc?id={FILE_ID}&export=view
   const ucPattern = /drive\.google\.com\/uc\?id=([a-zA-Z0-9_-]+)/;
   const ucMatch = trimmed.match(ucPattern);
   if (ucMatch) {
-    const fileId = ucMatch[1];
-    return `https://lh3.googleusercontent.com/d/${fileId}`;
+    return _driveProxyUrl(ucMatch[1]);
+  }
+
+  // Patrón 4: thumbnail directo de Drive → extraer el id y usar el proxy
+  const thumbPattern = /drive\.google\.com\/thumbnail\?id=([a-zA-Z0-9_-]+)/;
+  const thumbMatch = trimmed.match(thumbPattern);
+  if (thumbMatch) {
+    return _driveProxyUrl(thumbMatch[1]);
+  }
+
+  // Patrón 5: ya es nuestro proxy → dejarlo tal cual
+  if (trimmed.includes('/media/drive/')) {
+    return trimmed;
   }
   
-  // Patrón 4: https://drive.google.com/drive/folders/... (carpetas - no convertible)
+  // Patrón 6: https://drive.google.com/drive/folders/... (carpetas - no convertible)
   if (trimmed.includes('drive.google.com/drive/folders/')) {
     console.warn('No se puede usar una carpeta de Google Drive como imagen. Usa un enlace directo al archivo.');
     return url;

@@ -5,7 +5,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import {
   ArrowLeft, Save, Plus, Trash2, GripVertical,
   Video, FileText, BookOpen, X,
-  ChevronDown, Link as LinkIcon, Loader2,
+  ChevronDown, Link as LinkIcon,
   Edit3, Eye, Award, Send,
   DollarSign, Lock as LockIcon, FileCheck,
   Settings, CheckCircle, AlertCircle,
@@ -18,6 +18,9 @@ import { authService } from '../../services/authService';
 import EditorTexto from './EditorTexto';
 import ModalCrearExamenRapido from './ModalCrearExamenRapido';
 import { resolveImageUrl, isGoogleDriveUrl, convertGoogleDriveUrl } from '../../config/api.config';
+import { sanitizeHtml } from '../../utils/sanitize';
+import CourseImage from './CourseImage';
+import { useFeedback } from '../../hooks/useFeedback';
 
 // =============================================
 // COMPONENTES UI
@@ -26,6 +29,7 @@ import Dropdown from '../ui/Dropdown';
 import Switch from '../ui/Switch';
 import Input from '../ui/Input';
 import Badge from '../ui/Badge';
+import Button from '../ui/Button';
 
 // =============================================
 // CONSTANTES
@@ -67,13 +71,31 @@ const MONEDAS = [
   { value: 'EUR', label: 'EUR' },
 ];
 
+// ✅ #4: solo se ofrecen los tipos de bloqueo que SÍ son configurables desde la UI.
+// `secuencial` lo implementa el backend con el estado actual del curso.
+// NOTA (pendiente): `fecha`, `desempeno` y `mixto` requieren UI de configuración
+// adicional (respectivamente `bloqueo_config.fechas` y `EvaluacionLeccion`) que
+// todavía no existe; si se ofrecen, el usuario elegiría opciones que no hacen nada.
 const TIPOS_BLOQUEO = [
   { value: 'ninguno', label: 'Sin bloqueo' },
   { value: 'secuencial', label: 'Secuencial (aprobar modulo anterior)' },
-  { value: 'fecha', label: 'Por fecha' },
-  { value: 'desempeno', label: 'Por desempeno (nota minima)' },
-  { value: 'mixto', label: 'Mixto (secuencial + desempeno)' },
 ];
+
+// ✅ Genera IDs únicos y estables para módulos/lecciones/bloques.
+// Antes se usaba `Date.now()` (+1, +2...), lo que podía COLISIONAR si se creaban
+// varios elementos en el mismo milisegundo (rompía las keys de React y las
+// actualizaciones por id). `crypto.randomUUID()` es único y disponible en todos
+// los navegadores modernos; hay fallback por si el contexto no es seguro (http).
+const nuevoId = () => {
+  try {
+    if (typeof crypto !== 'undefined' && crypto.randomUUID) {
+      return crypto.randomUUID();
+    }
+  } catch {
+    // contexto no seguro (http) o API ausente → usar fallback
+  }
+  return `id-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+};
 
 const TIPOS_BLOQUE = [
   { value: 'video', label: 'Video', icon: Video },
@@ -82,6 +104,11 @@ const TIPOS_BLOQUE = [
   { value: 'examen', label: 'Examen', icon: Award },
   { value: 'recurso', label: 'Recurso', icon: LinkIcon },
 ];
+
+const TIPO_ICON_MAP = TIPOS_BLOQUE.reduce((acc, t) => {
+  acc[t.value] = t.icon;
+  return acc;
+}, {});
 
 // =============================================
 // COMPONENTE BLOQUE DE CONTENIDO
@@ -93,6 +120,7 @@ const BloqueContenido = ({
   onEliminar,
   onMoveUp,
   onMoveDown,
+  onDirtyChange,
   examenesDisponibles = [],
   onExamenCreado,
   cursoTitulo = 'Curso',
@@ -102,6 +130,25 @@ const BloqueContenido = ({
   const [vistaPrevia, setVistaPrevia] = useState(false);
   const [tempBloque, setTempBloque] = useState(bloque);
   const [mostrarModalExamen, setMostrarModalExamen] = useState(false);
+
+  // ✅ #5: el editor de bloque mantiene su propio estado local (`tempBloque`) y
+  // solo lo confirma al estado global al pulsar "Guardar". Si el usuario edita y
+  // luego pulsa "Guardar curso" sin confirmar el bloque, sus cambios se perderían.
+  // Detectamos ese caso y avisamos al padre mediante `onDirtyChange`.
+  const onDirtyChangeRef = useRef(onDirtyChange);
+  useEffect(() => {
+    onDirtyChangeRef.current = onDirtyChange;
+  });
+
+  const hayCambiosSinGuardar = editando && JSON.stringify(tempBloque) !== JSON.stringify(bloque);
+
+  useEffect(() => {
+    onDirtyChangeRef.current?.(bloque.id, hayCambiosSinGuardar);
+  }, [bloque.id, hayCambiosSinGuardar]);
+
+  useEffect(() => {
+    return () => { onDirtyChangeRef.current?.(bloque.id, false); };
+  }, [bloque.id]);
 
   const handleSave = () => {
     onUpdate(tempBloque);
@@ -118,13 +165,8 @@ const BloqueContenido = ({
     return found ? found.label : tipo;
   };
 
-  const getTipoIcon = (tipo) => {
-    const found = TIPOS_BLOQUE.find(t => t.value === tipo);
-    return found ? found.icon : FileText;
-  };
-
   if (!editando) {
-    const IconComponent = getTipoIcon(bloque.tipo);
+    const IconComponent = TIPO_ICON_MAP[bloque.tipo] || FileText;
     return (
       <div className="flex items-center gap-2 p-2 bg-gray-50 rounded-lg hover:bg-gray-100 transition-colors group">
         <GripVertical className="w-3.5 h-3.5 text-gray-300 cursor-grab" />
@@ -187,15 +229,22 @@ const BloqueContenido = ({
           >
             Cancelar
           </button>
-          <button
+          <Button
+            variant="primary"
+            size="sm"
             onClick={handleSave}
-            className="px-3 py-1 text-xs font-medium text-white rounded-lg transition-colors"
-            style={{ backgroundColor: '#0f766e' }}
           >
             Guardar
-          </button>
+          </Button>
         </div>
       </div>
+
+      {hayCambiosSinGuardar && (
+        <div className="flex items-center gap-2 px-3 py-2 bg-amber-50 border border-amber-200 rounded-lg text-xs text-amber-700">
+          <AlertCircle className="w-3.5 h-3.5 flex-shrink-0" />
+          Recuerda guardar este bloque antes de guardar el curso.
+        </div>
+      )}
 
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
         <Input
@@ -274,16 +323,15 @@ const BloqueContenido = ({
                     ]}
                     className="flex-1"
                   />
-                  <button
+                  <Button
+                    variant="primary"
+                    size="sm"
+                    icon={<Plus className="w-3.5 h-3.5" />}
                     onClick={() => setMostrarModalExamen(true)}
-                    className="px-3 py-1.5 text-xs font-medium text-white rounded-lg transition-colors flex items-center gap-1 whitespace-nowrap"
-                    style={{ backgroundColor: '#0f766e' }}
-                    onMouseEnter={(e) => e.target.style.backgroundColor = '#0d5e57'}
-                    onMouseLeave={(e) => e.target.style.backgroundColor = '#0f766e'}
+                    className="whitespace-nowrap"
                   >
-                    <Plus className="w-3.5 h-3.5" />
                     Nuevo
-                  </button>
+                  </Button>
                 </div>
               </div>
             )}
@@ -366,7 +414,7 @@ const BloqueContenido = ({
             {tempBloque.tipo === 'texto' && (
               <div 
                 className="prose prose-slate max-w-none"
-                dangerouslySetInnerHTML={{ __html: tempBloque.contenido?.texto || '' }}
+                dangerouslySetInnerHTML={{ __html: sanitizeHtml(tempBloque.contenido?.texto || '') }}
               />
             )}
             {tempBloque.tipo === 'quiz' && (
@@ -425,7 +473,6 @@ const BloqueContenido = ({
 const Toolbar = ({ datos, setDatos }) => {
   const [pagoActivo, setPagoActivo] = useState(datos.precio_tipo === 'pago');
   const [certificadoActivo, setCertificadoActivo] = useState(datos.certificado_habilitado);
-  const [subiendoImagen, setSubiendoImagen] = useState(false);
   const [errorImagen, setErrorImagen] = useState('');
   const fileInputRef = useRef(null);
   const [dragOver, setDragOver] = useState(false);
@@ -588,17 +635,6 @@ const Toolbar = ({ datos, setDatos }) => {
               size="sm"
             />
           </div>
-          
-          <div className="flex items-center gap-1">
-            <Clock className="w-3.5 h-3.5 text-gray-400 flex-shrink-0" />
-            <Input
-              value={datos.duracion}
-              onChange={(e) => setDatos({ ...datos, duracion: e.target.value })}
-              placeholder="Duración"
-              className="w-24"
-              size="sm"
-            />
-          </div>
 
           <div className="w-px h-6 bg-gray-200 flex-shrink-0" />
 
@@ -716,13 +752,11 @@ const Toolbar = ({ datos, setDatos }) => {
             >
               {imagenUrl ? (
                 <>
-                  <img 
-                    src={imagenUrl} 
-                    alt="Portada del curso" 
-                    className="w-full h-full object-cover"
-                    onError={(e) => {
-                      e.target.style.display = 'none';
-                    }}
+                  <CourseImage
+                    src={datos.imagen_url}
+                    alt="Portada del curso"
+                    className="w-full h-full"
+                    imgClassName="w-full h-full object-cover"
                   />
                   <div className="absolute inset-0 bg-black/0 hover:bg-black/30 transition-colors flex items-center justify-center opacity-0 hover:opacity-100">
                     <button
@@ -835,6 +869,7 @@ const Toolbar = ({ datos, setDatos }) => {
 // COMPONENTE PRINCIPAL
 // =============================================
 const CreadorCurso = ({ cursoInicial = null, onGuardar, onVolver }) => {
+  const { confirmar } = useFeedback();
   const [cargando, setCargando] = useState(false);
   const [error, setError] = useState('');
   const [examenesDisponibles, setExamenesDisponibles] = useState([]);
@@ -876,7 +911,6 @@ const CreadorCurso = ({ cursoInicial = null, onGuardar, onVolver }) => {
     precio_monto: cursoInicial?.precio_monto || '',
     moneda: cursoInicial?.moneda || 'PEN',
     numero_pago: cursoInicial?.numero_pago || '',
-    duracion: cursoInicial?.duracion || '',
     instructor: cursoInicial?.instructor || cursoInicial?.docente_nombre || nombreDocente,
     imagen_url: cursoInicial?.imagen_url || '',
     tipo_bloqueo: cursoInicial?.tipo_bloqueo || 'ninguno',
@@ -888,21 +922,21 @@ const CreadorCurso = ({ cursoInicial = null, onGuardar, onVolver }) => {
   const [modulos, setModulos] = useState(() => {
     if (cursoInicial?.modulos) return cursoInicial.modulos;
     return [{ 
-      id: Date.now(), 
+      id: nuevoId(), 
       titulo: 'Módulo 1', 
       lecciones: [
         { 
-          id: Date.now() + 1, 
+          id: nuevoId(), 
           titulo: 'Introducción', 
           bloques: [
             { 
-              id: Date.now() + 2, 
+              id: nuevoId(), 
               titulo: 'Video introductorio', 
               tipo: 'video', 
               contenido: { video_url: '' } 
             },
             { 
-              id: Date.now() + 3, 
+              id: nuevoId(), 
               titulo: 'Contenido de la clase', 
               tipo: 'texto', 
               contenido: { texto: '' } 
@@ -915,16 +949,64 @@ const CreadorCurso = ({ cursoInicial = null, onGuardar, onVolver }) => {
 
   const [moduloEditando, setModuloEditando] = useState(null);
 
+  // ✅ #5: bloques cuyo editor interno tiene cambios sin confirmar (su botón
+  // "Guardar" no se ha pulsado). Evita perder cambios al guardar el curso.
+  const [bloquesSinGuardar, setBloquesSinGuardar] = useState({});
+
+  const handleBloqueDirtyChange = (bloqueId, dirty) => {
+    setBloquesSinGuardar(prev => {
+      if (!!prev[bloqueId] === dirty) return prev;
+      return { ...prev, [bloqueId]: dirty };
+    });
+  };
+
+  // ✅ #2: snapshot del estado inicial para detectar cambios sin guardar.
+  // Se captura una sola vez (lazy) y se actualiza tras guardar/publicar.
+  const snapshotInicialRef = useRef(null);
+  if (snapshotInicialRef.current === null) {
+    snapshotInicialRef.current = JSON.stringify({ datos, modulos });
+  }
+
+  const hayCambiosSinGuardar =
+    JSON.stringify({ datos, modulos }) !== snapshotInicialRef.current;
+
+  // Advierte al cerrar/recargar la pestaña si hay cambios sin guardar.
+  useEffect(() => {
+    const handler = (e) => {
+      if (!hayCambiosSinGuardar) return;
+      e.preventDefault();
+      e.returnValue = '';
+      return '';
+    };
+    window.addEventListener('beforeunload', handler);
+    return () => window.removeEventListener('beforeunload', handler);
+  }, [hayCambiosSinGuardar]);
+
+  // Botón "atrás": confirma antes de salir si hay cambios sin guardar.
+  const handleVolver = async () => {
+    if (hayCambiosSinGuardar) {
+      const ok = await confirmar({
+        titulo: 'Cambios sin guardar',
+        mensaje: 'Tienes cambios sin guardar. ¿Seguro que quieres salir?',
+        confirmText: 'Salir',
+        cancelText: 'Cancelar',
+        variant: 'warning',
+      });
+      if (!ok) return;
+    }
+    onVolver?.();
+  };
+
   const agregarModulo = () => {
     const nuevoModulo = {
-      id: Date.now(),
+      id: nuevoId(),
       titulo: `Módulo ${modulos.length + 1}`,
       lecciones: [{ 
-        id: Date.now() + 1, 
+        id: nuevoId(), 
         titulo: 'Nueva Lección', 
         bloques: [
           { 
-            id: Date.now() + 2, 
+            id: nuevoId(), 
             titulo: 'Contenido', 
             tipo: 'texto', 
             contenido: { texto: '' } 
@@ -936,8 +1018,15 @@ const CreadorCurso = ({ cursoInicial = null, onGuardar, onVolver }) => {
     setModuloEditando(nuevoModulo.id);
   };
 
-  const eliminarModulo = (id) => {
-    if (!window.confirm('¿Eliminar este módulo?')) return;
+  const eliminarModulo = async (id) => {
+    const ok = await confirmar({
+      titulo: 'Eliminar módulo',
+      mensaje: '¿Eliminar este módulo?',
+      confirmText: 'Eliminar',
+      cancelText: 'Cancelar',
+      variant: 'danger',
+    });
+    if (!ok) return;
     setModulos(modulos.filter(m => m.id !== id));
     if (moduloEditando === id) setModuloEditando(null);
   };
@@ -946,11 +1035,11 @@ const CreadorCurso = ({ cursoInicial = null, onGuardar, onVolver }) => {
     setModulos(modulos.map(m => {
       if (m.id !== moduloId) return m;
       const nuevaLeccion = { 
-        id: Date.now(), 
+        id: nuevoId(), 
         titulo: `Lección ${m.lecciones.length + 1}`, 
         bloques: [
           { 
-            id: Date.now() + 1, 
+            id: nuevoId(), 
             titulo: 'Contenido', 
             tipo: 'texto', 
             contenido: { texto: '' } 
@@ -961,7 +1050,18 @@ const CreadorCurso = ({ cursoInicial = null, onGuardar, onVolver }) => {
     }));
   };
 
-  const eliminarLeccion = (moduloId, leccionId) => {
+  const eliminarLeccion = async (moduloId, leccionId) => {
+    const modulo = modulos.find(m => m.id === moduloId);
+    const leccion = modulo?.lecciones.find(l => l.id === leccionId);
+    const nombre = leccion?.titulo || 'sin título';
+    const ok = await confirmar({
+      titulo: 'Eliminar lección',
+      mensaje: `¿Eliminar la lección «${nombre}»? Se perderá su contenido.`,
+      confirmText: 'Eliminar',
+      cancelText: 'Cancelar',
+      variant: 'danger',
+    });
+    if (!ok) return;
     setModulos(modulos.map(m => {
       if (m.id !== moduloId) return m;
       return { ...m, lecciones: m.lecciones.filter(l => l.id !== leccionId) };
@@ -980,7 +1080,7 @@ const CreadorCurso = ({ cursoInicial = null, onGuardar, onVolver }) => {
             bloques: [
               ...l.bloques,
               { 
-                id: Date.now(), 
+                id: nuevoId(), 
                 titulo: `Bloque ${l.bloques.length + 1}`, 
                 tipo: 'texto', 
                 contenido: { texto: '' } 
@@ -1010,7 +1110,19 @@ const CreadorCurso = ({ cursoInicial = null, onGuardar, onVolver }) => {
     }));
   };
 
-  const eliminarBloque = (moduloId, leccionId, bloqueId) => {
+  const eliminarBloque = async (moduloId, leccionId, bloqueId) => {
+    const modulo = modulos.find(m => m.id === moduloId);
+    const leccion = modulo?.lecciones.find(l => l.id === leccionId);
+    const bloque = leccion?.bloques.find(b => b.id === bloqueId);
+    const nombre = bloque?.titulo || 'sin título';
+    const ok = await confirmar({
+      titulo: 'Eliminar bloque',
+      mensaje: `¿Eliminar el bloque «${nombre}»? Se perderá su contenido.`,
+      confirmText: 'Eliminar',
+      cancelText: 'Cancelar',
+      variant: 'danger',
+    });
+    if (!ok) return;
     setModulos(modulos.map(m => {
       if (m.id !== moduloId) return m;
       return {
@@ -1067,21 +1179,122 @@ const CreadorCurso = ({ cursoInicial = null, onGuardar, onVolver }) => {
     });
   };
 
-  const guardarCurso = async () => {
+  // ✅ #1: validación completa del curso. Devuelve el primer error encontrado
+  // (o null si todo está correcto). Se muestra en el banner de error existente.
+  const validarCurso = () => {
     if (!datos.titulo.trim()) {
-      setError('El título del curso es obligatorio');
+      return 'El título del curso es obligatorio';
+    }
+
+    // a) Al menos 1 módulo con al menos 1 lección
+    const totalLecciones = modulos.reduce((acc, m) => acc + m.lecciones.length, 0);
+    if (modulos.length === 0 || totalLecciones === 0) {
+      return 'Agrega al menos un módulo con una lección';
+    }
+
+    for (let mi = 0; mi < modulos.length; mi++) {
+      const modulo = modulos[mi];
+      for (let li = 0; li < modulo.lecciones.length; li++) {
+        const leccion = modulo.lecciones[li];
+
+        // b) Cada lección debe tener título
+        if (!leccion.titulo || !leccion.titulo.trim()) {
+          return `El título de la lección ${li + 1} del módulo ${mi + 1} es obligatorio`;
+        }
+
+        // c) Cada bloque debe tener contenido según su tipo
+        for (let bi = 0; bi < leccion.bloques.length; bi++) {
+          const bloque = leccion.bloques[bi];
+          const contenido = bloque.contenido || {};
+
+          if (bloque.tipo === 'video' && !(contenido.video_url || '').trim()) {
+            return `El video del bloque ${bi + 1} no tiene URL`;
+          }
+
+          if (bloque.tipo === 'texto') {
+            const textoSinEtiquetas = (contenido.texto || '')
+              .replace(/<[^>]*>/g, '')
+              .replace(/&nbsp;/g, ' ')
+              .trim();
+            if (!textoSinEtiquetas) {
+              return `El bloque de texto ${bi + 1} está vacío`;
+            }
+          }
+
+          if (bloque.tipo === 'examen' && !contenido.examen_id) {
+            return `El bloque ${bi + 1} no tiene un examen seleccionado`;
+          }
+
+          if (bloque.tipo === 'recurso') {
+            const archivosValidos = (contenido.archivos || []).filter(a => (a.url || '').trim());
+            if (archivosValidos.length === 0) {
+              return `El bloque de recurso ${bi + 1} no tiene archivos`;
+            }
+          }
+        }
+      }
+    }
+
+    // d) Precio del curso
+    if (datos.precio_tipo === 'pago') {
+      const monto = parseFloat(datos.precio_monto);
+      if (!Number.isFinite(monto) || monto <= 0) {
+        return 'Indica un monto mayor a 0 para el curso de pago';
+      }
+    }
+
+    // e) Nota mínima del certificado
+    if (
+      datos.certificado_habilitado &&
+      datos.certificado_nota_minima !== '' &&
+      datos.certificado_nota_minima != null
+    ) {
+      const nota = parseFloat(datos.certificado_nota_minima);
+      if (!Number.isFinite(nota) || nota < 0 || nota > 20) {
+        return 'La nota mínima debe estar entre 0 y 20';
+      }
+    }
+
+    return null;
+  };
+
+  const guardarCurso = async () => {
+    const errorValidacion = validarCurso();
+    if (errorValidacion) {
+      setError(errorValidacion);
       return null;
     }
+
+    // ✅ #5: si hay bloques abiertos con cambios sin confirmar, avisamos antes de
+    // guardar para que el usuario pulse "Guardar" (o "Cancelar") dentro del bloque.
+    const bloquesPendientes = Object.values(bloquesSinGuardar).filter(Boolean).length;
+    if (bloquesPendientes > 0) {
+      setError(
+        `Tienes ${bloquesPendientes} bloque(s) con cambios sin guardar. ` +
+        'Pulsa "Guardar" (o "Cancelar") dentro del bloque antes de guardar el curso.'
+      );
+      return null;
+    }
+
     setError('');
-    
+
+    // ✅ FIX CRÍTICO: si hay un archivo pendiente, `datos.imagen_url` es una URL
+    // `blob:` local que NO debe enviarse al backend (los demás usuarios verían
+    // una imagen rota). En ese caso conservamos la imagen anterior (si editamos)
+    // y el archivo se sube después con `subirImagen`.
+    const urlImagenParaGuardar = datos._imagenFile
+      ? (cursoInicial?.imagen_url || '')
+      : (datos.imagen_url || '');
+
     const cursoData = {
       titulo: datos.titulo.trim(),
       descripcion: datos.descripcion.trim(),
       categoria: datos.categoria,
       nivel: datos.nivel,
-      duracion: datos.duracion,
-      instructor: datos.instructor,
-      imagen_url: datos._imagenFile ? datos.imagen_url : datos.imagen_url,
+      // NOTA: `duracion` fue ELIMINADA del curso (era texto libre sin uso real).
+      // NOTA: `instructor` no existe como columna en el modelo Curso;
+      // se usa `docente_nombre` (lo asigna el backend). No se envía.
+      imagen_url: urlImagenParaGuardar,
       precio_tipo: datos.precio_tipo || 'gratis',
       precio_monto: datos.precio_tipo === 'pago' && datos.precio_monto ? parseFloat(datos.precio_monto) : null,
       moneda: datos.moneda || 'PEN',
@@ -1121,8 +1334,15 @@ const CreadorCurso = ({ cursoInicial = null, onGuardar, onVolver }) => {
           resultado.imagen_url = imgResult.imagen_url;
         }
       } catch (imgError) {
-        console.warn('Error subiendo imagen (no crítico):', imgError);
-        // No fallar el guardado por error de imagen
+        console.warn('Error subiendo imagen:', imgError);
+        // ✅ FIX: antes se silenciaba. Ahora avisamos al usuario porque el curso
+        // quedará sin la imagen nueva (se conserva la anterior si existía).
+        setError(
+          'El curso se guardó, pero la imagen no se pudo subir: ' +
+          (imgError?.message || 'error desconocido') +
+          '. Puedes intentarlo de nuevo editando el curso.'
+        );
+        return resultado;
       }
     }
     
@@ -1135,6 +1355,7 @@ const CreadorCurso = ({ cursoInicial = null, onGuardar, onVolver }) => {
     try {
       const guardado = await guardarCurso();
       if (!guardado) return;
+      snapshotInicialRef.current = JSON.stringify({ datos, modulos });
       onGuardar(guardado);
     } catch (e) {
       console.error('Error guardando curso:', e);
@@ -1151,6 +1372,7 @@ const CreadorCurso = ({ cursoInicial = null, onGuardar, onVolver }) => {
       const guardado = await guardarCurso();
       if (!guardado) return;
       await cursosService.publicar(guardado.id);
+      snapshotInicialRef.current = JSON.stringify({ datos, modulos });
       onGuardar(guardado);
     } catch (e) {
       console.error('Error publicando curso:', e);
@@ -1165,7 +1387,7 @@ const CreadorCurso = ({ cursoInicial = null, onGuardar, onVolver }) => {
       <header className="sticky top-0 z-50 bg-white/80 backdrop-blur-sm border-b border-gray-200/50">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 h-14 flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <button onClick={onVolver} className="p-2 hover:bg-gray-100 rounded-lg transition-colors text-gray-400 hover:text-gray-600">
+            <button onClick={handleVolver} className="p-2 hover:bg-gray-100 rounded-lg transition-colors text-gray-400 hover:text-gray-600">
               <ArrowLeft className="w-4 h-4" />
             </button>
             <span className="text-sm font-medium text-gray-700">
@@ -1176,25 +1398,26 @@ const CreadorCurso = ({ cursoInicial = null, onGuardar, onVolver }) => {
             </Badge>
           </div>
           <div className="flex items-center gap-2">
-            <button
+            <Button
+              variant="primary"
+              size="md"
               onClick={handlePublicar}
               disabled={cargando || !datos.titulo.trim()}
-              className="px-4 py-1.5 text-sm font-medium text-white rounded-lg transition-colors flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
-              style={{ backgroundColor: '#0f766e' }}
-              onMouseEnter={(e) => !cargando && datos.titulo.trim() && (e.target.style.backgroundColor = '#0d5e57')}
-              onMouseLeave={(e) => !cargando && datos.titulo.trim() && (e.target.style.backgroundColor = '#0f766e')}
+              loading={cargando}
+              icon={!cargando ? <Send className="w-4 h-4" /> : null}
             >
-              {cargando ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
               {cargando ? 'Procesando...' : 'Publicar'}
-            </button>
-            <button
+            </Button>
+            <Button
+              variant="secondary"
+              size="md"
               onClick={handleGuardar}
               disabled={cargando}
-              className="px-4 py-1.5 text-sm font-medium text-white bg-gray-900 rounded-lg hover:bg-gray-800 transition-colors flex items-center gap-2 disabled:opacity-50"
+              loading={cargando}
+              icon={!cargando ? <Save className="w-4 h-4" /> : null}
             >
-              {cargando ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
               {cargando ? 'Guardando...' : 'Guardar'}
-            </button>
+            </Button>
           </div>
         </div>
       </header>
@@ -1309,6 +1532,7 @@ const CreadorCurso = ({ cursoInicial = null, onGuardar, onVolver }) => {
                               index={bIndex}
                               totalBloques={leccion.bloques.length}
                               onUpdate={(updated) => actualizarBloque(modulo.id, leccion.id, updated)}
+                              onDirtyChange={handleBloqueDirtyChange}
                               onEliminar={() => eliminarBloque(modulo.id, leccion.id, bloque.id)}
                               onMoveUp={() => moverBloque(modulo.id, leccion.id, bloque.id, -1)}
                               onMoveDown={() => moverBloque(modulo.id, leccion.id, bloque.id, 1)}

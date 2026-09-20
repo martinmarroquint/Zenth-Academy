@@ -22,10 +22,12 @@ const DatePicker = ({
   const [selectedDate, setSelectedDate] = useState(null);
   const [viewMonth, setViewMonth] = useState(new Date().getMonth());
   const [viewYear, setViewYear] = useState(new Date().getFullYear());
+  const [prevValue, setPrevValue] = useState(value);
   const pickerRef = useRef(null);
   const inputRef = useRef(null);
 
-  useEffect(() => {
+  if (value !== prevValue) {
+    setPrevValue(value);
     if (value) {
       const date = new Date(value);
       if (!isNaN(date)) {
@@ -34,7 +36,7 @@ const DatePicker = ({
         setViewYear(date.getFullYear());
       }
     }
-  }, [value]);
+  }
 
   useEffect(() => {
     const handleClickOutside = (e) => {
@@ -336,4 +338,4 @@ const DatePicker = ({
   );
 };
 
-export default DatePicker;
+export default React.memo(DatePicker);

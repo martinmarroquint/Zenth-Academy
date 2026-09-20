@@ -11,6 +11,7 @@ from datetime import datetime, timezone
 
 from app.database import get_db
 from app.core.dependencies import require_docente
+from app.core.errors import error_interno
 from app.models.usuario import Usuario
 from app.models.material_compartido import MaterialCompartido
 from app.schemas.material_compartido import (
@@ -70,8 +71,7 @@ async def listar_materiales(
         
         return [_material_to_dict(m) for m in materiales]
     except Exception as e:
-        logger.error(f"Error listando materiales: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail=error_interno(e, "Error listando materiales"))
 
 
 @router.get("/{id}", response_model=MaterialResponse)
@@ -91,8 +91,7 @@ async def obtener_material(
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"Error obteniendo material: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail=error_interno(e, "Error obteniendo material"))
 
 
 @router.post("/", response_model=MaterialResponse, status_code=201)
@@ -125,8 +124,7 @@ async def crear_material(
         return _material_to_dict(material)
     except Exception as e:
         db.rollback()
-        logger.error(f"Error creando material: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail=error_interno(e, "Error creando material"))
 
 
 @router.put("/{id}", response_model=MaterialResponse)
@@ -157,8 +155,7 @@ async def actualizar_material(
         raise
     except Exception as e:
         db.rollback()
-        logger.error(f"Error actualizando material: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail=error_interno(e, "Error actualizando material"))
 
 
 @router.delete("/{id}", response_model=MensajeResponse)
@@ -183,8 +180,7 @@ async def eliminar_material(
         raise
     except Exception as e:
         db.rollback()
-        logger.error(f"Error eliminando material: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail=error_interno(e, "Error eliminando material"))
 
 
 @router.patch("/{id}/toggle", response_model=MaterialResponse)
@@ -212,5 +208,4 @@ async def toggle_material(
         raise
     except Exception as e:
         db.rollback()
-        logger.error(f"Error togglando material: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail=error_interno(e, "Error togglando material"))

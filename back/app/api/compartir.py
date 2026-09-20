@@ -12,6 +12,7 @@ from datetime import datetime, timezone, timedelta
 
 from app.database import get_db
 from app.core.dependencies import require_docente, get_current_user_optional
+from app.core.errors import error_interno
 from app.models.usuario import Usuario
 from app.models.material_compartido import MaterialCompartido
 from app.models.historial_comparticion import HistorialComparticion
@@ -192,8 +193,7 @@ def crear_sala(
         raise
     except Exception as e:
         db.rollback()
-        logger.error(f"Error creando sala: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail=error_interno(e, "Error creando sala"))
 
 
 @router.get("/salas/activa", response_model=Optional[SalaDocenteResponse])
@@ -227,8 +227,7 @@ def sala_activa_docente(
             "qr_expira": activa.qr_expira.isoformat() if activa.qr_expira else None,
         }
     except Exception as e:
-        logger.error(f"Error obteniendo sala activa: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail=error_interno(e, "Error obteniendo sala activa"))
 
 
 # =============================================
@@ -259,8 +258,7 @@ def estado_sala(
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"Error obteniendo estado: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail=error_interno(e, "Error obteniendo estado"))
 
 
 # =============================================
@@ -313,8 +311,7 @@ def vincular_sala(
         raise
     except Exception as e:
         db.rollback()
-        logger.error(f"Error vinculando sala: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail=error_interno(e, "Error vinculando sala"))
 
 
 # =============================================
@@ -361,8 +358,7 @@ def enviar_material(
         raise
     except Exception as e:
         db.rollback()
-        logger.error(f"Error enviando material: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail=error_interno(e, "Error enviando material"))
 
 
 # =============================================
@@ -393,8 +389,7 @@ def quitar_material(
         raise
     except Exception as e:
         db.rollback()
-        logger.error(f"Error quitando material: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail=error_interno(e, "Error quitando material"))
 
 
 # =============================================
@@ -443,5 +438,4 @@ def cerrar_sala(
         raise
     except Exception as e:
         db.rollback()
-        logger.error(f"Error cerrando sala: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail=error_interno(e, "Error cerrando sala"))

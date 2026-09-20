@@ -42,7 +42,7 @@ const ModalSolicitudDocente = ({ abierto, onCerrar, onSolicitudEnviada }) => {
       } else {
         setSolicitudExistente(null);
       }
-    } catch (e) {
+    } catch {
       // Silenciar
     }
   };

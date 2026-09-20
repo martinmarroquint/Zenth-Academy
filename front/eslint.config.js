@@ -6,7 +6,14 @@ import reactRefresh from 'eslint-plugin-react-refresh'
 import { defineConfig, globalIgnores } from 'eslint/config'
 
 export default defineConfig([
-  globalIgnores(['dist']),
+  // ✅ Ignorar artefactos generados (antes se linteaba `coverage/` y generaba ruido)
+  globalIgnores([
+    'dist',
+    'coverage',
+    'node_modules',
+    'htmlcov',
+    '**/*.min.js',
+  ]),
   {
     files: ['**/*.{js,jsx}'],
     extends: [
@@ -28,7 +35,16 @@ export default defineConfig([
     },
     rules: {
       'react/jsx-uses-vars': 'error',
-      'no-unused-vars': ['error', { varsIgnorePattern: '^[A-Z_]' }],
+      'no-unused-vars': ['error', { varsIgnorePattern: '^[A-Z_]', argsIgnorePattern: '^_' }],
+      // Permitir bloques vacíos intencionales (ej: catch que ignora)
+      'no-empty': ['error', { allowEmptyCatch: true }],
+    },
+  },
+  // Archivos de configuración (Node, no browser)
+  {
+    files: ['vite.config.js', 'eslint.config.js', 'postcss.config.js', 'tailwind.config.js'],
+    languageOptions: {
+      globals: { ...globals.node },
     },
   },
 ])

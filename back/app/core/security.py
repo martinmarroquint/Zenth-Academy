@@ -1,10 +1,11 @@
 # app/core/security.py
 # CONFIGURACIÓN DE SEGURIDAD - JWT ACCESS + REFRESH CON ROTACIÓN
 
-import os
 import uuid
 import hashlib
 import secrets
+import sys
+import os
 from datetime import datetime, timedelta, timezone
 from jose import jwt
 from typing import Optional
@@ -13,24 +14,26 @@ from typing import Optional
 # CONFIGURACIÓN - UNIFICADA Y SEGURA
 # =============================================
 
-# Usar JWT_SECRET_KEY de config (requerido) o generar uno seguro
-# En producción, SIEMPRE debe estar definido en .env
-_jwt_secret = os.getenv("JWT_SECRET_KEY")
+# ✅ FIX CRÍTICO: usar settings (que SÍ lee el .env vía pydantic-settings),
+# NO os.getenv() (que ignora el .env y generaba una clave aleatoria por reinicio).
+from app.config import settings
 
-if not _jwt_secret:
-    # En desarrollo, generar uno temporal (se pierde al reiniciar)
-    _jwt_secret = secrets.token_hex(32)
-    import sys
-    print("ADVERTENCIA: JWT_SECRET_KEY no definido. Usando clave temporal.", file=sys.stderr)
-    print("  Define JWT_SECRET_KEY en .env para produccion.", file=sys.stderr)
+SECRET_KEY = settings.JWT_SECRET_KEY
 
-SECRET_KEY = _jwt_secret
-ALGORITHM = "HS256"
+if not SECRET_KEY or len(SECRET_KEY) < 16:
+    print(
+        "ERROR: JWT_SECRET_KEY ausente o demasiado corta. "
+        "Defina una clave segura (>=16 chars) en .env",
+        file=sys.stderr
+    )
+    raise RuntimeError("JWT_SECRET_KEY inválida o no configurada")
+
+ALGORITHM = settings.JWT_ALGORITHM
 
 # Access token de corta duración (por defecto 60 min)
-ACCESS_TOKEN_EXPIRE_MINUTES = int(os.getenv("ACCESS_TOKEN_EXPIRE_MINUTES", "60"))
+ACCESS_TOKEN_EXPIRE_MINUTES = int(os.environ.get("ACCESS_TOKEN_EXPIRE_MINUTES", "60"))
 # Refresh token de larga duración (por defecto 7 días)
-REFRESH_TOKEN_EXPIRE_MINUTES = int(os.getenv("REFRESH_TOKEN_EXPIRE_MINUTES", "10080"))
+REFRESH_TOKEN_EXPIRE_MINUTES = int(os.environ.get("REFRESH_TOKEN_EXPIRE_MINUTES", "10080"))
 
 
 # =============================================

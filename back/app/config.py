@@ -1,6 +1,6 @@
 from typing import List, Optional
 from pydantic_settings import BaseSettings
-from pydantic import ConfigDict, field_validator
+from pydantic import ConfigDict, field_validator, model_validator
 import json
 
 class Settings(BaseSettings):
@@ -75,6 +75,36 @@ class Settings(BaseSettings):
     LOGIN_TIMEOUT_MINUTES: int = 15  # ← NUEVO
 
     # =====================================================
+    # MULTI-TENANT (empresa por defecto)
+    # Configurable por entorno para no hardcodear el UUID.
+    # =====================================================
+    EMPRESA_ID_DEFAULT: str = "ada6b7c4-162e-457c-9d2a-89006be2b8c9"
+
+    # =====================================================
+    # OAUTH (login social: Google / Microsoft)
+    # Si las credenciales están vacías, el proveedor se deshabilita
+    # automáticamente (el frontend no muestra su botón).
+    # =====================================================
+    GOOGLE_CLIENT_ID: Optional[str] = None
+    GOOGLE_CLIENT_SECRET: Optional[str] = None
+    MICROSOFT_CLIENT_ID: Optional[str] = None
+    MICROSOFT_CLIENT_SECRET: Optional[str] = None
+    MICROSOFT_TENANT: str = "common"  # "common" | "organizations" | "<tenant-id>"
+
+    # URL pública del backend (para construir el redirect_uri de OAuth)
+    BACKEND_PUBLIC_URL: str = "http://localhost:8000"
+    # URL del frontend a la que volvemos tras autenticar
+    FRONTEND_URL: str = "http://localhost:5173"
+
+    @property
+    def google_oauth_habilitado(self) -> bool:
+        return bool(self.GOOGLE_CLIENT_ID and self.GOOGLE_CLIENT_SECRET)
+
+    @property
+    def microsoft_oauth_habilitado(self) -> bool:
+        return bool(self.MICROSOFT_CLIENT_ID and self.MICROSOFT_CLIENT_SECRET)
+
+    # =====================================================
     # REDIS (opcional para caché)
     # =====================================================
     REDIS_URL: Optional[str] = None  # ← NUEVO
@@ -86,6 +116,19 @@ class Settings(BaseSettings):
         case_sensitive=True,
         extra="ignore"  # Ignorar campos extra en el .env
     )
+
+    # =====================================================
+    # VALIDADORES DE SEGURIDAD
+    # =====================================================
+    @model_validator(mode="after")
+    def _forzar_seguridad_en_produccion(self):
+        """
+        ✅ SEGURIDAD: Nunca permitir DEBUG=True en producción, sin importar
+        lo que diga el .env. Evita SQL echo, docs expuestos y trazas de error.
+        """
+        if self.ENVIRONMENT.lower() == "production" and self.DEBUG:
+            object.__setattr__(self, "DEBUG", False)
+        return self
 
     # =====================================================
     # PROPIEDADES CALCULADAS

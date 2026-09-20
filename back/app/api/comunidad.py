@@ -9,6 +9,7 @@ import logging
 
 from app.database import get_db
 from app.core.dependencies import require_roles, get_current_user_id
+from app.core.errors import error_interno
 from app.models.post import Post, Comentario, LikePost
 from app.schemas.post import (
     PostCreate, PostUpdate, PostResponse,
@@ -70,8 +71,7 @@ async def listar_posts(
         posts = query.order_by(Post.created_at.desc()).offset(offset).limit(limit).all()
         return [_post_to_dict(db, p) for p in posts]
     except Exception as e:
-        logger.error(f"Error listando posts: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail=error_interno(e, "Error listando posts"))
 
 
 @router.get("/{id}", response_model=PostResponse)
@@ -103,8 +103,7 @@ async def obtener_post(
         raise
     except Exception as e:
         db.rollback()
-        logger.error(f"Error obteniendo post: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail=error_interno(e, "Error obteniendo post"))
 
 
 @router.post("/", response_model=PostResponse, status_code=201)
@@ -136,8 +135,7 @@ async def crear_post(
         return _post_to_dict(db, post)
     except Exception as e:
         db.rollback()
-        logger.error(f"Error creando post: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail=error_interno(e, "Error creando post"))
 
 
 @router.put("/{id}", response_model=PostResponse)
@@ -161,8 +159,7 @@ async def actualizar_post(
         raise
     except Exception as e:
         db.rollback()
-        logger.error(f"Error actualizando post: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail=error_interno(e, "Error actualizando post"))
 
 
 @router.delete("/{id}", response_model=MensajeResponse)
@@ -182,8 +179,7 @@ async def eliminar_post(
         raise
     except Exception as e:
         db.rollback()
-        logger.error(f"Error eliminando post: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail=error_interno(e, "Error eliminando post"))
 
 
 @router.post("/{id}/comentarios", response_model=ComentarioResponse, status_code=201)
@@ -223,8 +219,7 @@ async def crear_comentario(
         raise
     except Exception as e:
         db.rollback()
-        logger.error(f"Error creando comentario: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail=error_interno(e, "Error creando comentario"))
 
 
 @router.post("/{id}/like", response_model=LikeResponse)
@@ -260,5 +255,4 @@ async def dar_like(
         raise
     except Exception as e:
         db.rollback()
-        logger.error(f"Error dando like: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail=error_interno(e, "Error dando like"))

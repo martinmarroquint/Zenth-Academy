@@ -2,6 +2,7 @@
 // SERVICIO DE AUTENTICACIÓN - CON REGISTRO Y GESTIÓN DE USUARIOS
 
 import api from './api';
+import { API_CONFIG } from '../config/api.config';
 
 const TOKEN_KEY = 'token';
 const USER_KEY = 'user';
@@ -88,6 +89,78 @@ class AuthService {
     }
   }
 
+  // =============================================
+  // LOGIN SOCIAL (OAuth 2.0): Google / Microsoft
+  // =============================================
+
+  /** Devuelve qué proveedores están configurados en el backend. */
+  async obtenerProveedoresOAuth() {
+    try {
+      const r = await api.get('/auth/oauth/providers');
+      return { google: !!r?.google, microsoft: !!r?.microsoft };
+    } catch {
+      return { google: false, microsoft: false };
+    }
+  }
+
+  /** Redirige al usuario al proveedor (flujo completo en el backend). */
+  iniciarOAuth(provider, redirect = '') {
+    const base = API_CONFIG.BASE_URL;
+    const q = redirect ? `?redirect=${encodeURIComponent(redirect)}` : '';
+    window.location.href = `${base}/auth/oauth/${provider}/login${q}`;
+  }
+
+  /**
+   * Procesa el retorno del proveedor: guarda los tokens y carga el perfil.
+   * Se llama desde la página /auth/callback.
+   */
+  async procesarCallbackOAuth(searchParams) {
+    const accessToken = searchParams.get('access_token');
+    const refreshToken = searchParams.get('refresh_token');
+    const destino = searchParams.get('redirect') || '';
+
+    if (!accessToken) {
+      return { success: false, error: 'No se recibió el token de acceso' };
+    }
+
+    // Guardar tokens primero para que /auth/me use el Authorization correcto
+    this.setAuthData(accessToken, null, refreshToken);
+
+    try {
+      const user = await api.get('/auth/me');
+      this.setAuthData(accessToken, user, refreshToken);
+      return { success: true, user, redirect: destino };
+    } catch (error) {
+      console.error('Error obteniendo el perfil tras OAuth:', error);
+      this.logout?.();
+      return { success: false, error: 'No se pudo obtener el perfil' };
+    }
+  }
+
+  /**
+   * Login con Google Identity Services: envía el ID token al backend, que lo
+   * valida con las claves públicas de Google y emite NUESTRO JWT.
+   */
+  async loginConGoogle(credential) {
+    try {
+      const response = await api.request('/auth/google', {
+        method: 'POST',
+        body: JSON.stringify({ credential }),
+      });
+      if (response?.access_token) {
+        this.setAuthData(response.access_token, response.user, response.refresh_token);
+        return { success: true, user: response.user };
+      }
+      return { success: false, error: 'No se pudo iniciar sesión con Google' };
+    } catch (error) {
+      console.error('Error en login con Google:', error);
+      return {
+        success: false,
+        error: error.message || 'Error al iniciar sesión con Google'
+      };
+    }
+  }
+
   async register(data) {
     try {
       const response = await api.request('/auth/register', {
@@ -145,7 +218,7 @@ class AuthService {
       }
     }
     this.clearAuthData();
-    window.location.href = '/login';
+    window.location.href = '/';
   }
 
   async verificarToken() {

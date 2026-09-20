@@ -8,10 +8,11 @@ import {
   PenTool, MessageCircle, Award, LogOut, ChevronLeft,
   ChevronRight, HelpCircle, LayoutDashboard, Send, Settings,
   Home, GraduationCap, Calendar, Bell, UserCircle, Menu, X,
-  PanelLeftClose, PanelLeftOpen, GripVertical, Globe
+  PanelLeftClose, PanelLeftOpen, GripVertical, Globe, UserPlus
 } from 'lucide-react';
 import { authService } from '../../services/authService';
-import cursosService from '../../services/cursosService';
+import { useSolicitudes } from '../../hooks/useSolicitudes';
+import { useModo } from '../../hooks/useModo';
 import ModalSolicitudDocente from '../modals/ModalSolicitudDocente';
 
 const ICONOS_NAV = {
@@ -26,6 +27,7 @@ const ICONOS_NAV = {
   certificados: Award,
   carpeta: FolderOpen,
   solicitudes: Send,
+  'solicitudes-docente': UserPlus,
   configuracion: Settings,
   home: Home,
   perfil: UserCircle,
@@ -40,7 +42,8 @@ const MENU_POR_ROL = {
       items: [
         { id: 'usuarios', label: 'Usuarios', to: '', end: true },
         { id: 'cursos', label: 'Mis Cursos', to: 'cursos' },
-        { id: 'solicitudes', label: 'Solicitudes', to: 'solicitudes' },
+        { id: 'solicitudes', label: 'Solicitudes de Curso', to: 'solicitudes' },
+        { id: 'solicitudes-docente', label: 'Postulaciones Docente', to: 'solicitudes-docente' },
         { id: 'certificados', label: 'Certificados', to: 'certificados' },
       ],
     },
@@ -73,9 +76,15 @@ const MENU_POR_ROL = {
   ],
   docente: [
     {
+      seccion: 'PANEL',
+      items: [
+        { id: 'dashboard', label: 'Dashboard', to: '', end: true },
+      ],
+    },
+    {
       seccion: 'CURSOS',
       items: [
-        { id: 'cursos', label: 'Mis Cursos', to: '', end: true },
+        { id: 'cursos', label: 'Mis Cursos', to: 'cursos' },
         { id: 'solicitudes', label: 'Solicitudes', to: 'solicitudes' },
         { id: 'certificados', label: 'Certificados', to: 'certificados' },
       ],
@@ -147,10 +156,9 @@ const MainLayout = () => {
   }, [sidebarAbierto]);
 
   const [menuMovil, setMenuMovil] = useState(false);
-  const [solicitudesPendientes, setSolicitudesPendientes] = useState(0);
-  const [hoverExpand, setHoverExpand] = useState(false);
   const [modalSolicitudAbierto, setModalSolicitudAbierto] = useState(false);
   const [solicitudPendiente, setSolicitudPendiente] = useState(false);
+  const [postulacionesPendientes, setPostulacionesPendientes] = useState(0);
 
   useEffect(() => {
     setMenuMovil(false);
@@ -178,8 +186,12 @@ const MainLayout = () => {
   }
   
   const usuario = authService.getCurrentUser();
-  const base = `/${rol}`;
-  const secciones = MENU_POR_ROL[rol] || MENU_POR_ROL.estudiante;
+  const { pendientes: solicitudesPendientes } = useSolicitudes();
+  const { esModoEstudiante, puedeAlternar, setModo } = useModo();
+  // ✅ El panel se deriva del MODO activo: docente/admin pueden pasar a estudiante.
+  const panel = esModoEstudiante ? 'estudiante' : rol;
+  const base = `/${panel}`;
+  const secciones = MENU_POR_ROL[panel] || MENU_POR_ROL.estudiante;
   const items = secciones.flatMap((s) => s.items);
   
   const itemActivo = items.find((i) => {
@@ -189,33 +201,6 @@ const MainLayout = () => {
     }
     return location.pathname.startsWith(path);
   });
-
-  const isItemActive = (item) => {
-    const path = `${base}${item.to ? '/' + item.to : ''}`;
-    if (item.end) {
-      return location.pathname === path;
-    }
-    return location.pathname.startsWith(path);
-  };
-
-  useEffect(() => {
-    const cargarSolicitudes = async () => {
-      if (rol !== 'admin' && rol !== 'docente') return;
-      try {
-        const data = await cursosService.solicitudesPendientes();
-        const pendientes = Array.isArray(data) 
-          ? data.filter(s => s.estado === 'pendiente').length 
-          : 0;
-        setSolicitudesPendientes(pendientes);
-      } catch (e) {
-        console.error('Error cargando solicitudes pendientes:', e);
-      }
-    };
-
-    cargarSolicitudes();
-    const interval = setInterval(cargarSolicitudes, 60000);
-    return () => clearInterval(interval);
-  }, [rol]);
 
   // Verificar si el estudiante tiene solicitud pendiente
   useEffect(() => {
@@ -228,12 +213,30 @@ const MainLayout = () => {
           s.estado === 'pendiente' || s.estado === 'en_revision'
         );
         setSolicitudPendiente(!!pendiente);
-      } catch (e) {
+      } catch {
         // Silenciar errores
       }
     };
     verificarSolicitud();
   }, [rol]);
+
+  // ✅ Admin: contador de postulaciones a docente pendientes (badge del menú)
+  useEffect(() => {
+    if (rol !== 'admin') return;
+    let activo = true;
+    import('../../services/solicitudesDocenteService')
+      .then(({ default: svc }) => svc.contarPendientes())
+      .then((data) => { if (activo) setPostulacionesPendientes(data?.pendientes || 0); })
+      .catch(() => {});
+    return () => { activo = false; };
+  }, [rol]);
+
+  // ✅ Reintentar entregas de examen guardadas offline (localStorage)
+  useEffect(() => {
+    import('../../services/examenesService')
+      .then(({ default: examenesService }) => examenesService.reintentarResultadosPendientes())
+      .catch(() => {});
+  }, []);
 
   const toggleSidebar = () => {
     setSidebarAbierto(!sidebarAbierto);
@@ -242,7 +245,7 @@ const MainLayout = () => {
   const handleLogout = () => {
     try {
       authService.logout();
-      window.location.href = '/login';
+      window.location.href = '/';
     } catch (error) {
       console.error('Error al cerrar sesión:', error);
     }
@@ -327,9 +330,12 @@ const MainLayout = () => {
               <div className="space-y-0.5">
                 {seccion.items.map((item) => {
                   const Icon = ICONOS_NAV[item.id] || LayoutDashboard;
-                  const esSolicitudes = item.id === 'solicitudes';
-                  const tieneBadge = esSolicitudes && solicitudesPendientes > 0;
-                  const isActive = isItemActive(item);
+                  const badgeCount = item.id === 'solicitudes'
+                    ? solicitudesPendientes
+                    : item.id === 'solicitudes-docente'
+                      ? postulacionesPendientes
+                      : 0;
+                  const tieneBadge = badgeCount > 0;
 
                   return (
                     <NavLink
@@ -352,14 +358,14 @@ const MainLayout = () => {
                           <span className="text-sm font-medium whitespace-nowrap">{item.label}</span>
                           {tieneBadge && (
                             <span className="ml-auto bg-amber-500 text-white text-[10px] font-bold px-2 py-0.5 rounded-full min-w-[20px] text-center">
-                              {solicitudesPendientes}
+                              {badgeCount}
                             </span>
                           )}
                         </>
                       )}
                       {!sidebarAbierto && tieneBadge && (
                         <span className="absolute -top-1 -right-1 bg-amber-500 text-white text-[9px] font-bold px-1.5 py-0.5 rounded-full min-w-[18px] text-center">
-                          {solicitudesPendientes}
+                          {badgeCount}
                         </span>
                       )}
                     </NavLink>
@@ -370,8 +376,36 @@ const MainLayout = () => {
           ))}
         </nav>
 
-        {/* Footer - Botón Ser Docente (solo estudiantes) + Salir */}
+        {/* Footer - Selector de modo + Botón Ser Docente + Salir */}
         <div className="border-t border-gray-200 p-2 space-y-0.5 flex-shrink-0">
+          {/* ✅ Selector de modo (solo docente/admin): Docente ⇄ Estudiante */}
+          {puedeAlternar && (
+            <div className="px-0.5 pb-1">
+              <div className="flex items-center bg-gray-100 rounded-lg p-0.5">
+                <button
+                  onClick={() => setModo('docente')}
+                  className={`flex-1 flex items-center justify-center gap-1.5 px-2 py-1.5 rounded-md text-[11px] font-medium transition-colors min-h-[32px] ${
+                    !esModoEstudiante ? 'bg-white text-[#0f766e] shadow-sm' : 'text-gray-500 hover:text-gray-700'
+                  }`}
+                  title="Modo gestión"
+                >
+                  <LayoutDashboard className="w-3.5 h-3.5" />
+                  {sidebarAbierto && <span>{rol === 'admin' ? 'Admin' : 'Docente'}</span>}
+                </button>
+                <button
+                  onClick={() => setModo('estudiante')}
+                  className={`flex-1 flex items-center justify-center gap-1.5 px-2 py-1.5 rounded-md text-[11px] font-medium transition-colors min-h-[32px] ${
+                    esModoEstudiante ? 'bg-white text-[#0f766e] shadow-sm' : 'text-gray-500 hover:text-gray-700'
+                  }`}
+                  title="Modo estudiante"
+                >
+                  <GraduationCap className="w-3.5 h-3.5" />
+                  {sidebarAbierto && <span>Estudiante</span>}
+                </button>
+              </div>
+            </div>
+          )}
+
           {/* Botón Ser Docente - solo para estudiantes */}
           {rol === 'estudiante' && (
             <button

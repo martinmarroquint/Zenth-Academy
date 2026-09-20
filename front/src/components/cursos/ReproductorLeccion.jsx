@@ -13,6 +13,7 @@ import cursosService from '../../services/cursosService';
 import examenesService from '../../services/examenesService';
 import { authService } from '../../services/authService';
 import ExamenActivo from '../examenes/ExamenActivo';
+import { sanitizeHtml } from '../../utils/sanitize';
 
 // =============================================
 // VIDEO PLAYER
@@ -364,7 +365,7 @@ const RichTextDisplay = ({ content }) => {
   }
   return (
     <div className="prose prose-slate max-w-none p-6 overflow-y-auto h-full">
-      <div dangerouslySetInnerHTML={{ __html: content }} />
+      <div dangerouslySetInnerHTML={{ __html: sanitizeHtml(content) }} />
     </div>
   );
 };
@@ -437,7 +438,13 @@ const ExamenActivoWrapper = ({ contenido, leccion, curso, onComplete, onClose, u
     setCompletado(true);
     if (curso?.id && leccion?.id && usuarioId) {
       try {
-        await cursosService.completarLeccion(curso.id, leccion.id, usuarioId);
+        // ✅ CORREGIDO: Enviar nota del examen al progreso del curso
+        const calificacion = resultado?.calificacion || 0;
+        const aprobado = calificacion >= 60;
+        await cursosService.completarLeccion(
+          curso.id, leccion.id, usuarioId, 0,
+          calificacion, aprobado
+        );
       } catch (error) {
         console.warn('No se pudo actualizar progreso:', error);
       }
@@ -481,7 +488,14 @@ const ExamenActivoWrapper = ({ contenido, leccion, curso, onComplete, onClose, u
     <div className="h-full overflow-y-auto">
       <ExamenActivo
         examen={examen}
-        alumno={{ id: usuario?.id || usuarioId }}
+        alumno={{
+          id: usuario?.id || usuarioId,
+          nombres: usuario?.nombres,
+          apellidos: usuario?.apellidos,
+          nombre: usuario?.nombre_completo,
+          grado: usuario?.grado,
+          dni: usuario?.dni,
+        }}
         onFinalizar={handleFinalizar}
         onAbandonar={onClose}
       />
@@ -581,15 +595,6 @@ const ReproductorLeccion = ({
   const bloqueActual = bloques[bloqueActualIndex] || null;
   const totalBloques = bloques.length;
 
-  const handleBloqueComplete = useCallback(() => {
-    setBloqueCompletado(true);
-    
-    // Si es el último bloque, marcar la lección como completada
-    if (bloqueActualIndex === totalBloques - 1) {
-      handleMarcarCompletada();
-    }
-  }, [bloqueActualIndex, totalBloques]);
-
   const handleMarcarCompletada = useCallback(async () => {
     if (!usuarioId || !curso?.id || !leccion?.id) return;
     if (isCompletada) return;
@@ -604,6 +609,15 @@ const ReproductorLeccion = ({
       setMarcando(false);
     }
   }, [usuarioId, curso?.id, leccion?.id, isCompletada, onLeccionCompletada]);
+
+  const handleBloqueComplete = useCallback(() => {
+    setBloqueCompletado(true);
+    
+    // Si es el último bloque, marcar la lección como completada
+    if (bloqueActualIndex === totalBloques - 1) {
+      handleMarcarCompletada();
+    }
+  }, [bloqueActualIndex, totalBloques, handleMarcarCompletada]);
 
   const handleNavegarBloque = (direccion) => {
     const nuevoIndex = bloqueActualIndex + direccion;

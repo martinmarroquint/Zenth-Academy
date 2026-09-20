@@ -222,7 +222,7 @@ const Registro = () => {
           <div className="mt-4 text-center">
             <p className="text-sm text-gray-400">
               ¿Ya tienes cuenta?{' '}
-              <Link to="/login" className="font-medium transition-colors hover:underline" style={{ color: '#0f766e' }}>
+              <Link to="/" className="font-medium transition-colors hover:underline" style={{ color: '#0f766e' }}>
                 Inicia sesión
               </Link>
             </p>

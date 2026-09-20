@@ -5,7 +5,6 @@ import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   BookOpen,
-  Clock,
   Users,
   Star,
   Loader2,
@@ -35,12 +34,13 @@ import cursosService from '../services/cursosService';
 import certificadosService from '../services/certificadosService';
 import { authService } from '../services/authService';
 import Badge from '../components/ui/Badge';
-import { resolveImageUrl } from '../config/api.config';
+import CourseImage from '../components/cursos/CourseImage';
+import { useFeedback } from '../hooks/useFeedback';
 
 const EstudianteCursos = () => {
   const navigate = useNavigate();
   const usuario = authService.getCurrentUser();
-  const usuarioId = usuario?.id;
+  const { toast } = useFeedback();
   
   const [cursos, setCursos] = useState([]);
   const [inscripciones, setInscripciones] = useState([]);
@@ -51,8 +51,8 @@ const EstudianteCursos = () => {
   const [busqueda, setBusqueda] = useState('');
   const [solicitudes, setSolicitudes] = useState([]);
   const [certificados, setCertificados] = useState([]);
-  const [ordenarPor, setOrdenarPor] = useState('fecha');
-  const [ordenDireccion, setOrdenDireccion] = useState('desc');
+  const [ordenarPor] = useState('fecha');
+  const [ordenDireccion] = useState('desc');
   const [mostrarFiltros, setMostrarFiltros] = useState(false);
   const [filtroCategoria, setFiltroCategoria] = useState('todas');
   const [filtroNivel, setFiltroNivel] = useState('todos');
@@ -92,21 +92,21 @@ const EstudianteCursos = () => {
       if (curso.precio_tipo === 'pago') {
         // Curso de pago → enviar solicitud de acceso
         await cursosService.solicitarAcceso(curso.id, {});
-        alert('Solicitud enviada. El docente revisará tu acceso.');
+        toast.success('Solicitud enviada. El docente revisará tu acceso.');
       } else {
         // Curso gratuito → inscripción directa
         await cursosService.inscribirme(curso.id);
       }
       await cargar();
     } catch (e) {
-      alert('No se pudo completar: ' + (e.message || ''));
+      toast.error('No se pudo completar: ' + (e.message || ''));
     } finally {
       setInscribiendo(null);
     }
   };
 
   // Memoizar cálculos
-  const { progresoPorCurso, solicitudesPendientes, cursosConEstado } = useMemo(() => {
+  const { cursosConEstado } = useMemo(() => {
     const progreso = {};
     inscripciones.forEach((i) => {
       progreso[i.curso_id] = {
@@ -614,14 +614,11 @@ const EstudianteCursos = () => {
               >
                 <div className="relative h-32 bg-gradient-to-br from-gray-50 to-gray-100 flex items-center justify-center overflow-hidden">
                   {curso.imagen_url ? (
-                    <img 
-                      src={resolveImageUrl(curso.imagen_url)} 
+                    <CourseImage
+                      src={curso.imagen_url}
                       alt={curso.titulo}
-                      className="w-full h-full object-cover"
-                      onError={(e) => {
-                        e.target.style.display = 'none';
-                        e.target.parentElement.style.background = 'linear-gradient(135deg, #f9fafb, #f3f4f6)';
-                      }}
+                      className="w-full h-full"
+                      imgClassName="w-full h-full object-cover"
                     />
                   ) : (
                     <div className="w-14 h-14 rounded-2xl bg-white/80 backdrop-blur-sm border border-gray-200 flex items-center justify-center shadow-sm">
@@ -659,10 +656,6 @@ const EstudianteCursos = () => {
                     {curso.descripcion || 'Sin descripción'}
                   </p>
                   <div className="flex items-center gap-3 text-[10px] text-gray-400 mb-3">
-                    <span className="inline-flex items-center gap-1">
-                      <Clock className="w-3 h-3" />
-                      {curso.duracion || 'Sin duración'}
-                    </span>
                     <span className="inline-flex items-center gap-1">
                       <Users className="w-3 h-3" />
                       {curso.estudiantes_count || 0}

@@ -105,7 +105,7 @@ const CalificacionesEstudiante = ({ cursoId }) => {
       {/* Lista de lecciones con nota */}
       <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
         <div className="px-5 py-4 border-b border-gray-100 flex items-center gap-2">
-          <TrendingUp className="w-4 h-4 text-indigo-600" />
+          <TrendingUp className="w-4 h-4 text-[#0f766e]" />
           <h3 className="font-semibold text-gray-900">Calificaciones por actividad</h3>
         </div>
 

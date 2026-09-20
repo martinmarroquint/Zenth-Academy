@@ -137,12 +137,18 @@ const cursosService = {
     }
   },
 
-  completarLeccion: async (cursoId, leccionId, usuarioId, tiempoInvertido = 0) => {
+  completarLeccion: async (cursoId, leccionId, usuarioId, tiempoInvertido = 0, nota = null, aprobado = null) => {
     try {
-      return await api.post(`/cursos/${cursoId}/lecciones/${leccionId}/completar`, {
+      const body = {
         usuario_id: usuarioId,
         tiempo_invertido: tiempoInvertido
-      });
+      };
+      // ✅ Enviar nota y aprobado si existen (ej: resultado de examen)
+      if (nota !== null && nota !== undefined) {
+        body.nota = nota;
+        body.aprobado = aprobado !== null ? aprobado : nota >= 10;
+      }
+      return await api.post(`/cursos/${cursoId}/lecciones/${leccionId}/completar`, body);
     } catch (error) {
       console.error('Error completando leccion:', error);
       throw error;
@@ -372,6 +378,46 @@ const cursosService = {
       return await api.post(`/cursos/${cursoId}/lecciones/${leccionId}/liberar`, body);
     } catch (error) {
       console.error('Error liberando leccion:', error);
+      throw error;
+    }
+  },
+
+  // =============================================
+  // COMENTARIOS POR LECCIÓN
+  // =============================================
+
+  listarComentariosLeccion: async (cursoId, leccionId) => {
+    try {
+      return await api.get(`/cursos/${cursoId}/lecciones/${leccionId}/comentarios`);
+    } catch (error) {
+      console.error('Error listando comentarios de leccion:', error);
+      throw error;
+    }
+  },
+
+  crearComentarioLeccion: async (cursoId, leccionId, contenido) => {
+    try {
+      return await api.post(`/cursos/${cursoId}/lecciones/${leccionId}/comentarios`, { contenido });
+    } catch (error) {
+      console.error('Error creando comentario de leccion:', error);
+      throw error;
+    }
+  },
+
+  eliminarComentarioLeccion: async (cursoId, leccionId, comentarioId) => {
+    try {
+      return await api.delete(`/cursos/${cursoId}/lecciones/${leccionId}/comentarios/${comentarioId}`);
+    } catch (error) {
+      console.error('Error eliminando comentario de leccion:', error);
+      throw error;
+    }
+  },
+
+  darLikeComentarioLeccion: async (cursoId, leccionId, comentarioId) => {
+    try {
+      return await api.post(`/cursos/${cursoId}/lecciones/${leccionId}/comentarios/${comentarioId}/like`);
+    } catch (error) {
+      console.error('Error alternando like de comentario:', error);
       throw error;
     }
   }

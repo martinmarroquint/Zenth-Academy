@@ -11,6 +11,7 @@ import {
 import { Excalidraw, MainMenu } from '@excalidraw/excalidraw';
 import '@excalidraw/excalidraw/index.css';
 import pizarraService from '../../services/pizarraService';
+import { useFeedback } from '../../hooks/useFeedback';
 
 // =============================================
 // COMPONENTE PRINCIPAL
@@ -23,6 +24,7 @@ const PizarraInteractiva = ({
   titulo: initialTitulo = 'Pizarra Interactiva',
   usuario = null
 }) => {
+  const { toast, confirmar } = useFeedback();
   // Estados
   const [pizarraId, setPizarraId] = useState(initialPizarraId);
   const [titulo, setTitulo] = useState(initialTitulo);
@@ -31,7 +33,7 @@ const PizarraInteractiva = ({
   const [isSaving, setIsSaving] = useState(false);
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [excalidrawAPI, setExcalidrawAPI] = useState(null);
-  const [isReady, setIsReady] = useState(false);
+  const [, setIsReady] = useState(false);
   const [elementosIniciales, setElementosIniciales] = useState([]);
   const [cargandoInicial, setCargandoInicial] = useState(false);
   const [creandoPizarra, setCreandoPizarra] = useState(false);
@@ -149,7 +151,7 @@ const PizarraInteractiva = ({
     if (!excalidrawAPI) return;
     const currentId = pizarraIdRef.current;
     if (!currentId) {
-      alert('La pizarra aún se está creando, intenta de nuevo en unos segundos.');
+      toast.info('La pizarra aún se está creando, intenta de nuevo en unos segundos.');
       return;
     }
     setIsSaving(true);
@@ -159,17 +161,23 @@ const PizarraInteractiva = ({
       showToast('Pizarra guardada correctamente');
     } catch (error) {
       console.error('Error guardando:', error);
-      alert('Error al guardar la pizarra');
+      toast.error('Error al guardar la pizarra');
     } finally {
       setIsSaving(false);
     }
-  }, [excalidrawAPI]);
+  }, [excalidrawAPI, toast]);
 
-  const clearBoard = useCallback(() => {
+  const clearBoard = useCallback(async () => {
     if (!excalidrawAPI) return;
-    if (!window.confirm('¿Limpiar toda la pizarra?')) return;
+    const ok = await confirmar({
+      titulo: 'Limpiar pizarra',
+      mensaje: '¿Limpiar toda la pizarra? Esta acción no se puede deshacer.',
+      confirmText: 'Limpiar',
+      variant: 'danger',
+    });
+    if (!ok) return;
     excalidrawAPI.resetScene();
-  }, [excalidrawAPI]);
+  }, [excalidrawAPI, confirmar]);
 
   const toggleFullscreen = useCallback(() => {
     if (!document.fullscreenElement) {
@@ -294,7 +302,7 @@ const PizarraInteractiva = ({
                 }}
                 onBlur={guardarTitulo}
                 autoFocus
-                className="text-lg font-semibold text-gray-800 border border-gray-300 rounded px-2 py-0.5 outline-none focus:border-indigo-400 min-w-[200px]"
+                className="text-lg font-semibold text-gray-800 border border-gray-300 rounded px-2 py-0.5 outline-none focus:border-[#0f766e] min-w-[200px]"
               />
               <button
                 onClick={guardarTitulo}
@@ -312,12 +320,12 @@ const PizarraInteractiva = ({
                   setEditandoTitulo(true);
                 }
               }}
-              className="text-lg font-semibold text-gray-800 truncate hover:text-indigo-600 transition-colors flex items-center gap-2 group"
+              className="text-lg font-semibold text-gray-800 truncate hover:text-[#0f766e] transition-colors flex items-center gap-2 group"
               title={isEditor ? 'Clic para editar nombre' : titulo}
             >
               {titulo}
               {isEditor && (
-                <Pencil className="w-3.5 h-3.5 text-gray-300 group-hover:text-indigo-400 flex-shrink-0 hidden sm:block" />
+                <Pencil className="w-3.5 h-3.5 text-gray-300 group-hover:text-[#0f766e] flex-shrink-0 hidden sm:block" />
               )}
             </button>
           )}
@@ -382,7 +390,7 @@ const PizarraInteractiva = ({
         {cargandoInicial && (
           <div className="absolute inset-0 z-10 flex items-center justify-center bg-white/80">
             <div className="flex flex-col items-center gap-3">
-              <div className="w-10 h-10 border-4 border-gray-200 border-t-indigo-600 rounded-full animate-spin" />
+              <div className="w-10 h-10 border-4 border-gray-200 border-t-[#0f766e] rounded-full animate-spin" />
               <span className="text-sm text-gray-500">Cargando pizarra...</span>
             </div>
           </div>

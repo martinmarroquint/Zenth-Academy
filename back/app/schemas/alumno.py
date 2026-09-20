@@ -59,3 +59,8 @@ class AlumnoListResponse(BaseModel):
 class MensajeResponse(BaseModel):
     mensaje: str
     ok: bool = True
+
+
+class EliminarAlumnosMasivoRequest(BaseModel):
+    """Body de /alumnos/eliminar-masivo."""
+    ids: List[str] = []

@@ -6,8 +6,10 @@ import React, { useState } from 'react';
 import { Users, Trash2, ArrowLeft, Plus, X, Save, Upload, UserPlus } from 'lucide-react';
 // ✅ IMPORT CORREGIDO - constantes ahora desde examenes
 import { COLOR_PRIMARIO, GRADOS_RECONOCIDOS } from '../examenes/constantes';
+import { useFeedback } from '../../hooks/useFeedback';
 
 const CargarAlumnos = ({ alumnos: alumnosIniciales, onGuardar, onVolver }) => {
+  const { confirmar } = useFeedback();
   const [alumnos, setAlumnos] = useState(alumnosIniciales || []);
   const [modo, setModo] = useState('lista');
   const [textoLista, setTextoLista] = useState('');
@@ -96,8 +98,14 @@ const CargarAlumnos = ({ alumnos: alumnosIniciales, onGuardar, onVolver }) => {
   const handleEliminar = (id) => 
     setAlumnos(alumnos.filter(a => a.id !== id));
   
-  const handleEliminarTodos = () => { 
-    if (window.confirm('Eliminar todos los alumnos?')) setAlumnos([]); 
+  const handleEliminarTodos = async () => { 
+    const ok = await confirmar({
+      titulo: 'Eliminar todos los alumnos',
+      mensaje: '¿Eliminar todos los alumnos? Esta acción no se puede deshacer.',
+      confirmText: 'Eliminar',
+      variant: 'danger',
+    });
+    if (ok) setAlumnos([]); 
   };
 
   return (
@@ -309,7 +317,7 @@ const CargarAlumnos = ({ alumnos: alumnosIniciales, onGuardar, onVolver }) => {
 
       <style>{`
         * { -webkit-tap-highlight-color: transparent; }
-        *:focus { outline: none !important; }
+        *:focus-visible { outline: 2px solid #0f766e; outline-offset: 2px; }
         
         ::-webkit-scrollbar {
           width: 4px;

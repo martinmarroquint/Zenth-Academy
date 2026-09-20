@@ -82,7 +82,7 @@ const PanelForo = ({ onCrearPublicacion, onVerPublicacion }) => {
         {puedeCrear && (
           <button
             onClick={onCrearPublicacion}
-            className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors flex items-center gap-2 text-sm"
+            className="px-4 py-2 bg-[#0f766e] text-white rounded-lg hover:bg-[#0d5e57] transition-colors flex items-center gap-2 text-sm"
           >
             <Plus className="w-4 h-4" />
             Nueva Publicación
@@ -119,13 +119,13 @@ const PanelForo = ({ onCrearPublicacion, onVerPublicacion }) => {
             value={busqueda}
             onChange={(e) => setBusqueda(e.target.value)}
             placeholder="Buscar en la comunidad..."
-            className="w-full pl-9 pr-4 py-2 text-sm border border-gray-200 rounded-lg outline-none focus:border-indigo-300 focus:ring-2 focus:ring-indigo-100 transition-all"
+            className="w-full pl-9 pr-4 py-2 text-sm border border-gray-200 rounded-lg outline-none focus:border-[#0f766e] focus:ring-2 focus:ring-[#0f766e]/20 transition-all"
           />
         </div>
         <select
           value={filtro}
           onChange={(e) => setFiltro(e.target.value)}
-          className="px-3 py-2 text-sm border border-gray-200 rounded-lg outline-none focus:border-indigo-300 bg-white"
+          className="px-3 py-2 text-sm border border-gray-200 rounded-lg outline-none focus:border-[#0f766e] bg-white"
         >
           <option value="recientes">Más Recientes</option>
           <option value="populares">Más Populares</option>

@@ -3,7 +3,7 @@
 
 import React, { useState, useEffect, useCallback } from 'react';
 import {
-  Plus, Search, BookOpen, Users, Clock, Star,
+  Plus, Search, BookOpen, Users, Star,
   GraduationCap, Loader2, FileText, Award,
   Trash2, Eye, Play, Edit3, Send, ChevronRight,
   FolderOpen, Calendar, MoreVertical, Copy,
@@ -13,9 +13,11 @@ import {
 import { Button, Input, Dropdown, Badge } from '../ui';
 import cursosService from '../../services/cursosService';
 import { authService } from '../../services/authService';
-import { resolveImageUrl } from '../../config/api.config';
+import CourseImage from './CourseImage';
+import { useFeedback } from '../../hooks/useFeedback';
 
 const PanelCursos = ({ onCrearCurso, onVerCurso, onEditarCurso }) => {
+  const { toast, confirmar } = useFeedback();
   const usuario = authService.getCurrentUser();
   const esAdmin = usuario?.rol === 'admin';
   const usuarioId = usuario?.id;
@@ -28,8 +30,6 @@ const PanelCursos = ({ onCrearCurso, onVerCurso, onEditarCurso }) => {
   const [publicando, setPublicando] = useState(null);
   const [filtroEstado, setFiltroEstado] = useState('todos');
   const [solicitudesPendientes, setSolicitudesPendientes] = useState(0);
-  const [vista, setVista] = useState('grid'); // 'grid' | 'list'
-  const [ordenando, setOrdenando] = useState(false);
 
   const cargarCursos = useCallback(async () => {
     setCargando(true);
@@ -66,28 +66,42 @@ const PanelCursos = ({ onCrearCurso, onVerCurso, onEditarCurso }) => {
   }, [cargarCursos]);
 
   const handleEliminar = async (id, titulo) => {
-    if (!window.confirm(`¿Eliminar el curso "${titulo}"?`)) return;
+    const ok = await confirmar({
+      titulo: 'Eliminar curso',
+      mensaje: `¿Eliminar el curso "${titulo}"? Esta acción no se puede deshacer.`,
+      confirmText: 'Eliminar',
+      cancelText: 'Cancelar',
+      variant: 'danger',
+    });
+    if (!ok) return;
     setEliminando(id);
     try {
       await cursosService.eliminar(id);
       await cargarCursos();
     } catch (e) {
       console.error('Error eliminando curso:', e);
-      alert(e.message || 'No se pudo eliminar el curso');
+      toast.error(e.message || 'No se pudo eliminar el curso');
     } finally {
       setEliminando(null);
     }
   };
 
   const handlePublicar = async (id, titulo) => {
-    if (!window.confirm(`¿Publicar el curso "${titulo}"?`)) return;
+    const ok = await confirmar({
+      titulo: 'Publicar curso',
+      mensaje: `¿Publicar el curso "${titulo}"?`,
+      confirmText: 'Publicar',
+      cancelText: 'Cancelar',
+      variant: 'info',
+    });
+    if (!ok) return;
     setPublicando(id);
     try {
       await cursosService.publicar(id);
       await cargarCursos();
     } catch (e) {
       console.error('Error publicando curso:', e);
-      alert(e.message || 'No se pudo publicar el curso');
+      toast.error(e.message || 'No se pudo publicar el curso');
     } finally {
       setPublicando(null);
     }
@@ -135,24 +149,6 @@ const PanelCursos = ({ onCrearCurso, onVerCurso, onEditarCurso }) => {
   const totalLecciones = cursos.reduce((acc, c) => acc + (c.modulos || []).reduce((a, m) => a + (m.lecciones || []).length, 0), 0);
   const publicados = cursos.filter(c => String(c.estado || '').toUpperCase() === 'PUBLICADO').length;
   const totalEstudiantes = cursos.reduce((acc, c) => acc + (c.estudiantes_count || 0), 0);
-
-  const getNivelColor = (nivel) => {
-    const colores = {
-      principiante: 'bg-green-100 text-green-700',
-      intermedio: 'bg-blue-100 text-blue-700',
-      avanzado: 'bg-purple-100 text-purple-700'
-    };
-    return colores[nivel] || 'bg-gray-100 text-gray-700';
-  };
-
-  const getEstadoColor = (estado) => {
-    const colores = {
-      PUBLICADO: 'bg-emerald-100 text-emerald-700',
-      BORRADOR: 'bg-gray-100 text-gray-600',
-      ARCHIVADO: 'bg-gray-100 text-gray-400'
-    };
-    return colores[String(estado || '').toUpperCase()] || 'bg-gray-100 text-gray-600';
-  };
 
   if (cargando) {
     return (
@@ -311,14 +307,11 @@ const PanelCursos = ({ onCrearCurso, onVerCurso, onEditarCurso }) => {
                 }}
               >
                 {curso.imagen_url ? (
-                  <img 
-                    src={resolveImageUrl(curso.imagen_url)} 
+                  <CourseImage
+                    src={curso.imagen_url}
                     alt={curso.titulo}
-                    className="w-full h-full object-cover"
-                    onError={(e) => {
-                      e.target.style.display = 'none';
-                      e.target.parentElement.style.background = 'linear-gradient(135deg, #e6f4f2, #d1e8e5)';
-                    }}
+                    className="w-full h-full"
+                    imgClassName="w-full h-full object-cover"
                   />
                 ) : (
                   <BookOpen className="w-20 h-20 text-[#0f766e]/20" />
@@ -381,11 +374,6 @@ const PanelCursos = ({ onCrearCurso, onVerCurso, onEditarCurso }) => {
               {/* Contenido */}
               <div className="p-4">
                 <div className="flex items-center gap-2 text-xs text-gray-400 mb-2">
-                  <span className="flex items-center gap-1">
-                    <Clock className="w-3 h-3" />
-                    {curso.duracion || 'Sin duración'}
-                  </span>
-                  <span className="w-1 h-1 rounded-full bg-gray-300" />
                   <span className="flex items-center gap-1">
                     <FileText className="w-3 h-3" />
                     {(curso.modulos || []).reduce((acc, m) => acc + (m.lecciones || []).length, 0)} lecciones

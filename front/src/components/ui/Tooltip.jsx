@@ -11,7 +11,6 @@ const Tooltip = ({
   className = '',
 }) => {
   const [isVisible, setIsVisible] = useState(false);
-  const [coords, setCoords] = useState({ top: 0, left: 0 });
   const triggerRef = useRef(null);
   const tooltipRef = useRef(null);
   const timeoutRef = useRef(null);
@@ -79,4 +78,4 @@ const Tooltip = ({
   );
 };
 
-export default Tooltip;
+export default React.memo(Tooltip);

@@ -1,6 +1,6 @@
 // src/components/examenes/ExamenActivo.jsx
 // VERSION CORREGIDA - CONFIG SEGURIDAD Y TEMPORIZADOR
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { 
   AlertTriangle, Clock, Flag, ChevronLeft, ChevronRight, 
   Send, Shuffle, CheckCircle2, XCircle, GripVertical,
@@ -15,7 +15,25 @@ import useExamenSeguridad from '../../hooks/useExamenSeguridad';
 import examenesService from '../../services/examenesService';
 import { COLOR_PRIMARIO } from './constantes';
 
-const ExamenActivo = ({ examen, alumno, onFinalizar, onAbandonar }) => {
+const shuffleArray = (array) => {
+  const a = [...array];
+  for (let i = a.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [a[i], a[j]] = [a[j], a[i]];
+  }
+  return a;
+};
+
+const ExamenActivo = ({
+  examen,
+  alumno,
+  onFinalizar,
+  onAbandonar,
+  // ✅ Modo público (sin login): usa el endpoint /publico/{codigo}/resultado
+  modoPublico = false,
+  codigoPublico = null,
+  passwordPublico = null
+}) => {
   const [preguntasExamen, setPreguntasExamen] = useState([]);
   const [mapeoOpciones, setMapeoOpciones] = useState({});
   const [preguntaActual, setPreguntaActual] = useState(0);
@@ -27,8 +45,21 @@ const ExamenActivo = ({ examen, alumno, onFinalizar, onAbandonar }) => {
   const [enviando, setEnviando] = useState(false);
   const [inicializando, setInicializando] = useState(true);
   const [alertaActiva, setAlertaActiva] = useState(null);
+  // ✅ Autoridad de tiempo (servidor)
+  const [intentoId, setIntentoId] = useState(null);
+  const [segundosIniciales, setSegundosIniciales] = useState(null);
+  const [errorInicio, setErrorInicio] = useState('');
+  const [reintentoKey, setReintentoKey] = useState(0);
 
-  const configExamen = examen?.configuracion || {};
+  const configExamen = useMemo(() => examen?.configuracion || {}, [examen]);
+
+  // ✅ Nombre robusto: soporta nombre completo, nombres+apellidos o nombre simple.
+  const nombreAlumno = useMemo(() => {
+    if (!alumno) return '';
+    if (alumno.nombre) return alumno.nombre;
+    if (alumno.nombre_completo) return alumno.nombre_completo;
+    return [alumno.apellidos, alumno.nombres].filter(Boolean).join(', ');
+  }, [alumno]);
 
   // ✅ USAR CONFIGURACION REAL
   const LIMITE_VIOLACIONES = configExamen.limite_violaciones || 3;
@@ -54,9 +85,9 @@ const ExamenActivo = ({ examen, alumno, onFinalizar, onAbandonar }) => {
         preguntas = shuffleArray(preguntas); 
       }
       
-      if (configExamen.preguntas_por_examen > 0 && configExamen.preguntas_por_examen < preguntas.length) {
-        preguntas = preguntas.slice(0, configExamen.preguntas_por_examen);
-      }
+      // ⚠️ `preguntas_por_examen` está deshabilitado: el backend califica TODAS
+      // las preguntas del examen, así que mostrar un subconjunto produciría
+      // calificaciones artificialmente bajas. Requiere selección server-side.
       
       preguntas = preguntas.map(p => {
         if (p.tipo === 'opcion_multiple' && configExamen.aleatorizar_opciones) {
@@ -95,20 +126,25 @@ const ExamenActivo = ({ examen, alumno, onFinalizar, onAbandonar }) => {
       });
       
       setPreguntasExamen(preguntas);
+      // ✅ Escala numérica: registrar el valor por defecto del slider para que
+      // una pregunta sin tocar no quede como "sin responder".
+      setRespuestas(prev => {
+        const siguiente = { ...prev };
+        preguntas.forEach((p, idx) => {
+          if (p.tipo === 'escala_numerica') {
+            const clave = String(p._indiceOriginal ?? p.orden ?? idx);
+            if (siguiente[clave] === undefined) {
+              siguiente[clave] = Math.round(((p.escala_min || 1) + (p.escala_max || 10)) / 2);
+            }
+          }
+        });
+        return siguiente;
+      });
       setInicializando(false);
     } else {
       setInicializando(false);
     }
-  }, [examen]);
-
-  const shuffleArray = (array) => {
-    const a = [...array];
-    for (let i = a.length - 1; i > 0; i--) {
-      const j = Math.floor(Math.random() * (i + 1));
-      [a[i], a[j]] = [a[j], a[i]];
-    }
-    return a;
-  };
+  }, [examen, configExamen]);
 
   const getClaveReal = useCallback(() => {
     const pregunta = preguntasExamen[preguntaActual];
@@ -118,37 +154,71 @@ const ExamenActivo = ({ examen, alumno, onFinalizar, onAbandonar }) => {
   // =============================================
   // HOOKS CON CONFIGURACION REAL
   // =============================================
+  const finalizarExamenRef = useRef(null);
+
   const manejarTiempoAgotado = useCallback(() => { 
-    if (!entregado) finalizarExamen(true); 
+    if (!entregado) finalizarExamenRef.current?.(true); 
   }, [entregado]);
 
   const manejarViolacionMaxima = useCallback(() => { 
-    if (!entregado) setMostrarModalTrampa(true); 
-  }, [entregado]);
+    if (entregado) return;
+    const accion = configExamen.accion_violaciones || 'anular';
+    if (accion === 'advertir') {
+      setMostrarModalTrampa(true);
+      return;
+    }
+    // 'anular' → entrega marcada como TRAMPA; 'cerrar' → entrega normal.
+    finalizarExamenRef.current?.(false, accion === 'anular' ? 'TRAMPA' : 'COMPLETADO');
+  }, [entregado, configExamen.accion_violaciones]);
 
   const temporizador = useTemporizador({
-    tiempoTotalSegundos: (examen?.tiempo_limite || 60) * 60,
+    // ✅ Si el servidor indica cuánto queda (reanudar), se usa ese valor.
+    tiempoTotalSegundos: segundosIniciales ?? ((examen?.tiempo_limite || 60) * 60),
     onTiempoAgotado: manejarTiempoAgotado,
     alertas: [300, 600, 900],
     onAlerta: setAlertaActiva
   });
 
+  // ✅ AUTORIDAD DE TIEMPO: inicia (o reanuda) el intento en el servidor.
+  useEffect(() => {
+    let activo = true;
+    const iniciarIntento = async () => {
+      if (!examen?.id) return;
+      if (modoPublico && !codigoPublico) return;
+      try {
+        const data = modoPublico
+          ? await examenesService.iniciarIntentoPublico(codigoPublico, passwordPublico)
+          : await examenesService.iniciarIntento(examen.id);
+        if (!activo) return;
+        setIntentoId(data.intento_id);
+        if (typeof data.segundos_restantes === 'number') setSegundosIniciales(data.segundos_restantes);
+        setErrorInicio('');
+      } catch (e) {
+        if (activo) setErrorInicio(e.message || 'No se pudo iniciar el examen');
+      }
+    };
+    iniciarIntento();
+    return () => { activo = false; };
+  }, [examen?.id, modoPublico, codigoPublico, passwordPublico, reintentoKey]);
+
   // ✅ CORREGIDO: primer parámetro es examenActivo (boolean), no MODO_ESTRICTO
-  const examenActivo = !entregado && preguntasExamen.length > 0;
+  const examenActivo = !entregado && !errorInicio && preguntasExamen.length > 0;
   const seguridad = useExamenSeguridad(examenActivo, { 
     limite_violaciones: LIMITE_VIOLACIONES, 
     modo_estricto: MODO_ESTRICTO
   });
 
-  useEffect(() => { seguridad.setOnViolacionMaxima(manejarViolacionMaxima); }, [manejarViolacionMaxima]);
+  useEffect(() => { seguridad.setOnViolacionMaxima(manejarViolacionMaxima); }, [manejarViolacionMaxima, seguridad]);
+
+  const { iniciar: iniciarTemporizador, detener: detenerTemporizador } = temporizador;
 
   useEffect(() => { 
-    if (!entregado && preguntasExamen.length > 0) { 
-      const timer = setTimeout(() => { try { temporizador.iniciar(); } catch (e) {} }, 300);
+    if (!entregado && !errorInicio && preguntasExamen.length > 0) { 
+      const timer = setTimeout(() => { try { iniciarTemporizador(); } catch {} }, 300);
       return () => clearTimeout(timer);
     } 
-    return () => { try { temporizador.detener(); } catch (e) {} }; 
-  }, [preguntasExamen.length]);
+    return () => { try { detenerTemporizador(); } catch {} }; 
+  }, [preguntasExamen.length, entregado, errorInicio, iniciarTemporizador, detenerTemporizador]);
 
   const totalPreguntas = preguntasExamen.length;
   const preguntaActualData = preguntasExamen[preguntaActual];
@@ -218,12 +288,12 @@ const ExamenActivo = ({ examen, alumno, onFinalizar, onAbandonar }) => {
   // =============================================
   // FINALIZAR EXAMEN
   // =============================================
-  const finalizarExamen = useCallback(async (porTiempo = false) => {
+  const finalizarExamen = useCallback(async (porTiempo = false, estadoForzado = null) => {
     if (entregado || enviando) return;
     setEntregado(true);
     setEnviando(true);
     
-    try { temporizador.detener(); } catch (e) {}
+    try { temporizador.detener(); } catch {}
 
     // DES-ALEATORIZAR RESPUESTAS
     const respuestasFinales = {};
@@ -243,8 +313,10 @@ const ExamenActivo = ({ examen, alumno, onFinalizar, onAbandonar }) => {
         }
       }
       else if (pregunta.tipo === 'relacionar' && typeof value === 'object' && value !== null) {
-        const colBVisual = pregunta.columna_b || [];
-        const colBOriginal = pregunta._columnaBOriginal || [];
+        // ✅ FIX: usar las MISMAS listas filtradas que el render; de lo
+        // contrario los índices se desalinean cuando hay celdas vacías.
+        const colBVisual = (pregunta.columna_b || []).filter(b => b && b.trim());
+        const colBOriginal = (pregunta._columnaBOriginal || []).filter(b => b && b.trim());
         const respConvertida = {};
         Object.entries(value).forEach(([k, v]) => {
           if (typeof v === 'number' && v >= 0 && v < colBVisual.length) {
@@ -258,8 +330,9 @@ const ExamenActivo = ({ examen, alumno, onFinalizar, onAbandonar }) => {
         respuestasFinales[key] = respConvertida;
       }
       else if (pregunta.tipo === 'ordenamiento' && Array.isArray(value)) {
-        const elementosVisuales = pregunta.elementos || [];
-        const elementosOriginales = pregunta._elementosOriginales || [];
+        // ✅ FIX: mismas listas filtradas que el render (evita desalineación).
+        const elementosVisuales = (pregunta.elementos || []).filter(e => e && e.trim());
+        const elementosOriginales = (pregunta._elementosOriginales || []).filter(e => e && e.trim());
         const respConvertida = new Array(elementosOriginales.length).fill(0);
         elementosVisuales.forEach((elemVisual, idxVisual) => {
           const idxOriginal = elementosOriginales.findIndex(e => e === elemVisual);
@@ -281,14 +354,16 @@ const ExamenActivo = ({ examen, alumno, onFinalizar, onAbandonar }) => {
 
     // ✅ USAR CONFIGURACION REAL
     const violacionesCount = seguridad.violaciones || 0;
-    const esTrampa = violacionesCount >= LIMITE_VIOLACIONES;
+    const esTrampa = estadoForzado ? estadoForzado === 'TRAMPA' : violacionesCount >= LIMITE_VIOLACIONES;
+
+    const alumnoIdFinal = alumno?.id || (modoPublico ? 'publico' : null);
 
     const datosEnvio = {
       examen_id: examen.id,
-      alumno_id: alumno.id,
-      alumno_nombre: (alumno.apellidos || '') + ', ' + (alumno.nombres || ''),
-      alumno_grado: alumno.grado || '',
-      alumno_dni: alumno.dni || '',
+      alumno_id: alumnoIdFinal,
+      alumno_nombre: nombreAlumno,
+      alumno_grado: alumno?.grado || '',
+      alumno_dni: alumno?.dni || '',
       respuestas: respuestasConClavesString,
       tiempo_usado: temporizador.getTiempoUsado(),
       tiempo_restante: temporizador.tiempoRestante,
@@ -297,29 +372,53 @@ const ExamenActivo = ({ examen, alumno, onFinalizar, onAbandonar }) => {
       entregado_por_tiempo: porTiempo,
       estado: esTrampa ? 'TRAMPA' : 'COMPLETADO',
       calificacion: 0, correctas: 0, total_preguntas: 0,
-      puntos_obtenidos: 0, total_puntos: 0
+      puntos_obtenidos: 0, total_puntos: 0,
+      intento_id: intentoId
     };
 
     let resultadoBackend = null;
     try {
-      resultadoBackend = await examenesService.guardarResultado(datosEnvio);
-    } catch (e) {
-      try {
-        const pendientes = JSON.parse(localStorage.getItem('resultados_pendientes') || '[]');
-        pendientes.push(datosEnvio);
-        localStorage.setItem('resultados_pendientes', JSON.stringify(pendientes));
-      } catch (e2) {}
+      if (modoPublico && codigoPublico) {
+        // ✅ Examen público: usa el endpoint sin autenticación. Antes llamaba
+        // al endpoint autenticado, que con 401 redirigía al login y perdía
+        // el resultado del participante.
+        resultadoBackend = await examenesService.guardarResultadoPublico(codigoPublico, {
+          password: passwordPublico || null,
+          respuestas: respuestasConClavesString,
+          alumno_nombre: nombreAlumno || 'Participante',
+          alumno_id: alumnoIdFinal || 'publico',
+          alumno_grado: alumno?.grado || '',
+          alumno_dni: alumno?.dni || '',
+          tiempo_usado: temporizador.getTiempoUsado(),
+          violaciones: violacionesCount,
+          intento_id: intentoId
+        });
+      } else {
+        resultadoBackend = await examenesService.guardarResultado(datosEnvio);
+      }
+    } catch {
+      // Reintento offline solo en modo autenticado (el público no tiene canal alterno).
+      if (!modoPublico) {
+        try {
+          const pendientes = JSON.parse(localStorage.getItem('resultados_pendientes') || '[]');
+          pendientes.push(datosEnvio);
+          localStorage.setItem('resultados_pendientes', JSON.stringify(pendientes));
+        } catch {}
+      }
     }
+
+    const idResultado = resultadoBackend?.id || resultadoBackend?.resultado_id;
 
     const resultadoFinal = {
       ...datosEnvio,
       examenId: examen.id,
       examen_id: examen.id,
-      alumnoId: alumno.id,
+      alumnoId: alumno?.id,
       totalPreguntas: resultadoBackend?.total_preguntas || preguntasExamen.length,
       puntosObtenidos: resultadoBackend?.puntos_obtenidos ?? 0,
       totalPuntos: resultadoBackend?.total_puntos ?? 0,
-      calificacion: resultadoBackend?.calificacion ?? 0,
+      // Se preserva null (examen público con mostrar_resultados=false) en vez de forzar 0.
+      calificacion: resultadoBackend && resultadoBackend.calificacion !== undefined ? resultadoBackend.calificacion : 0,
       correctas: resultadoBackend?.correctas ?? 0,
       tiempoUsado: temporizador.getTiempoUsado(),
       tiempoRestante: temporizador.tiempoRestante,
@@ -329,13 +428,15 @@ const ExamenActivo = ({ examen, alumno, onFinalizar, onAbandonar }) => {
       fechaEntrega: new Date().toISOString(),
       preguntasMarcadas: Array.from(preguntasMarcadas),
       estado: resultadoBackend?.estado || (esTrampa ? 'TRAMPA' : 'COMPLETADO'),
-      id: resultadoBackend?.id,
-      resultado_id: resultadoBackend?.id
+      id: idResultado,
+      resultado_id: idResultado
     };
 
     setEnviando(false);
     onFinalizar(resultadoFinal);
-  }, [examen, alumno, respuestas, preguntasMarcadas, preguntasExamen, mapeoOpciones, configExamen, temporizador, seguridad, onFinalizar, entregado, enviando, LIMITE_VIOLACIONES]);
+  }, [examen, alumno, respuestas, preguntasMarcadas, preguntasExamen, mapeoOpciones, configExamen, temporizador, seguridad, onFinalizar, entregado, enviando, LIMITE_VIOLACIONES, modoPublico, codigoPublico, passwordPublico, nombreAlumno, intentoId]);
+
+  useEffect(() => { finalizarExamenRef.current = finalizarExamen; }, [finalizarExamen]);
 
   // =============================================
   // LOADER
@@ -346,6 +447,25 @@ const ExamenActivo = ({ examen, alumno, onFinalizar, onAbandonar }) => {
         <div className="text-center">
           <div className="w-10 h-10 border-3 border-gray-200 border-t-emerald-600 rounded-full animate-spin mx-auto mb-4"></div>
           <p className="text-sm text-gray-500">Preparando examen...</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (errorInicio && !entregado) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4">
+        <div className="bg-white rounded-2xl shadow-sm p-8 max-w-md text-center">
+          <AlertTriangle className="w-10 h-10 text-amber-500 mx-auto mb-3" />
+          <p className="text-sm font-medium text-gray-700 mb-1">No se pudo iniciar el examen</p>
+          <p className="text-xs text-gray-500 mb-4">{errorInicio}</p>
+          <button
+            onClick={() => { setErrorInicio(''); setReintentoKey((k) => k + 1); }}
+            className="px-5 py-2 text-sm text-white rounded-xl"
+            style={{ backgroundColor: COLOR_PRIMARIO }}
+          >
+            Reintentar
+          </button>
         </div>
       </div>
     );

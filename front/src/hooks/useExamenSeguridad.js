@@ -8,6 +8,12 @@ const useExamenSeguridad = (examenActivo, configuracion = {}) => {
   const [violaciones, setViolaciones] = useState(0);
   const [eventosSeguridad, setEventosSeguridad] = useState([]);
   const [advertenciaActiva, setAdvertenciaActiva] = useState(false);
+  const [prevExamenActivo, setPrevExamenActivo] = useState(examenActivo);
+
+  if (examenActivo !== prevExamenActivo) {
+    setPrevExamenActivo(examenActivo);
+    if (!examenActivo) setAdvertenciaActiva(false);
+  }
   
   const examenActivoRef = useRef(examenActivo);
   const violacionesRef = useRef(violaciones);
@@ -174,10 +180,7 @@ const useExamenSeguridad = (examenActivo, configuracion = {}) => {
   }, [incrementarViolacion, reingresarFullscreen]);
 
   useEffect(() => {
-    if (!examenActivo) { 
-      setAdvertenciaActiva(false); 
-      return; 
-    }
+    if (!examenActivo) return;
 
     // Handlers
     const handleVisibilityChange = () => {
@@ -295,7 +298,7 @@ const useExamenSeguridad = (examenActivo, configuracion = {}) => {
     violaciones, 
     eventosSeguridad, 
     advertenciaActiva, 
-    maxViolaciones: limiteViolacionesRef.current, 
+    maxViolaciones: configuracion.limite_violaciones || MAX_VIOLACIONES, 
     resetearViolaciones, 
     setOnViolacionMaxima 
   };

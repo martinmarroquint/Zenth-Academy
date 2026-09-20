@@ -8,7 +8,8 @@ import VerCertificado from '../../components/certificados/VerCertificado';
 
 const CertificadosPage = () => {
   const [certificadoViendo, setCertificadoViendo] = useState(null);
-  const [certificadoGenerando, setCertificadoGenerando] = useState(null);
+  const [mostrandoGenerador, setMostrandoGenerador] = useState(false);
+  const [cursoParaCertificado, setCursoParaCertificado] = useState(null);
 
   if (certificadoViendo) {
     return (
@@ -19,19 +20,21 @@ const CertificadosPage = () => {
     );
   }
 
-  if (certificadoGenerando) {
+  if (mostrandoGenerador) {
     return (
       <GenerarCertificado
-        cursoId={certificadoGenerando}
-        onVolver={() => setCertificadoGenerando(null)}
-        onGenerado={() => setCertificadoGenerando(null)}
+        cursoId={cursoParaCertificado}
+        onVolver={() => setMostrandoGenerador(false)}
       />
     );
   }
 
   return (
     <PanelCertificados
-      onGenerarCertificado={(cursoId) => setCertificadoGenerando(cursoId)}
+      onGenerarCertificado={(cursoId) => {
+        setCursoParaCertificado(cursoId || null);
+        setMostrandoGenerador(true);
+      }}
       onVerCertificado={(id) => setCertificadoViendo(id)}
     />
   );

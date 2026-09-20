@@ -1,7 +1,7 @@
 // front/src/pages/Home.jsx
 // PAGINA PRINCIPAL - QR arriba, Login abajo
 
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { QRCodeSVG } from 'qrcode.react';
 import {
@@ -10,6 +10,7 @@ import {
 } from 'lucide-react';
 import { authService } from '../services/authService';
 import compartirService from '../services/compartirService';
+import SocialLoginButtons from '../components/auth/SocialLoginButtons';
 
 const Home = () => {
   const navigate = useNavigate();
@@ -27,13 +28,61 @@ const Home = () => {
   
   const pollingIntervalRef = useRef(null);
   const isPollingActiveRef = useRef(false);
+  const cargarSalaActivaRef = useRef(null);
 
   useEffect(() => {
     const token = localStorage.getItem('token');
     setTieneToken(!!token && token !== 'undefined' && token !== 'null');
+
+    // ✅ Mensaje de error devuelto por el login social (OAuth)
+    const params = new URLSearchParams(window.location.search);
+    const err = params.get('error');
+    if (err) {
+      const mensajes = {
+        cancelado: 'Cancelaste el inicio de sesión con el proveedor.',
+        oauth_fallido: 'No se pudo completar el inicio de sesión social.',
+        sesion_expirada: 'La sesión expiró. Intenta de nuevo.',
+        usuario_inactivo: 'Tu cuenta está inactiva. Contacta al administrador.',
+        proveedor_invalido: 'Proveedor no válido.',
+        parametros_faltantes: 'Faltan datos para completar el inicio de sesión.',
+      };
+      setError(mensajes[err] || 'No se pudo iniciar sesión.');
+      // Limpiar la URL para que no se repita al recargar
+      window.history.replaceState({}, '', window.location.pathname);
+    }
   }, []);
 
-  const cargarSalaActiva = async () => {
+  const detenerPolling = useCallback(() => {
+    isPollingActiveRef.current = false;
+    if (pollingIntervalRef.current) {
+      clearInterval(pollingIntervalRef.current);
+      pollingIntervalRef.current = null;
+    }
+  }, []);
+
+  const iniciarPolling = useCallback((intervaloMs) => {
+    detenerPolling();
+    isPollingActiveRef.current = true;
+    pollingIntervalRef.current = setInterval(() => {
+      if (isPollingActiveRef.current) {
+        cargarSalaActivaRef.current?.();
+      }
+    }, intervaloMs);
+  }, [detenerPolling]);
+
+  const reconfigurarPolling = useCallback((data) => {
+    let intervalo = 30000;
+    if (data) {
+      if (data.estado === 'ACTIVO') {
+        intervalo = 10000;
+      } else if (data.estado === 'ESPERANDO') {
+        intervalo = 5000;
+      }
+    }
+    iniciarPolling(intervalo);
+  }, [iniciarPolling]);
+
+  const cargarSalaActiva = useCallback(async () => {
     const token = localStorage.getItem('token');
     const tokenValido = token && token !== 'undefined' && token !== 'null';
     
@@ -66,37 +115,11 @@ const Home = () => {
     } finally {
       setCargandoQR(false);
     }
-  };
+  }, [detenerPolling, reconfigurarPolling]);
 
-  const reconfigurarPolling = (data) => {
-    let intervalo = 30000;
-    if (data) {
-      if (data.estado === 'ACTIVO') {
-        intervalo = 10000;
-      } else if (data.estado === 'ESPERANDO') {
-        intervalo = 5000;
-      }
-    }
-    iniciarPolling(intervalo);
-  };
-
-  const iniciarPolling = (intervaloMs) => {
-    detenerPolling();
-    isPollingActiveRef.current = true;
-    pollingIntervalRef.current = setInterval(() => {
-      if (isPollingActiveRef.current) {
-        cargarSalaActiva();
-      }
-    }, intervaloMs);
-  };
-
-  const detenerPolling = () => {
-    isPollingActiveRef.current = false;
-    if (pollingIntervalRef.current) {
-      clearInterval(pollingIntervalRef.current);
-      pollingIntervalRef.current = null;
-    }
-  };
+  useEffect(() => {
+    cargarSalaActivaRef.current = cargarSalaActiva;
+  }, [cargarSalaActiva]);
 
   useEffect(() => {
     const token = localStorage.getItem('token');
@@ -110,7 +133,7 @@ const Home = () => {
     return () => {
       detenerPolling();
     };
-  }, []);
+  }, [cargarSalaActiva, detenerPolling]);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -279,6 +302,9 @@ const Home = () => {
             )}
           </button>
         </form>
+
+        {/* Login social (Google / Microsoft) */}
+        <SocialLoginButtons onError={setError} />
 
         <div className="mt-6 text-center">
           <p className="text-xs text-gray-400">

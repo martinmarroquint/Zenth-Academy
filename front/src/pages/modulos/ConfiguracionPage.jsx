@@ -1,12 +1,99 @@
 // front/src/pages/modulos/ConfiguracionPage.jsx
-// CONFIGURACION (pilar 3): Perfil, Notificaciones, Preferencias
+// CONFIGURACION (pilar 3): Perfil, Seguridad, Notificaciones, Preferencias, Cuenta
 
 import React, { useState, useEffect } from 'react';
 import {
-  User, Bell, Settings, Save, Loader2, Eye, EyeOff,
-  CheckCircle, Lock, Palette, Globe
+  User, Bell, Settings, Save, CheckCircle, Lock, Globe,
+  Info, Download, LogOut, AlertTriangle, ShieldCheck,
+  Calendar, Clock
 } from 'lucide-react';
 import { authService } from '../../services/authService';
+import { Input, Button, Switch, Tabs, Badge, Modal, Dropdown } from '../../components/ui';
+
+// =============================================
+// CONSTANTES
+// =============================================
+
+const TABS = [
+  { id: 'perfil', label: 'Perfil', icon: <User className="w-4 h-4" /> },
+  { id: 'seguridad', label: 'Seguridad', icon: <Lock className="w-4 h-4" /> },
+  { id: 'notificaciones', label: 'Notificaciones', icon: <Bell className="w-4 h-4" /> },
+  { id: 'preferencias', label: 'Preferencias', icon: <Settings className="w-4 h-4" /> },
+  { id: 'cuenta', label: 'Cuenta', icon: <ShieldCheck className="w-4 h-4" /> },
+];
+
+const GRUPOS_NOTIFICACIONES = [
+  {
+    titulo: 'Solicitudes de acceso',
+    items: [
+      { key: 'nueva_solicitud', label: 'Nueva solicitud de acceso a curso', desc: 'Cuando un estudiante solicita acceso a uno de tus cursos' },
+    ],
+  },
+  {
+    titulo: 'Cursos',
+    items: [
+      { key: 'curso_completado', label: 'Estudiante completó un curso', desc: 'Cuando un estudiante termina el 100% de un curso' },
+      { key: 'certificado_emitido', label: 'Certificado emitido', desc: 'Cuando se emite un certificado automáticamente' },
+      { key: 'material_compartido', label: 'Sesión de compartir en clase', desc: 'Cuando inicias o terminas una sesión de compartir en clase' },
+    ],
+  },
+  {
+    titulo: 'Comunidad',
+    items: [
+      { key: 'nuevo_comentario', label: 'Nuevo comentario en el foro', desc: 'Cuando alguien comenta en una publicación del foro' },
+      { key: 'recordatorios', label: 'Recordatorios de estudio', desc: 'Recordatorios periódicos para estudiantes' },
+    ],
+  },
+];
+
+const IDIOMAS = [
+  { value: 'es', label: 'Español' },
+  { value: 'en', label: 'English' },
+];
+
+const FORMATOS_FECHA = [
+  { value: 'dmy', label: 'DD/MM/AAAA' },
+  { value: 'mdy', label: 'MM/DD/AAAA' },
+];
+
+const ZONAS_HORARIAS = [
+  { value: 'America/Lima', label: '(GMT-5) Lima, Bogotá, Quito' },
+  { value: 'America/Mexico_City', label: '(GMT-6) Ciudad de México' },
+  { value: 'America/Bogota', label: '(GMT-5) Bogotá' },
+  { value: 'America/Argentina/Buenos_Aires', label: '(GMT-3) Buenos Aires' },
+  { value: 'America/Santiago', label: '(GMT-4) Santiago' },
+  { value: 'Europe/Madrid', label: '(GMT+1) Madrid' },
+  { value: 'UTC', label: '(GMT+0) UTC' },
+];
+
+const FORTALEZA_INFO = {
+  debil: { label: 'Débil', color: 'bg-red-500', text: 'text-red-600', ancho: 'w-1/3' },
+  media: { label: 'Media', color: 'bg-amber-500', text: 'text-amber-600', ancho: 'w-2/3' },
+  fuerte: { label: 'Fuerte', color: 'bg-emerald-500', text: 'text-emerald-600', ancho: 'w-full' },
+};
+
+const evaluarFortaleza = (pwd) => {
+  if (!pwd) return null;
+  let score = 0;
+  if (pwd.length >= 6) score += 1;
+  if (pwd.length >= 10) score += 1;
+  if (/[a-z]/.test(pwd) && /[A-Z]/.test(pwd)) score += 1;
+  if (/\d/.test(pwd)) score += 1;
+  if (/[^A-Za-z0-9]/.test(pwd)) score += 1;
+  if (score <= 2) return 'debil';
+  if (score === 3) return 'media';
+  return 'fuerte';
+};
+
+const PREFERENCIAS_DEFAULT = {
+  idioma: 'es',
+  formatoFecha: 'dmy',
+  zonaHoraria: 'America/Lima',
+};
+
+// =============================================
+// COMPONENTE
+// =============================================
 
 const ConfiguracionPage = () => {
   const [tabActiva, setTabActiva] = useState('perfil');
@@ -26,7 +113,6 @@ const ConfiguracionPage = () => {
 
   // ===== SEGURIDAD =====
   const [password, setPassword] = useState({ actual: '', nueva: '', confirmar: '' });
-  const [mostrarPass, setMostrarPass] = useState(false);
   const [guardandoPass, setGuardandoPass] = useState(false);
   const [mensajePass, setMensajePass] = useState('');
 
@@ -42,11 +128,19 @@ const ConfiguracionPage = () => {
   // ===== PREFERENCIAS =====
   const [preferencias, setPreferencias] = useState(() => {
     try {
-      return JSON.parse(localStorage.getItem('cv_preferencias') || '{"idioma":"es","tema":"claro"}');
+      const guardadas = JSON.parse(localStorage.getItem('cv_preferencias') || '{}');
+      // Eliminar la preferencia de tema: el tema oscuro real aún no está implementado
+      delete guardadas.tema;
+      return { ...PREFERENCIAS_DEFAULT, ...guardadas };
     } catch {
-      return { idioma: 'es', tema: 'claro' };
+      return { ...PREFERENCIAS_DEFAULT };
     }
   });
+
+  // ===== CUENTA =====
+  const [mensajeExport, setMensajeExport] = useState('');
+  const [mostrarLogout, setMostrarLogout] = useState(false);
+  const [cerrandoSesion, setCerrandoSesion] = useState(false);
 
   useEffect(() => {
     localStorage.setItem('cv_notificaciones', JSON.stringify(notificaciones));
@@ -56,6 +150,39 @@ const ConfiguracionPage = () => {
     localStorage.setItem('cv_preferencias', JSON.stringify(preferencias));
   }, [preferencias]);
 
+  // ===== HELPERS DE FORMATO =====
+  const formatearFecha = (valor) => {
+    if (!valor) return '—';
+    const fecha = new Date(valor);
+    if (Number.isNaN(fecha.getTime())) return '—';
+    const dia = String(fecha.getDate()).padStart(2, '0');
+    const mes = String(fecha.getMonth() + 1).padStart(2, '0');
+    const anio = fecha.getFullYear();
+    return preferencias.formatoFecha === 'mdy' ? `${mes}/${dia}/${anio}` : `${dia}/${mes}/${anio}`;
+  };
+
+  const formatearFechaHora = (valor) => {
+    if (!valor) return '—';
+    const fecha = new Date(valor);
+    if (Number.isNaN(fecha.getTime())) return '—';
+    const hora = fecha.toLocaleTimeString('es-PE', { hour: '2-digit', minute: '2-digit' });
+    return `${formatearFecha(valor)} · ${hora}`;
+  };
+
+  const iniciales = `${(usuario?.nombres || '').charAt(0)}${(usuario?.apellidos || '').charAt(0)}`.toUpperCase() || 'U';
+
+  const rolVariant = usuario?.rol === 'admin'
+    ? 'danger'
+    : usuario?.rol === 'docente'
+      ? 'primary'
+      : usuario?.rol === 'estudiante'
+        ? 'info'
+        : 'default';
+
+  const fortaleza = evaluarFortaleza(password.nueva);
+  const fortalezaInfo = fortaleza ? FORTALEZA_INFO[fortaleza] : null;
+
+  // ===== ACCIONES =====
   const handleGuardarPerfil = async () => {
     setGuardandoPerfil(true);
     setMensajePerfil('');
@@ -68,7 +195,6 @@ const ConfiguracionPage = () => {
       if (perfil.biografia) data.biografia = perfil.biografia;
       if (perfil.institucion) data.institucion = perfil.institucion;
       await authService.actualizarPerfil(data);
-      // Actualizar usuario en localStorage
       const actualizado = { ...usuario, ...data };
       localStorage.setItem('user', JSON.stringify(actualizado));
       authService.user = actualizado;
@@ -109,122 +235,154 @@ const ConfiguracionPage = () => {
     }
   };
 
-  const toggleNotificacion = (key) => {
-    setNotificaciones(prev => ({ ...prev, [key]: !prev[key] }));
+  const toggleNotificacion = (key, value) => {
+    setNotificaciones((prev) => ({ ...prev, [key]: value }));
   };
 
-  const TABS = [
-    { id: 'perfil', label: 'Perfil', icon: User },
-    { id: 'seguridad', label: 'Seguridad', icon: Lock },
-    { id: 'notificaciones', label: 'Notificaciones', icon: Bell },
-    { id: 'preferencias', label: 'Preferencias', icon: Settings },
-  ];
+  const exportarDatos = () => {
+    const almacenamiento = {};
+    for (let i = 0; i < localStorage.length; i += 1) {
+      const key = localStorage.key(i);
+      const raw = localStorage.getItem(key);
+      try {
+        almacenamiento[key] = JSON.parse(raw);
+      } catch {
+        almacenamiento[key] = raw;
+      }
+    }
+
+    const payload = {
+      exportado_en: new Date().toISOString(),
+      usuario: usuario
+        ? { nombres: usuario.nombres, apellidos: usuario.apellidos, email: usuario.email, rol: usuario.rol }
+        : null,
+      almacenamiento_local: almacenamiento,
+    };
+
+    const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const enlace = document.createElement('a');
+    enlace.href = url;
+    enlace.download = `zenth-datos-${new Date().toISOString().slice(0, 10)}.json`;
+    document.body.appendChild(enlace);
+    enlace.click();
+    document.body.removeChild(enlace);
+    URL.revokeObjectURL(url);
+
+    setMensajeExport('Datos exportados correctamente');
+    setTimeout(() => setMensajeExport(''), 3000);
+  };
+
+  const handleLogout = async () => {
+    setCerrandoSesion(true);
+    try {
+      await authService.logout();
+    } finally {
+      setCerrandoSesion(false);
+    }
+  };
 
   return (
     <div className="max-w-5xl mx-auto px-4 sm:px-6 py-6 space-y-6">
-      <div>
-        <h2 className="text-2xl font-bold text-gray-900">Configuración</h2>
-        <p className="text-sm text-gray-500">Gestiona tu perfil, seguridad y preferencias</p>
+      {/* Header */}
+      <div className="flex items-center gap-4">
+        <div className="w-12 h-12 rounded-2xl bg-[#0f766e]/10 flex items-center justify-center flex-shrink-0">
+          <Settings className="w-6 h-6 text-[#0f766e]" />
+        </div>
+        <div>
+          <h1 className="text-2xl font-bold text-gray-900 tracking-tight">Configuración</h1>
+          <p className="text-sm text-gray-500">Gestiona tu perfil, seguridad, notificaciones y preferencias</p>
+        </div>
       </div>
 
       {/* Tabs */}
-      <div className="flex items-center gap-1 border-b border-gray-200 bg-white rounded-xl px-2 overflow-x-auto">
-        {TABS.map((tab) => {
-          const Icon = tab.icon;
-          return (
-            <button
-              key={tab.id}
-              onClick={() => setTabActiva(tab.id)}
-              className={`px-4 py-2.5 text-sm font-medium transition-colors border-b-2 -mb-px flex items-center gap-1.5 whitespace-nowrap ${
-                tabActiva === tab.id
-                  ? 'text-indigo-600 border-indigo-600'
-                  : 'text-gray-500 border-transparent hover:text-gray-700'
-              }`}
-            >
-              <Icon className="w-4 h-4" />
-              {tab.label}
-            </button>
-          );
-        })}
+      <div className="bg-white rounded-2xl border border-gray-200/60 px-3 overflow-x-auto">
+        <Tabs
+          tabs={TABS}
+          activeTab={tabActiva}
+          onChange={setTabActiva}
+          variant="underlined"
+          className="min-w-max [&>button]:whitespace-nowrap"
+        />
       </div>
 
       {/* ===== PERFIL ===== */}
       {tabActiva === 'perfil' && (
-        <div className="bg-white rounded-xl border border-gray-200 p-6 space-y-4">
-          <div className="flex items-center gap-4">
-            <div className="w-16 h-16 rounded-full bg-indigo-600 flex items-center justify-center">
-              <span className="text-2xl font-bold text-white">
-                {(usuario?.nombres || 'U').charAt(0).toUpperCase()}
-              </span>
+        <div className="bg-white rounded-2xl border border-gray-200/60 p-6 space-y-6">
+          <div className="flex flex-col sm:flex-row sm:items-center gap-5">
+            <div className="w-20 h-20 rounded-full bg-[#0f766e] flex items-center justify-center flex-shrink-0">
+              <span className="text-3xl font-bold text-white">{iniciales}</span>
             </div>
-            <div>
-              <h3 className="font-semibold text-gray-900">{usuario?.nombres} {usuario?.apellidos}</h3>
+            <div className="space-y-1.5">
+              <h3 className="text-lg font-semibold text-gray-900">
+                {usuario?.nombres} {usuario?.apellidos}
+              </h3>
               <p className="text-sm text-gray-500">{usuario?.email}</p>
-              <span className="text-xs bg-indigo-50 text-indigo-600 px-2 py-0.5 rounded-full capitalize">
-                {usuario?.rol || 'usuario'}
-              </span>
+              <div className="flex flex-wrap items-center gap-2">
+                <Badge variant={rolVariant} size="md" className="capitalize">
+                  {usuario?.rol || 'usuario'}
+                </Badge>
+                {usuario?.email_verificado && (
+                  <Badge variant="success" size="md" className="flex items-center gap-1">
+                    <CheckCircle className="w-3 h-3" />
+                    Verificado
+                  </Badge>
+                )}
+              </div>
+              <div className="flex flex-wrap items-center gap-x-4 gap-y-1 pt-1 text-xs text-gray-400">
+                <span className="flex items-center gap-1">
+                  <Calendar className="w-3.5 h-3.5" />
+                  Registro: {formatearFecha(usuario?.fecha_registro)}
+                </span>
+                <span className="flex items-center gap-1">
+                  <Clock className="w-3.5 h-3.5" />
+                  Último acceso: {formatearFechaHora(usuario?.ultimo_acceso)}
+                </span>
+              </div>
             </div>
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <div>
-              <label className="text-xs text-gray-500 block mb-1">Nombres</label>
-              <input
-                type="text"
-                value={perfil.nombres}
-                onChange={(e) => setPerfil({ ...perfil, nombres: e.target.value })}
-                className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg outline-none focus:border-indigo-300 focus:ring-2 focus:ring-indigo-100 transition-all"
-              />
-            </div>
-            <div>
-              <label className="text-xs text-gray-500 block mb-1">Apellidos</label>
-              <input
-                type="text"
-                value={perfil.apellidos}
-                onChange={(e) => setPerfil({ ...perfil, apellidos: e.target.value })}
-                className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg outline-none focus:border-indigo-300 focus:ring-2 focus:ring-indigo-100 transition-all"
-              />
-            </div>
-            <div>
-              <label className="text-xs text-gray-500 block mb-1">Teléfono</label>
-              <input
-                type="text"
-                value={perfil.telefono}
-                onChange={(e) => setPerfil({ ...perfil, telefono: e.target.value })}
-                className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg outline-none focus:border-indigo-300 focus:ring-2 focus:ring-indigo-100 transition-all"
-              />
-            </div>
-            <div>
-              <label className="text-xs text-gray-500 block mb-1">Institución</label>
-              <input
-                type="text"
-                value={perfil.institucion}
-                onChange={(e) => setPerfil({ ...perfil, institucion: e.target.value })}
-                className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg outline-none focus:border-indigo-300 focus:ring-2 focus:ring-indigo-100 transition-all"
-              />
-            </div>
-            <div>
-              <label className="text-xs text-gray-500 block mb-1">Especialidad</label>
-              <input
-                type="text"
-                value={perfil.especialidad}
-                onChange={(e) => setPerfil({ ...perfil, especialidad: e.target.value })}
-                className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg outline-none focus:border-indigo-300 focus:ring-2 focus:ring-indigo-100 transition-all"
-              />
-            </div>
+            <Input
+              label="Nombres"
+              value={perfil.nombres}
+              onChange={(e) => setPerfil({ ...perfil, nombres: e.target.value })}
+            />
+            <Input
+              label="Apellidos"
+              value={perfil.apellidos}
+              onChange={(e) => setPerfil({ ...perfil, apellidos: e.target.value })}
+            />
+            <Input
+              label="Teléfono"
+              value={perfil.telefono}
+              onChange={(e) => setPerfil({ ...perfil, telefono: e.target.value })}
+            />
+            <Input
+              label="Institución"
+              value={perfil.institucion}
+              onChange={(e) => setPerfil({ ...perfil, institucion: e.target.value })}
+            />
+            <Input
+              label="Especialidad"
+              value={perfil.especialidad}
+              onChange={(e) => setPerfil({ ...perfil, especialidad: e.target.value })}
+            />
           </div>
+
           <div>
-            <label className="text-xs text-gray-500 block mb-1">Biografía</label>
+            <label className="block text-xs font-medium text-gray-700 mb-1.5">Biografía</label>
             <textarea
               value={perfil.biografia}
               onChange={(e) => setPerfil({ ...perfil, biografia: e.target.value })}
               rows={3}
-              className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg outline-none focus:border-indigo-300 focus:ring-2 focus:ring-indigo-100 transition-all resize-none"
+              className="w-full px-4 py-2 text-sm bg-white border border-gray-200 rounded-xl outline-none transition-all duration-200 resize-none hover:border-gray-300 focus:border-[#0f766e] focus:ring-2 focus:ring-[#0f766e]/20 placeholder:text-gray-400"
+              placeholder="Cuéntanos un poco sobre ti"
             />
           </div>
 
           {mensajePerfil && (
-            <div className={`flex items-center gap-2 text-sm px-4 py-3 rounded-lg ${
+            <div className={`flex items-center gap-2 text-sm px-4 py-3 rounded-xl ${
               mensajePerfil.includes('correctamente') ? 'bg-emerald-50 text-emerald-700' : 'bg-red-50 text-red-600'
             }`}>
               <CheckCircle className="w-4 h-4" />
@@ -232,154 +390,245 @@ const ConfiguracionPage = () => {
             </div>
           )}
 
-          <button
+          <Button
+            variant="primary"
+            icon={<Save className="w-4 h-4" />}
+            loading={guardandoPerfil}
             onClick={handleGuardarPerfil}
-            disabled={guardandoPerfil}
-            className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors flex items-center gap-2 text-sm font-medium disabled:opacity-50"
           >
-            {guardandoPerfil ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
             Guardar perfil
-          </button>
+          </Button>
         </div>
       )}
 
       {/* ===== SEGURIDAD ===== */}
       {tabActiva === 'seguridad' && (
-        <div className="bg-white rounded-xl border border-gray-200 p-6 space-y-4">
-          <h3 className="font-semibold text-gray-900">Cambiar contraseña</h3>
-          <div className="grid grid-cols-1 gap-4 max-w-md">
-            <div>
-              <label className="text-xs text-gray-500 block mb-1">Contraseña actual</label>
-              <div className="relative">
-                <input
-                  type={mostrarPass ? 'text' : 'password'}
-                  value={password.actual}
-                  onChange={(e) => setPassword({ ...password, actual: e.target.value })}
-                  className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg outline-none focus:border-indigo-300 focus:ring-2 focus:ring-indigo-100 transition-all pr-10"
-                />
-                <button
-                  onClick={() => setMostrarPass(!mostrarPass)}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400"
-                >
-                  {mostrarPass ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                </button>
-              </div>
+        <div className="space-y-6">
+          <div className="bg-white rounded-2xl border border-gray-200/60 p-6 space-y-5">
+            <div className="flex items-center gap-2">
+              <Lock className="w-4 h-4 text-[#0f766e]" />
+              <h3 className="font-semibold text-gray-900">Cambiar contraseña</h3>
             </div>
-            <div>
-              <label className="text-xs text-gray-500 block mb-1">Nueva contraseña</label>
-              <input
+
+            <div className="grid grid-cols-1 gap-4 max-w-md">
+              <Input
                 type="password"
-                value={password.nueva}
-                onChange={(e) => setPassword({ ...password, nueva: e.target.value })}
-                className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg outline-none focus:border-indigo-300 focus:ring-2 focus:ring-indigo-100 transition-all"
+                label="Contraseña actual"
+                value={password.actual}
+                onChange={(e) => setPassword({ ...password, actual: e.target.value })}
               />
-            </div>
-            <div>
-              <label className="text-xs text-gray-500 block mb-1">Confirmar nueva contraseña</label>
-              <input
+              <div>
+                <Input
+                  type="password"
+                  label="Nueva contraseña"
+                  value={password.nueva}
+                  onChange={(e) => setPassword({ ...password, nueva: e.target.value })}
+                />
+                {fortalezaInfo && (
+                  <div className="mt-2 space-y-1">
+                    <div className="h-1.5 w-full bg-gray-100 rounded-full overflow-hidden">
+                      <div className={`h-full rounded-full transition-all duration-300 ${fortalezaInfo.color} ${fortalezaInfo.ancho}`} />
+                    </div>
+                    <p className={`text-xs font-medium ${fortalezaInfo.text}`}>
+                      Seguridad: {fortalezaInfo.label}
+                    </p>
+                  </div>
+                )}
+              </div>
+              <Input
                 type="password"
+                label="Confirmar nueva contraseña"
                 value={password.confirmar}
                 onChange={(e) => setPassword({ ...password, confirmar: e.target.value })}
-                className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg outline-none focus:border-indigo-300 focus:ring-2 focus:ring-indigo-100 transition-all"
               />
             </div>
+
+            {mensajePass && (
+              <div className={`flex items-center gap-2 text-sm px-4 py-3 rounded-xl max-w-md ${
+                mensajePass.includes('correctamente') ? 'bg-emerald-50 text-emerald-700' : 'bg-red-50 text-red-600'
+              }`}>
+                <CheckCircle className="w-4 h-4" />
+                {mensajePass}
+              </div>
+            )}
+
+            <Button
+              variant="primary"
+              icon={<Save className="w-4 h-4" />}
+              loading={guardandoPass}
+              onClick={handleCambiarPassword}
+            >
+              Cambiar contraseña
+            </Button>
           </div>
 
-          {mensajePass && (
-            <div className={`flex items-center gap-2 text-sm px-4 py-3 rounded-lg max-w-md ${
-              mensajePass.includes('correctamente') ? 'bg-emerald-50 text-emerald-700' : 'bg-red-50 text-red-600'
-            }`}>
-              <CheckCircle className="w-4 h-4" />
-              {mensajePass}
+          <div className="bg-white rounded-2xl border border-gray-200/60 p-6 space-y-3">
+            <div className="flex items-center gap-2">
+              <ShieldCheck className="w-4 h-4 text-[#0f766e]" />
+              <h3 className="font-semibold text-gray-900">Sesión</h3>
             </div>
-          )}
-
-          <button
-            onClick={handleCambiarPassword}
-            disabled={guardandoPass}
-            className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors flex items-center gap-2 text-sm font-medium disabled:opacity-50"
-          >
-            {guardandoPass ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
-            Cambiar contraseña
-          </button>
+            <div className="flex items-center gap-3 text-sm text-gray-600">
+              <Clock className="w-4 h-4 text-gray-400 flex-shrink-0" />
+              <span>
+                Último acceso: <span className="font-medium text-gray-900">{formatearFechaHora(usuario?.ultimo_acceso)}</span>
+              </span>
+            </div>
+            <p className="text-xs text-gray-400">
+              Si no reconoces este acceso, cambia tu contraseña inmediatamente.
+            </p>
+          </div>
         </div>
       )}
 
       {/* ===== NOTIFICACIONES ===== */}
       {tabActiva === 'notificaciones' && (
-        <div className="bg-white rounded-xl border border-gray-200 p-6 space-y-4">
-          <h3 className="font-semibold text-gray-900">Notificaciones</h3>
-          <p className="text-xs text-gray-500">Configura qué notificaciones deseas recibir</p>
+        <div className="bg-white rounded-2xl border border-gray-200/60 p-6 space-y-5">
+          <div>
+            <h3 className="font-semibold text-gray-900">Notificaciones</h3>
+            <p className="text-xs text-gray-500 mt-1">Configura qué notificaciones deseas recibir</p>
+          </div>
 
-          {[
-            { key: 'nueva_solicitud', label: 'Nueva solicitud de acceso a curso', desc: 'Cuando un estudiante solicita acceso a uno de tus cursos' },
-            { key: 'curso_completado', label: 'Estudiante completó un curso', desc: 'Cuando un estudiante termina el 100% de un curso' },
-            { key: 'nuevo_comentario', label: 'Nuevo comentario en el foro', desc: 'Cuando alguien comenta en una publicación del foro' },
-            { key: 'certificado_emitido', label: 'Certificado emitido', desc: 'Cuando se emite un certificado automáticamente' },
-            { key: 'material_compartido', label: 'Sesión de compartir en clase', desc: 'Cuando inicias o terminas una sesión de compartir en clase' },
-            { key: 'recordatorios', label: 'Recordatorios de estudio', desc: 'Recordatorios periódicos para estudiantes' },
-          ].map((item) => (
-            <label key={item.key} className="flex items-start justify-between gap-4 py-3 border-b border-gray-100 cursor-pointer">
-              <div>
-                <p className="text-sm font-medium text-gray-900">{item.label}</p>
-                <p className="text-xs text-gray-500">{item.desc}</p>
+          <div className="flex items-start gap-2 text-xs text-gray-600 bg-[#e6f4f2]/60 border border-[#0f766e]/20 rounded-xl px-3 py-2.5">
+            <Info className="w-4 h-4 text-[#0f766e] flex-shrink-0 mt-0.5" />
+            <span>Estas preferencias se guardan en este dispositivo y no se sincronizan con tu cuenta.</span>
+          </div>
+
+          <div className="space-y-5">
+            {GRUPOS_NOTIFICACIONES.map((grupo) => (
+              <div key={grupo.titulo} className="space-y-1">
+                <h4 className="text-xs font-semibold text-gray-400 uppercase tracking-wider">{grupo.titulo}</h4>
+                {grupo.items.map((item) => (
+                  <div
+                    key={item.key}
+                    className="flex items-start justify-between gap-4 py-3 border-b border-gray-100 last:border-0"
+                  >
+                    <div>
+                      <p className="text-sm font-medium text-gray-900">{item.label}</p>
+                      <p className="text-xs text-gray-500">{item.desc}</p>
+                    </div>
+                    <Switch
+                      checked={notificaciones[item.key] !== false}
+                      onChange={(checked) => toggleNotificacion(item.key, checked)}
+                    />
+                  </div>
+                ))}
               </div>
-              <button
-                onClick={() => toggleNotificacion(item.key)}
-                className={`relative w-10 h-6 rounded-full transition-colors flex-shrink-0 ${
-                  notificaciones[item.key] !== false ? 'bg-indigo-600' : 'bg-gray-300'
-                }`}
-              >
-                <span
-                  className={`absolute top-0.5 w-5 h-5 bg-white rounded-full shadow transition-all ${
-                    notificaciones[item.key] !== false ? 'left-[18px]' : 'left-0.5'
-                  }`}
-                />
-              </button>
-            </label>
-          ))}
+            ))}
+          </div>
         </div>
       )}
 
       {/* ===== PREFERENCIAS ===== */}
       {tabActiva === 'preferencias' && (
-        <div className="bg-white rounded-xl border border-gray-200 p-6 space-y-4">
-          <h3 className="font-semibold text-gray-900">Preferencias</h3>
-
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 max-w-lg">
-            <div>
-              <label className="text-xs text-gray-500 block mb-1 flex items-center gap-1">
-                <Globe className="w-3.5 h-3.5" /> Idioma
-              </label>
-              <select
-                value={preferencias.idioma || 'es'}
-                onChange={(e) => setPreferencias({ ...preferencias, idioma: e.target.value })}
-                className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg outline-none focus:border-indigo-300 bg-white"
-              >
-                <option value="es">Español</option>
-                <option value="en">English</option>
-              </select>
-            </div>
-            <div>
-              <label className="text-xs text-gray-500 block mb-1 flex items-center gap-1">
-                <Palette className="w-3.5 h-3.5" /> Tema visual
-              </label>
-              <select
-                value={preferencias.tema || 'claro'}
-                onChange={(e) => setPreferencias({ ...preferencias, tema: e.target.value })}
-                className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg outline-none focus:border-indigo-300 bg-white"
-              >
-                <option value="claro">Claro</option>
-                <option value="oscuro">Oscuro</option>
-              </select>
-            </div>
+        <div className="bg-white rounded-2xl border border-gray-200/60 p-6 space-y-5">
+          <div>
+            <h3 className="font-semibold text-gray-900">Preferencias</h3>
+            <p className="text-xs text-gray-500 mt-1">Ajustes de visualización y regionalización</p>
           </div>
 
-          <p className="text-xs text-gray-400">
-            Las preferencias se guardan en este dispositivo por ahora. La sincronización en la nube llegará en una fase posterior.
-          </p>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 max-w-xl">
+            <Dropdown
+              label="Idioma"
+              value={preferencias.idioma}
+              onChange={(value) => setPreferencias({ ...preferencias, idioma: value })}
+              options={IDIOMAS}
+            />
+            <Dropdown
+              label="Formato de fecha"
+              value={preferencias.formatoFecha}
+              onChange={(value) => setPreferencias({ ...preferencias, formatoFecha: value })}
+              options={FORMATOS_FECHA}
+            />
+            <Dropdown
+              label="Zona horaria"
+              value={preferencias.zonaHoraria}
+              onChange={(value) => setPreferencias({ ...preferencias, zonaHoraria: value })}
+              options={ZONAS_HORARIAS}
+              className="sm:col-span-2"
+            />
+          </div>
+
+          <div className="flex items-start gap-2 text-xs text-gray-500">
+            <Globe className="w-3.5 h-3.5 flex-shrink-0 mt-0.5" />
+            <span>Las preferencias se guardan en este dispositivo por ahora. La sincronización en la nube llegará en una fase posterior.</span>
+          </div>
         </div>
       )}
+
+      {/* ===== CUENTA ===== */}
+      {tabActiva === 'cuenta' && (
+        <div className="space-y-6">
+          <div className="bg-white rounded-2xl border border-gray-200/60 p-6 space-y-4">
+            <div className="flex items-center gap-2">
+              <Download className="w-4 h-4 text-[#0f766e]" />
+              <h3 className="font-semibold text-gray-900">Exportar mis datos</h3>
+            </div>
+            <p className="text-sm text-gray-500">
+              Descarga un archivo JSON con la información guardada en este dispositivo (preferencias,
+              notificaciones y datos de sesión).
+            </p>
+            <Button
+              variant="outline"
+              icon={<Download className="w-4 h-4" />}
+              onClick={exportarDatos}
+            >
+              Descargar mis datos
+            </Button>
+            {mensajeExport && (
+              <div className="flex items-center gap-2 text-sm px-4 py-3 rounded-xl bg-emerald-50 text-emerald-700">
+                <CheckCircle className="w-4 h-4" />
+                {mensajeExport}
+              </div>
+            )}
+          </div>
+
+          <div className="bg-white rounded-2xl border border-red-200 p-6 space-y-4">
+            <div className="flex items-center gap-2">
+              <AlertTriangle className="w-4 h-4 text-red-500" />
+              <h3 className="font-semibold text-gray-900">Zona de peligro</h3>
+            </div>
+            <p className="text-sm text-gray-500">
+              Cerrar sesión en este dispositivo. Deberás volver a ingresar tus credenciales para acceder
+              a tu cuenta.
+            </p>
+            <Button
+              variant="danger"
+              icon={<LogOut className="w-4 h-4" />}
+              onClick={() => setMostrarLogout(true)}
+            >
+              Cerrar sesión
+            </Button>
+          </div>
+        </div>
+      )}
+
+      {/* Modal de confirmación de cierre de sesión */}
+      <Modal
+        isOpen={mostrarLogout}
+        onClose={() => setMostrarLogout(false)}
+        title="Cerrar sesión"
+        size="sm"
+      >
+        <div className="space-y-5">
+          <p className="text-sm text-gray-600">
+            ¿Seguro que deseas cerrar sesión? Tendrás que iniciar sesión nuevamente para acceder a tu
+            cuenta.
+          </p>
+          <div className="flex justify-end gap-2">
+            <Button variant="outline" onClick={() => setMostrarLogout(false)} disabled={cerrandoSesion}>
+              Cancelar
+            </Button>
+            <Button
+              variant="danger"
+              icon={<LogOut className="w-4 h-4" />}
+              loading={cerrandoSesion}
+              onClick={handleLogout}
+            >
+              Sí, cerrar sesión
+            </Button>
+          </div>
+        </div>
+      </Modal>
     </div>
   );
 };

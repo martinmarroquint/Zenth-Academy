@@ -2,12 +2,16 @@
 # VERSION COMPLETA - CON ENDPOINTS PARA EMBED EN CURSOS Y NUEVOS ROLES
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
-from sqlalchemy.orm import Session
-from sqlalchemy import or_
+from sqlalchemy import or_, func
+from sqlalchemy.orm import Session, selectinload
 from typing import List, Optional
 import uuid
 import secrets
+import traceback
+import logging
 from datetime import datetime, timezone, timedelta
+
+logger = logging.getLogger(__name__)
 
 from app.database import get_db
 from app.core.dependencies import (
@@ -18,6 +22,7 @@ from app.core.dependencies import (
 from app.models.usuario import Usuario
 from app.models.examen import Examen, Pregunta
 from app.models.resultado_examen import ResultadoExamen
+from app.models.intento_examen import IntentoExamen
 from app.models.alumno import Alumno
 from app.models.alumno_examen import AlumnoExamen  # LEGACY: fallback de lectura
 from app.models.grupo import Grupo
@@ -30,12 +35,19 @@ from app.schemas.examenes import (
     MensajeResponse,
     GrupoCreate, GrupoUpdate, GrupoResponse,
     HistorialComparticionCreate, HistorialComparticionResponse,
-    CompartirAlumnosRequest, AlumnoConectadoResponse
+    CompartirAlumnosRequest, AlumnoConectadoResponse,
+    AsistenciaItem, AlumnoGuardarItem, RecursoGrupoCreate,
+    VerificarPasswordRequest, ResultadoPublicoRequest,
+    VincularGrupoCarpetaRequest, SincronizarIniciarRequest,
+    IntentoExamenResponse
 )
 
 router = APIRouter()
 
 QR_EXPIRATION_SECONDS = 30
+# Margen de gracia tras expirar el intento (red/procesamiento). Pasado este
+# margen, la entrega se marca como entregada_por_tiempo (no se rechaza).
+GRACIA_ENTREGA_SEGUNDOS = 30
 
 
 # =============================================
@@ -48,7 +60,243 @@ def generar_codigo():
     return f"EXA-{ahora.year}{str(ahora.month).zfill(2)}{str(ahora.day).zfill(2)}-{r.zfill(4)}"
 
 
+def _verificar_ownership_examen(examen: Examen, current_user: Usuario) -> None:
+    """
+    ✅ SEGURIDAD: Verifica que el docente sea dueño del examen.
+    - Admin siempre puede.
+    - Si el examen es legacy (docente_id NULL), se permite para no romper datos existentes.
+    - En caso contrario, debe coincidir el docente_id.
+    """
+    if current_user.rol == 'admin':
+        return
+    if not examen.docente_id:
+        # Examen legacy sin dueño asignado: permitir (se asignará dueño al editarlo)
+        return
+    if str(examen.docente_id) != str(current_user.id):
+        logger.warning(
+            f"Acceso denegado: docente {current_user.id} intentó gestionar "
+            f"examen {examen.id} propiedad de {examen.docente_id}"
+        )
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="No tienes permiso para gestionar este examen"
+        )
+
+
+def _serializar_pregunta(pregunta: Pregunta, incluir_respuestas: bool) -> dict:
+    """Serializa una pregunta. Si `incluir_respuestas` es False (estudiantes /
+    acceso público), se oculta la clave de respuestas para evitar trampas.
+
+    NOTA: en `relacionar` y `ordenamiento` el orden canónico de `columna_b` /
+    `elementos` codifica la respuesta; ocultarlo requeriría selección y
+    calificación server-side por intento (fuera del alcance actual).
+    """
+    data = {
+        "id": str(pregunta.id),
+        "examen_id": str(pregunta.examen_id),
+        "tipo": pregunta.tipo,
+        "enunciado": pregunta.enunciado,
+        "puntos": pregunta.puntos,
+        "orden": pregunta.orden,
+        "opcion_a": pregunta.opcion_a,
+        "opcion_b": pregunta.opcion_b,
+        "opcion_c": pregunta.opcion_c,
+        "opcion_d": pregunta.opcion_d,
+        "opcion_e": pregunta.opcion_e,
+        "columna_a": pregunta.columna_a,
+        "columna_b": pregunta.columna_b,
+        "elementos": pregunta.elementos,
+        "longitud_minima": pregunta.longitud_minima,
+        "escala_opciones": pregunta.escala_opciones,
+        "escala_max": pregunta.escala_max,
+        "escala_min": pregunta.escala_min,
+        "escala_paso": pregunta.escala_paso,
+        "escala_min_label": pregunta.escala_min_label,
+        "escala_max_label": pregunta.escala_max_label,
+        "created_at": pregunta.created_at.isoformat() if pregunta.created_at else None,
+    }
+
+    if incluir_respuestas:
+        data.update({
+            "respuesta_correcta": pregunta.respuesta_correcta,
+            "afirmaciones": pregunta.afirmaciones,
+            "respuesta_corta": pregunta.respuesta_corta,
+            "respuestas_alternativas": pregunta.respuestas_alternativas,
+            "rubrica": pregunta.rubrica,
+            "segmentos": pregunta.segmentos,
+            "frases": pregunta.frases,
+        })
+        return data
+
+    # Sanitizado: se conserva el texto pero se borra la clave.
+    afirmaciones = pregunta.afirmaciones or []
+    frases = pregunta.frases or []
+    data.update({
+        "respuesta_correcta": None,
+        "afirmaciones": [
+            {"id": a.get("id"), "texto": a.get("texto"), "esVerdadero": False}
+            for a in afirmaciones
+        ] if afirmaciones else None,
+        "respuesta_corta": "",
+        "respuestas_alternativas": [],
+        "rubrica": "",
+        "segmentos": None,
+        "frases": [
+            {
+                **f,
+                "segmentos": [
+                    {**s, "respuesta": ""} if s.get("tipo") == "espacio" else s
+                    for s in (f.get("segmentos") or [])
+                ],
+            }
+            for f in frases
+        ] if frases else None,
+    })
+    return data
+
+
+def _serializar_examen(examen: Examen, incluir_respuestas: bool) -> dict:
+    return {
+        "id": str(examen.id),
+        "codigo": examen.codigo,
+        "titulo": examen.titulo,
+        "descripcion": examen.descripcion or "",
+        "tiempo_limite": examen.tiempo_limite,
+        "puntaje_aprobacion": examen.puntaje_aprobacion,
+        "estado": examen.estado,
+        "configuracion": examen.configuracion or {},
+        "total_preguntas": len(examen.preguntas) if examen.preguntas else 0,
+        "intentos_permitidos": examen.intentos_permitidos,
+        "grupo_id": examen.grupo_id,
+        "created_at": examen.created_at.isoformat() if examen.created_at else None,
+        "updated_at": examen.updated_at.isoformat() if examen.updated_at else None,
+        "preguntas": [_serializar_pregunta(p, incluir_respuestas) for p in (examen.preguntas or [])],
+    }
+
+
+def _filtrar_examenes_por_rol(query, current_user: Usuario):
+    """Aísla los exámenes según el rol.
+
+    - admin: ve todos.
+    - docente: ve los suyos (+ legacy sin dueño).
+    - estudiante: solo exámenes PUBLICADO.
+    """
+    if current_user.rol == 'admin':
+        return query
+    if current_user.rol == 'docente':
+        return query.filter(
+            or_(Examen.docente_id == str(current_user.id), Examen.docente_id.is_(None))
+        )
+    return query.filter(Examen.estado == 'PUBLICADO')
+
+
+def _aware_utc(dt):
+    """Normaliza a datetime UTC-aware (las columnas DateTime sin timezone
+    devuelven naive tanto en SQLite como en PostgreSQL)."""
+    if dt is None:
+        return None
+    if dt.tzinfo is None:
+        return dt.replace(tzinfo=timezone.utc)
+    return dt
+
+
+def _intento_a_dict(intento: IntentoExamen, examen: Examen, intentos_usados: int) -> dict:
+    ahora = datetime.now(timezone.utc)
+    expira = _aware_utc(intento.expira_en)
+    restantes = 0
+    if expira:
+        restantes = max(0, int((expira - ahora).total_seconds()))
+    return {
+        "intento_id": str(intento.id),
+        "examen_id": str(examen.id),
+        "expira_en": intento.expira_en,
+        "segundos_restantes": restantes,
+        "tiempo_limite": examen.tiempo_limite or 60,
+        "intentos_permitidos": examen.intentos_permitidos or 0,
+        "intentos_usados": intentos_usados,
+    }
+
+
+def _crear_o_reanudar_intento(db: Session, examen: Examen, *, usuario_id=None,
+                              es_publico=False, codigo_publico=None, alumno_nombre=""):
+    """Devuelve un intento EN_CURSO vigente o crea uno nuevo con `expira_en`."""
+    ahora = datetime.now(timezone.utc)
+    query = db.query(IntentoExamen).filter(
+        IntentoExamen.examen_id == str(examen.id),
+        IntentoExamen.estado == 'EN_CURSO',
+        IntentoExamen.es_publico == es_publico,
+    )
+    if es_publico:
+        query = query.filter(IntentoExamen.codigo_publico == codigo_publico)
+    else:
+        query = query.filter(IntentoExamen.usuario_id == str(usuario_id))
+
+    vigente = query.order_by(IntentoExamen.iniciado_en.desc()).first()
+    if vigente and _aware_utc(vigente.expira_en) and _aware_utc(vigente.expira_en) > ahora:
+        return vigente
+
+    if vigente:
+        vigente.estado = 'EXPIRADO'
+
+    limite_seg = (examen.tiempo_limite or 60) * 60
+    intento = IntentoExamen(
+        id=str(uuid.uuid4()),
+        examen_id=str(examen.id),
+        usuario_id=str(usuario_id) if usuario_id else None,
+        alumno_nombre=alumno_nombre or "",
+        es_publico=es_publico,
+        codigo_publico=codigo_publico,
+        iniciado_en=ahora,
+        expira_en=ahora + timedelta(seconds=limite_seg),
+        estado='EN_CURSO',
+    )
+    db.add(intento)
+    db.commit()
+    db.refresh(intento)
+    return intento
+
+
+def _resolver_tiempo_desde_intento(db: Session, examen: Examen, intento_id, *,
+                                   usuario_id=None, es_publico=False, codigo_publico=None):
+    """Valida el intento y devuelve (tiempo_usado, entregado_por_tiempo, intento).
+
+    Devuelve (None, None, None) si no se proporcionó intento (uso manual de
+    docentes/admins). Lanza HTTPException si el intento no es válido.
+    """
+    if not intento_id:
+        return None, None, None
+
+    intento = db.query(IntentoExamen).filter(IntentoExamen.id == intento_id).first()
+    if not intento or str(intento.examen_id) != str(examen.id):
+        raise HTTPException(status_code=400, detail="Intento inválido para este examen")
+
+    if es_publico:
+        if not intento.es_publico or intento.codigo_publico != codigo_publico:
+            raise HTTPException(status_code=403, detail="El intento no corresponde a este examen público")
+    else:
+        if intento.es_publico or (intento.usuario_id and str(intento.usuario_id) != str(usuario_id)):
+            raise HTTPException(status_code=403, detail="El intento no te pertenece")
+
+    ahora = datetime.now(timezone.utc)
+    limite_seg = (examen.tiempo_limite or 60) * 60
+    iniciado = _aware_utc(intento.iniciado_en)
+    expira = _aware_utc(intento.expira_en)
+    transcurrido = int((ahora - iniciado).total_seconds()) if iniciado else 0
+    tiempo_usado = max(0, min(transcurrido, limite_seg))
+    entregado_tarde = bool(
+        expira and ahora > (expira + timedelta(seconds=GRACIA_ENTREGA_SEGUNDOS))
+    )
+    return tiempo_usado, entregado_tarde, intento
+
+
 def calcular_resultado(examen, respuestas_alumno):
+    """
+    Calcula el resultado de un examen con auto-calificación para 8 tipos de pregunta.
+    
+    Tipos auto-calificados: opcion_multiple, verdadero_falso, relacionar, completar,
+                            ordenamiento, respuesta_corta, likert, estrellas, escala_numerica
+    Tipo manual: ensayo (siempre 0 puntos, requiere calificación manual del docente)
+    """
     preguntas = examen.preguntas if hasattr(examen, 'preguntas') else []
     
     total_puntos = 0
@@ -59,78 +307,91 @@ def calcular_resultado(examen, respuestas_alumno):
     for i, pregunta in enumerate(preguntas):
         respuesta = respuestas_alumno.get(str(i))
         pts = pregunta.puntos if pregunta.puntos is not None else 0
+        
+        # ✅ Ensayo y encuestas NO contribuyen al denominador (no se califican).
+        if pregunta.tipo in ('ensayo', 'likert', 'estrellas', 'escala_numerica'):
+            detalle_preguntas.append({
+                "indice": i,
+                "tipo": pregunta.tipo,
+                "puntos": 0,
+                "puntos_obtenidos": 0,
+                "correcta": None
+            })
+            continue
+        
         total_puntos += pts
         pregunta_correcta = False
         puntos_pregunta = 0
         
-        if pregunta.tipo == 'opcion_multiple':
-            # CORRECCIÓN: respuesta es int (del JSON), respuesta_correcta es string (VARCHAR en BD)
-            # Se comparan ambos como enteros para evitar int != str
-            if respuesta is not None and int(respuesta) == int(pregunta.respuesta_correcta):
-                puntos_pregunta = pts
-                pregunta_correcta = True
-                
-        elif pregunta.tipo == 'verdadero_falso':
-            if isinstance(respuesta, list) and pregunta.afirmaciones and len(pregunta.afirmaciones) > 0:
-                correctas = sum(1 for j, af in enumerate(pregunta.afirmaciones) 
-                    if j < len(respuesta) and respuesta[j] == af.get('esVerdadero', False))
-                proporcion = correctas / len(pregunta.afirmaciones) if len(pregunta.afirmaciones) > 0 else 0
-                puntos_pregunta = round(proporcion * pts, 2)
-                pregunta_correcta = (correctas == len(pregunta.afirmaciones))
-                
-        elif pregunta.tipo == 'relacionar':
-            if isinstance(respuesta, dict) and pregunta.columna_a:
-                col_a = [a for a in pregunta.columna_a if a and a.strip()]
-                total_pares = len(col_a)
-                if total_pares > 0:
-                    correctas = sum(1 for j in range(total_pares) 
-                        if str(j) in respuesta and respuesta[str(j)] == j)
-                    proporcion = correctas / total_pares
+        try:
+            if pregunta.tipo == 'opcion_multiple':
+                # ✅ FIX: Validación de tipo con try/except
+                if respuesta is not None and pregunta.respuesta_correcta is not None:
+                    if int(respuesta) == int(pregunta.respuesta_correcta):
+                        puntos_pregunta = pts
+                        pregunta_correcta = True
+                        
+            elif pregunta.tipo == 'verdadero_falso':
+                if isinstance(respuesta, list) and pregunta.afirmaciones and len(pregunta.afirmaciones) > 0:
+                    correctas = sum(1 for j, af in enumerate(pregunta.afirmaciones) 
+                        if j < len(respuesta) and respuesta[j] == af.get('esVerdadero', False))
+                    proporcion = correctas / len(pregunta.afirmaciones)
                     puntos_pregunta = round(proporcion * pts, 2)
-                    pregunta_correcta = (correctas == total_pares)
+                    pregunta_correcta = (correctas == len(pregunta.afirmaciones))
                     
-        elif pregunta.tipo == 'completar':
-            if pregunta.frases and isinstance(respuesta, list):
-                espacios = []
-                for frase in pregunta.frases:
-                    for seg in (frase.get('segmentos') or []):
-                        if seg.get('tipo') == 'espacio':
-                            espacios.append(seg.get('respuesta', ''))
-                if espacios:
-                    correctas = sum(1 for j, esp in enumerate(espacios)
-                        if j < len(respuesta) and str(respuesta[j] or '').lower().strip() == esp.lower().strip())
-                    proporcion = correctas / len(espacios) if len(espacios) > 0 else 0
-                    puntos_pregunta = round(proporcion * pts, 2)
-                    pregunta_correcta = (correctas == len(espacios))
+            elif pregunta.tipo == 'relacionar':
+                if isinstance(respuesta, dict) and pregunta.columna_a:
+                    col_a = [a for a in pregunta.columna_a if a and a.strip()]
+                    total_pares = len(col_a)
+                    if total_pares > 0:
+                        correctas = sum(1 for j in range(total_pares) 
+                            if str(j) in respuesta and respuesta[str(j)] == j)
+                        proporcion = correctas / total_pares
+                        puntos_pregunta = round(proporcion * pts, 2)
+                        pregunta_correcta = (correctas == total_pares)
+                        
+            elif pregunta.tipo == 'completar':
+                if pregunta.frases and isinstance(respuesta, list):
+                    espacios = []
+                    for frase in pregunta.frases:
+                        for seg in (frase.get('segmentos') or []):
+                            if seg.get('tipo') == 'espacio':
+                                # ✅ FIX: `respuesta` puede ser None (Optional[str] en el schema).
+                                # Antes `esp.lower()` lanzaba AttributeError y abortaba TODO el examen.
+                                espacios.append(seg.get('respuesta') or '')
+                    if espacios:
+                        correctas = sum(1 for j, esp in enumerate(espacios)
+                            if j < len(respuesta) and str(respuesta[j] or '').lower().strip() == str(esp or '').lower().strip())
+                        proporcion = correctas / len(espacios)
+                        puntos_pregunta = round(proporcion * pts, 2)
+                        pregunta_correcta = (correctas == len(espacios))
+                        
+            elif pregunta.tipo == 'ordenamiento':
+                if isinstance(respuesta, list) and pregunta.elementos:
+                    elementos = [e for e in pregunta.elementos if e and str(e).strip()]
+                    total_elem = len(elementos)
+                    if total_elem > 0:
+                        correctas = sum(1 for j in range(total_elem) 
+                            if j < len(respuesta) and respuesta[j] == j + 1)
+                        proporcion = correctas / total_elem
+                        puntos_pregunta = round(proporcion * pts, 2)
+                        pregunta_correcta = (correctas == total_elem)
+                        
+            elif pregunta.tipo == 'respuesta_corta':
+                respuestas_aceptadas = [pregunta.respuesta_corta or '']
+                if pregunta.respuestas_alternativas:
+                    respuestas_aceptadas.extend(pregunta.respuestas_alternativas)
+                respuestas_validas = [str(r).lower().strip() for r in respuestas_aceptadas if r and str(r).strip()]
+                if respuestas_validas and str(respuesta or '').lower().strip() in respuestas_validas:
+                    puntos_pregunta = pts
+                    pregunta_correcta = True
                     
-        elif pregunta.tipo == 'ordenamiento':
-            if isinstance(respuesta, list) and pregunta.elementos:
-                elementos = [e for e in pregunta.elementos if e and e.strip()]
-                total_elem = len(elementos)
-                if total_elem > 0:
-                    correctas = sum(1 for j in range(total_elem) 
-                        if j < len(respuesta) and respuesta[j] == j + 1)
-                    proporcion = correctas / total_elem
-                    puntos_pregunta = round(proporcion * pts, 2)
-                    pregunta_correcta = (correctas == total_elem)
-                    
-        elif pregunta.tipo == 'respuesta_corta':
-            respuestas_aceptadas = [pregunta.respuesta_corta or '']
-            if pregunta.respuestas_alternativas:
-                respuestas_aceptadas.extend(pregunta.respuestas_alternativas)
-            if str(respuesta or '').lower().strip() in [r.lower().strip() for r in respuestas_aceptadas if r]:
-                puntos_pregunta = pts
-                pregunta_correcta = True
-                
-        elif pregunta.tipo == 'ensayo':
+        except (ValueError, TypeError, KeyError, AttributeError):
+            # ✅ FIX: Si hay error de tipo/clave, la pregunta se evalúa como 0 puntos
+            # pero SÍ cuenta en el denominador (el estudiante intentó responder)
+            logger.warning(f"Error evaluando pregunta {i} tipo {pregunta.tipo}: {traceback.format_exc()}")
             puntos_pregunta = 0
-            pregunta_correcta = None
-            
-        elif pregunta.tipo in ('likert', 'estrellas', 'escala_numerica'):
-            # Tipos de encuesta: siempre puntaje completo si respondieron
-            if respuesta is not None:
-                puntos_pregunta = pts
-                pregunta_correcta = True
+            pregunta_correcta = False
         
         puntos_obtenidos += puntos_pregunta
         if pregunta_correcta:
@@ -140,14 +401,14 @@ def calcular_resultado(examen, respuestas_alumno):
             "indice": i,
             "tipo": pregunta.tipo,
             "puntos": pts,
-            "puntos_obtenidos": puntos_pregunta,
+            "puntos_obtenidos": round(puntos_pregunta, 2),
             "correcta": pregunta_correcta
         })
     
     calificacion = round((puntos_obtenidos / total_puntos * 100), 2) if total_puntos > 0 else 0
     
     return {
-        "total_puntos": total_puntos,
+        "total_puntos": round(total_puntos, 2),
         "puntos_obtenidos": round(puntos_obtenidos, 2),
         "correctas": correctas_reales,
         "total_preguntas": len(preguntas),
@@ -178,10 +439,18 @@ def crear_grupo(
     db: Session = Depends(get_db),
     current_user: Usuario = Depends(require_docente)  # ✅ Cambiado
 ):
+    # ✅ FIX: el dueño es SIEMPRE el usuario autenticado (salvo admin que puede
+    # asignarlo explícitamente). Antes `data.docente_id or current_user.id` no caía
+    # nunca al usuario actual porque el schema tiene default "default" (truthy),
+    # dejando todos los grupos a nombre de "default".
+    docente_id_final = str(current_user.id)
+    if current_user.rol == 'admin' and data.docente_id and data.docente_id != 'default':
+        docente_id_final = data.docente_id
+
     grupo = Grupo(
         id=str(uuid.uuid4()),
         nombre=data.nombre,
-        docente_id=data.docente_id or str(current_user.id),
+        docente_id=docente_id_final,
         alumnos=[],
         asistencias=[],
         recursos=[],
@@ -191,6 +460,24 @@ def crear_grupo(
     db.commit()
     db.refresh(grupo)
     return grupo
+
+
+def _verificar_ownership_grupo(grupo: Grupo, current_user: Usuario) -> None:
+    """✅ SEGURIDAD: aísla los grupos por docente (admin siempre puede)."""
+    if current_user.rol == 'admin':
+        return
+    # Grupos legacy sin dueño real ("default") se permiten para no romper datos previos
+    if not grupo.docente_id or grupo.docente_id == 'default':
+        return
+    if str(grupo.docente_id) != str(current_user.id):
+        logger.warning(
+            f"Acceso denegado: docente {current_user.id} intentó gestionar "
+            f"grupo {grupo.id} propiedad de {grupo.docente_id}"
+        )
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="No tienes permiso para gestionar este grupo"
+        )
 
 
 @router.get("/grupos/{grupo_id}", response_model=GrupoResponse)
@@ -215,6 +502,8 @@ def actualizar_grupo(
     grupo = db.query(Grupo).filter(Grupo.id == grupo_id).first()
     if not grupo:
         raise HTTPException(status_code=404, detail="Grupo no encontrado")
+    # ✅ SEGURIDAD: verificar ownership
+    _verificar_ownership_grupo(grupo, current_user)
     
     if data.nombre is not None:
         grupo.nombre = data.nombre
@@ -242,6 +531,8 @@ def eliminar_grupo(
     grupo = db.query(Grupo).filter(Grupo.id == grupo_id).first()
     if not grupo:
         raise HTTPException(status_code=404, detail="Grupo no encontrado")
+    # ✅ SEGURIDAD: verificar ownership
+    _verificar_ownership_grupo(grupo, current_user)
     db.delete(grupo)
     db.commit()
     return {"mensaje": "Grupo eliminado", "ok": True}
@@ -250,7 +541,7 @@ def eliminar_grupo(
 @router.post("/grupos/{grupo_id}/asistencia", response_model=MensajeResponse)
 def guardar_asistencia(
     grupo_id: str,
-    data: List[dict],
+    data: List[AsistenciaItem],
     db: Session = Depends(get_db),
     current_user: Usuario = Depends(require_docente)  # ✅ Cambiado
 ):
@@ -261,7 +552,7 @@ def guardar_asistencia(
     fecha_actual = datetime.now(timezone.utc).strftime("%Y-%m-%d")
     asistencias_actuales = grupo.asistencias or []
     asistencias_actuales = [a for a in asistencias_actuales if a.get('fecha') != fecha_actual]
-    grupo.asistencias = asistencias_actuales + data
+    grupo.asistencias = asistencias_actuales + [a.model_dump() for a in data]
     grupo.updated_at = datetime.now(timezone.utc)
     db.commit()
     return {"mensaje": "Asistencia guardada", "total": len(data), "ok": True}
@@ -345,7 +636,7 @@ def _alumnos_por_ids(db: Session, alumnos_ids: list) -> list:
 @router.post("/grupos/{grupo_id}/recursos")
 def agregar_recurso_grupo(
     grupo_id: str,
-    data: dict,
+    data: RecursoGrupoCreate,
     db: Session = Depends(get_db),
     current_user: Usuario = Depends(require_docente)
 ):
@@ -353,15 +644,15 @@ def agregar_recurso_grupo(
     if not grupo:
         raise HTTPException(status_code=404, detail="Grupo no encontrado")
 
-    tipo_material, categoria = _tipo_recurso_a_material(data.get("tipo", "link"))
+    tipo_material, categoria = _tipo_recurso_a_material(data.tipo)
     material = MaterialCompartido(
         id=str(uuid.uuid4()),
         docente_id=str(current_user.id),
         docente_nombre=current_user.nombre_completo or grupo.docente_id,
-        titulo=data.get("nombre", "Sin nombre"),
-        descripcion=data.get("descripcion", ""),
+        titulo=data.nombre,
+        descripcion=data.descripcion,
         tipo=tipo_material,
-        contenido=data.get("url") or data.get("contenido", ""),
+        contenido=data.url or data.contenido,
         grupo_id=grupo_id,
         categoria=categoria,
         token=secrets.token_urlsafe(16),
@@ -412,11 +703,11 @@ def eliminar_recurso_grupo(
 
 @router.post("/sincronizar/iniciar")
 def iniciar_sesion_carpeta(
-    data: dict,
+    data: SincronizarIniciarRequest,
     db: Session = Depends(get_db),
     current_user: Usuario = Depends(require_docente)  # ✅ Cambiado
 ):
-    session_id = data.get("session_id")
+    session_id = data.session_id
     if not session_id:
         raise HTTPException(status_code=400, detail="session_id requerido")
     return {
@@ -496,12 +787,12 @@ def escanear_qr(
 
 @router.post("/sincronizar/vincular")
 def vincular_grupo_carpeta(
-    data: dict,
+    data: VincularGrupoCarpetaRequest,
     db: Session = Depends(get_db),
     current_user: Usuario = Depends(get_current_active_user)
 ):
-    session_id = data.get("session_id")
-    grupo_id = data.get("grupo_id")
+    session_id = data.session_id
+    grupo_id = data.grupo_id
     if not session_id or not grupo_id:
         raise HTTPException(status_code=400, detail="session_id y grupo_id requeridos")
     grupo = db.query(Grupo).filter(Grupo.id == grupo_id).first()
@@ -689,44 +980,59 @@ def obtener_alumnos_por_grupo(
 
 @router.post("/alumnos", status_code=201)
 def guardar_alumnos(
-    data: List[dict],
+    data: List[AlumnoGuardarItem],
     db: Session = Depends(get_db),
     current_user: Usuario = Depends(require_docente)  # ✅ Cambiado
 ):
     if not data:
         raise HTTPException(status_code=400, detail="Lista de alumnos vacía")
-    grupo_ids = {a.get('grupo_id') for a in data if a.get('grupo_id')}
+    grupo_ids = {a.grupo_id for a in data if a.grupo_id}
     # FASE E: los alumnos viven en `alumnos`; desvinculamos los que ya no
     # están en la lista del grupo (no se borran: el catálogo es único).
-    for gid in grupo_ids:
-        db.query(Alumno).filter(Alumno.grupo_id == gid).update({"grupo_id": None})
+    # N+1 fix: un solo UPDATE para todos los grupos.
+    if grupo_ids:
+        db.query(Alumno).filter(Alumno.grupo_id.in_(grupo_ids)).update({"grupo_id": None})
+    # N+1 fix: precargar alumnos existentes por id y por dni en dos consultas
+    ids_buscados = {a.id for a in data if a.id}
+    dnis_buscados = {a.dni for a in data if a.dni}
+    existentes_por_id = {
+        a.id: a for a in db.query(Alumno).filter(Alumno.id.in_(ids_buscados)).all()
+    } if ids_buscados else {}
+    existentes_por_dni = {
+        a.dni: a for a in db.query(Alumno).filter(Alumno.dni.in_(dnis_buscados)).all()
+    } if dnis_buscados else {}
     for alumno in data:
-        existe = None
-        if alumno.get('id'):
-            existe = db.query(Alumno).filter(Alumno.id == alumno['id']).first()
-        if not existe and alumno.get('dni'):
-            existe = db.query(Alumno).filter(Alumno.dni == alumno['dni']).first()
+        existe = existentes_por_id.get(alumno.id) if alumno.id else None
+        if not existe and alumno.dni:
+            existe = existentes_por_dni.get(alumno.dni)
         if existe:
-            # Actualizar datos y vincular al grupo
-            existe.nombres = alumno.get('nombres', existe.nombres)
-            existe.apellidos = alumno.get('apellidos', existe.apellidos)
-            existe.dni = alumno.get('dni') or None
-            existe.grado = alumno.get('grado') or None
-            existe.email = alumno.get('email') or None
-            existe.grupo = alumno.get('grupo') or None
-            existe.grupo_id = alumno.get('grupo_id', None)
+            # Actualizar datos y vincular al grupo.
+            # nombres/apellidos solo se sobrescriben si el cliente los envió
+            # (equivale al .get(key, valor_actual) original).
+            if 'nombres' in alumno.model_fields_set:
+                existe.nombres = alumno.nombres
+            if 'apellidos' in alumno.model_fields_set:
+                existe.apellidos = alumno.apellidos
+            existe.dni = alumno.dni or None
+            existe.grado = alumno.grado or None
+            existe.email = alumno.email or None
+            existe.grupo = alumno.grupo or None
+            existe.grupo_id = alumno.grupo_id
         else:
             nuevo = Alumno(
                 id=str(uuid.uuid4()),
-                dni=alumno.get('dni') or None,
-                grado=alumno.get('grado') or None,
-                nombres=alumno.get('nombres', ''),
-                apellidos=alumno.get('apellidos', ''),
-                email=alumno.get('email') or None,
-                grupo=alumno.get('grupo') or None,
-                grupo_id=alumno.get('grupo_id', None)
+                dni=alumno.dni or None,
+                grado=alumno.grado or None,
+                nombres=alumno.nombres if 'nombres' in alumno.model_fields_set else '',
+                apellidos=alumno.apellidos if 'apellidos' in alumno.model_fields_set else '',
+                email=alumno.email or None,
+                grupo=alumno.grupo or None,
+                grupo_id=alumno.grupo_id
             )
             db.add(nuevo)
+            existentes_por_id[nuevo.id] = nuevo
+            if nuevo.dni:
+                existentes_por_dni[nuevo.dni] = nuevo
     db.commit()
     return {"mensaje": f"{len(data)} alumnos guardados correctamente", "ok": True}
 
@@ -755,61 +1061,130 @@ def eliminar_alumnos_por_grupo(
 
 def _actualizar_progreso_por_examen(db, examen_id, alumno_id, calificacion):
     """
-    Cuando un alumno rinde un examen asociado a una leccion de curso,
-    marca la leccion como completada y actualiza el progreso del curso.
+    Cuando un alumno rinde un examen asociado a una lección de curso,
+    marca la lección como completada (si aprobó) y recalcula el progreso.
+
+    ✅ FIX: antes usaba `InscripcionCurso.alumno_id` (columna inexistente → AttributeError
+    silenciado) y escaneaba TODOS los cursos. Ahora:
+      - usa `estudiante_id`
+      - filtra cursos por el docente dueño del examen
+      - actualiza ProgresoLeccion (fuente de verdad) y delega el recálculo
     """
-    from app.models.curso import Curso, InscripcionCurso
+    from app.models.curso import Curso, InscripcionCurso, ProgresoLeccion
     from app.models.examen import Examen
-    
-    examen = db.query(Examen).filter(Examen.id == examen_id).first()
-    if not examen:
-        return
-    
-    cursos = db.query(Curso).all()
-    for curso in cursos:
-        modulos = curso.modulos or []
-        for modulo in modulos:
-            lecciones = modulo.get('lecciones', [])
-            for leccion in lecciones:
-                if leccion.get('tipo') == 'examen':
-                    contenido = leccion.get('contenido', {})
-                    if contenido.get('examen_id') == examen_id:
-                        leccion_id = leccion.get('id')
-                        if not leccion_id:
-                            continue
-                        
-                        inscripcion = db.query(InscripcionCurso).filter(
-                            InscripcionCurso.curso_id == str(curso.id),
-                            InscripcionCurso.alumno_id == alumno_id
-                        ).first()
-                        
-                        if not inscripcion:
-                            continue
-                        
-                        lecciones_completadas = inscripcion.lecciones_completadas or []
-                        if leccion_id not in lecciones_completadas and calificacion >= 60:
-                            lecciones_completadas.append(leccion_id)
-                            inscripcion.lecciones_completadas = lecciones_completadas
-                            
-                            total_lecciones = sum(
-                                len(m.get('lecciones', [])) 
-                                for m in modulos
-                            )
-                            if total_lecciones > 0:
-                                inscripcion.progreso = round(
-                                    len(lecciones_completadas) / total_lecciones * 100, 2
-                                )
-                            
-                            if inscripcion.progreso >= 100:
-                                inscripcion.completado = True
-                            
-                            db.commit()
+    from sqlalchemy import cast, String
+
+    try:
+        examen = db.query(Examen).filter(Examen.id == examen_id).first()
+        if not examen:
+            return
+
+        # Optimización: limitar a los cursos del docente dueño del examen
+        query = db.query(Curso)
+        if examen.docente_id:
+            query = query.filter(cast(Curso.docente_id, String) == str(examen.docente_id))
+        cursos = query.all()
+
+        for curso in cursos:
+            modulos = curso.modulos or []
+            for modulo in modulos:
+                for leccion in modulo.get('lecciones', []):
+                    if leccion.get('tipo') != 'examen':
+                        continue
+                    contenido = leccion.get('contenido') or {}
+                    if str(contenido.get('examen_id')) != str(examen_id):
+                        continue
+
+                    leccion_id = leccion.get('id')
+                    if not leccion_id:
+                        continue
+
+                    inscripcion = db.query(InscripcionCurso).filter(
+                        cast(InscripcionCurso.curso_id, String) == str(curso.id),
+                        cast(InscripcionCurso.estudiante_id, String) == str(alumno_id)
+                    ).first()
+                    if not inscripcion:
                         return
+
+                    aprobado = (calificacion or 0) >= 60
+
+                    # ✅ Actualizar ProgresoLeccion (fuente de verdad del progreso)
+                    progreso_lec = db.query(ProgresoLeccion).filter(
+                        cast(ProgresoLeccion.curso_id, String) == str(curso.id),
+                        cast(ProgresoLeccion.estudiante_id, String) == str(alumno_id),
+                        cast(ProgresoLeccion.leccion_id, String) == str(leccion_id)
+                    ).first()
+
+                    if not progreso_lec:
+                        progreso_lec = ProgresoLeccion(
+                            id=str(uuid.uuid4()),
+                            curso_id=str(curso.id),
+                            estudiante_id=str(alumno_id),
+                            leccion_id=str(leccion_id),
+                            modulo_id=modulo.get('id'),
+                        )
+                        db.add(progreso_lec)
+
+                    progreso_lec.nota = calificacion
+                    progreso_lec.aprobado = aprobado
+                    progreso_lec.intentos = (progreso_lec.intentos or 0) + 1
+                    progreso_lec.fecha_ultimo_intento = datetime.now(timezone.utc)
+                    if aprobado and not progreso_lec.completado:
+                        progreso_lec.completado = True
+                        progreso_lec.fecha_completado = datetime.now(timezone.utc)
+                    if not progreso_lec.fecha_liberacion:
+                        progreso_lec.fecha_liberacion = datetime.now(timezone.utc)
+
+                    db.commit()
+
+                    # Recalcular con la lógica centralizada (evita duplicar reglas)
+                    try:
+                        from app.api.cursos import _actualizar_progreso_curso
+                        _actualizar_progreso_curso(db, str(curso.id), str(alumno_id))
+                    except Exception as e:
+                        logger.warning(f"No se pudo recalcular progreso del curso: {e}")
+                    return
+    except Exception as e:
+        # No romper el guardado del resultado por un fallo en la sincronización
+        logger.warning(f"_actualizar_progreso_por_examen falló: {e}")
 
 
 # =============================================
 # RESULTADOS
 # =============================================
+
+@router.post("/{examen_id}/intentos", response_model=IntentoExamenResponse)
+def iniciar_intento(
+    examen_id: str,
+    db: Session = Depends(get_db),
+    current_user: Usuario = Depends(get_current_active_user)
+):
+    """Inicia (o reanuda) un intento con expiración controlada por el servidor.
+
+    El frontend usa `segundos_restantes` para el temporizador y devuelve
+    `intento_id` al entregar. Así el tiempo deja de ser controlado por el cliente.
+    """
+    examen = db.query(Examen).filter(Examen.id == examen_id).first()
+    if not examen:
+        raise HTTPException(status_code=404, detail="Examen no encontrado")
+
+    usados = db.query(ResultadoExamen).filter(
+        ResultadoExamen.examen_id == examen_id,
+        ResultadoExamen.alumno_id == str(current_user.id)
+    ).count()
+
+    if current_user.rol not in ('admin', 'docente'):
+        if examen.estado != 'PUBLICADO':
+            raise HTTPException(status_code=403, detail="Examen no disponible")
+        if examen.intentos_permitidos and examen.intentos_permitidos > 0 and usados >= examen.intentos_permitidos:
+            raise HTTPException(status_code=400, detail="Límite de intentos alcanzado")
+
+    intento = _crear_o_reanudar_intento(
+        db, examen, usuario_id=str(current_user.id), es_publico=False,
+        alumno_nombre=current_user.nombre_completo,
+    )
+    return _intento_a_dict(intento, examen, usados)
+
 
 @router.post("/resultados", response_model=ResultadoResponse, status_code=201)
 def guardar_resultado(
@@ -820,6 +1195,21 @@ def guardar_resultado(
     examen = db.query(Examen).filter(Examen.id == data.examen_id).first()
     if not examen:
         raise HTTPException(status_code=404, detail="Examen no encontrado")
+    
+    # ✅ SEGURIDAD (CRÍTICO): Un estudiante solo puede enviar resultados como él mismo.
+    # Docentes/admins pueden registrar en nombre de un alumno (uso manual/testing).
+    alumno_id_final = data.alumno_id
+    if current_user.rol == 'estudiante':
+        if data.alumno_id and str(data.alumno_id) != str(current_user.id):
+            logger.warning(
+                f"Intento de suplantación: usuario {current_user.id} intentó enviar "
+                f"resultado como alumno_id={data.alumno_id} en examen {data.examen_id}"
+            )
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="No puedes enviar resultados a nombre de otro estudiante"
+            )
+        alumno_id_final = str(current_user.id)
     
     # ✅ CORREGIDO: Verificar que el examen esté publicado
     if examen.estado != 'PUBLICADO':
@@ -843,15 +1233,23 @@ def guardar_resultado(
         except (ValueError, AttributeError):
             pass
     
-    # Verificar límite de intentos
+    # Verificar límite de intentos (usando el alumno validado)
     if examen.intentos_permitidos and examen.intentos_permitidos > 0:
         intentos_actuales = db.query(ResultadoExamen).filter(
             ResultadoExamen.examen_id == data.examen_id,
-            ResultadoExamen.alumno_id == data.alumno_id
+            ResultadoExamen.alumno_id == alumno_id_final
         ).count()
         if intentos_actuales >= examen.intentos_permitidos:
             raise HTTPException(status_code=400, detail="Límite de intentos alcanzado")
     
+    # ✅ AUTORIDAD DE TIEMPO: el servidor calcula el tiempo a partir del intento.
+    # Los estudiantes DEBEN entregar con un intento iniciado en el servidor.
+    if current_user.rol == 'estudiante' and not data.intento_id:
+        raise HTTPException(status_code=400, detail="Debes iniciar el intento antes de entregar")
+    tiempo_usado_servidor, entregado_tarde, intento = _resolver_tiempo_desde_intento(
+        db, examen, data.intento_id, usuario_id=alumno_id_final
+    )
+
     resultado_calculado = calcular_resultado(examen, data.respuestas or {})
     estado_final = data.estado or 'COMPLETADO'
     calificacion = resultado_calculado["calificacion"]
@@ -868,7 +1266,7 @@ def guardar_resultado(
     resultado = ResultadoExamen(
         id=str(uuid.uuid4()),
         examen_id=data.examen_id,
-        alumno_id=data.alumno_id,
+        alumno_id=alumno_id_final,
         # FASE F: el alumno unificado es el usuario autenticado (alumno.id == usuario.id)
         alumno_id_unificado=str(current_user.id),
         alumno_nombre=data.alumno_nombre,
@@ -880,22 +1278,29 @@ def guardar_resultado(
         total_preguntas=resultado_calculado["total_preguntas"],
         puntos_obtenidos=puntos_obtenidos,
         total_puntos=resultado_calculado["total_puntos"],
-        tiempo_usado=data.tiempo_usado or 0,
+        # Tiempo del servidor cuando hay intento; del cliente en uso manual (docente).
+        tiempo_usado=tiempo_usado_servidor if tiempo_usado_servidor is not None else (data.tiempo_usado or 0),
         tiempo_restante=data.tiempo_restante or 0,
         violaciones=data.violaciones or 0,
         eventos_seguridad=data.eventos_seguridad or [],
-        entregado_por_tiempo=data.entregado_por_tiempo or False,
+        entregado_por_tiempo=entregado_tarde if entregado_tarde is not None else (data.entregado_por_tiempo or False),
         estado=estado_final,
         detalle_respuestas=resultado_calculado["detalle_preguntas"]
     )
     db.add(resultado)
+
+    if intento:
+        intento.estado = 'TRAMPA' if estado_final == 'TRAMPA' else 'COMPLETADO'
+        intento.entregado_en = datetime.now(timezone.utc)
+        intento.violaciones = data.violaciones or 0
+
     db.commit()
     db.refresh(resultado)
     
     # ACTUALIZAR PROGRESO DEL CURSO: Si el examen esta asociado a una leccion de curso,
     # marcar la leccion como completada y actualizar progreso
     try:
-        _actualizar_progreso_por_examen(db, data.examen_id, data.alumno_id, calificacion)
+        _actualizar_progreso_por_examen(db, data.examen_id, alumno_id_final, calificacion)
     except Exception as e:
         # No fallar el guardado del resultado por error en progreso
         import logging
@@ -910,6 +1315,10 @@ def listar_resultados(
     db: Session = Depends(get_db),
     current_user: Usuario = Depends(require_docente)  # ✅ Cambiado
 ):
+    # ✅ SEGURIDAD: cada docente solo ve los resultados de sus exámenes.
+    examen = db.query(Examen).filter(Examen.id == examen_id).first()
+    if examen:
+        _verificar_ownership_examen(examen, current_user)
     return db.query(ResultadoExamen).filter(
         ResultadoExamen.examen_id == examen_id
     ).order_by(ResultadoExamen.entregado_en.desc()).all()
@@ -921,6 +1330,16 @@ def listar_resultados_alumno(
     db: Session = Depends(get_db),
     current_user: Usuario = Depends(get_current_active_user)
 ):
+    # ✅ SEGURIDAD: Un estudiante solo puede ver sus propios resultados.
+    # Docentes/admins pueden ver los de cualquier alumno.
+    if current_user.rol not in ('admin', 'docente') and str(current_user.id) != str(alumno_id):
+        logger.warning(
+            f"Acceso denegado: usuario {current_user.id} intentó ver resultados de alumno_id={alumno_id}"
+        )
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="No tienes permiso para ver los resultados de otro estudiante"
+        )
     return db.query(ResultadoExamen).filter(
         ResultadoExamen.alumno_id == alumno_id
     ).order_by(ResultadoExamen.entregado_en.desc()).all()
@@ -933,6 +1352,17 @@ def obtener_mejor_resultado(
     db: Session = Depends(get_db),
     current_user: Usuario = Depends(get_current_active_user)
 ):
+    # ✅ SEGURIDAD: Un estudiante solo puede consultar su propio mejor resultado
+    if current_user.rol not in ('admin', 'docente') and str(current_user.id) != str(alumno_id):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="No tienes permiso para consultar resultados de otro estudiante"
+        )
+    # ✅ SEGURIDAD: los docentes solo consultan resultados de sus exámenes.
+    if current_user.rol in ('admin', 'docente'):
+        examen_mejor = db.query(Examen).filter(Examen.id == examen_id).first()
+        if examen_mejor:
+            _verificar_ownership_examen(examen_mejor, current_user)
     resultados = db.query(ResultadoExamen).filter(
         ResultadoExamen.examen_id == examen_id,
         ResultadoExamen.alumno_id == alumno_id
@@ -951,6 +1381,10 @@ def limpiar_resultados(
     db: Session = Depends(get_db),
     current_user: Usuario = Depends(require_docente)  # ✅ Cambiado
 ):
+    # ✅ SEGURIDAD: evitar que un docente borre resultados de otro.
+    examen = db.query(Examen).filter(Examen.id == examen_id).first()
+    if examen:
+        _verificar_ownership_examen(examen, current_user)
     db.query(ResultadoExamen).filter(ResultadoExamen.examen_id == examen_id).delete()
     db.commit()
     return {"mensaje": "Resultados eliminados", "ok": True}
@@ -963,6 +1397,10 @@ def eliminar_resultado_alumno(
     db: Session = Depends(get_db),
     current_user: Usuario = Depends(require_docente)  # ✅ Cambiado
 ):
+    # ✅ SEGURIDAD: evitar que un docente borre resultados de otro.
+    examen = db.query(Examen).filter(Examen.id == examen_id).first()
+    if examen:
+        _verificar_ownership_examen(examen, current_user)
     eliminados = db.query(ResultadoExamen).filter(
         ResultadoExamen.examen_id == examen_id,
         ResultadoExamen.alumno_id == alumno_id
@@ -986,6 +1424,30 @@ def obtener_revision(
     ).first()
     if not resultado:
         raise HTTPException(status_code=404, detail="Resultado no encontrado")
+    
+    # ✅ SEGURIDAD: los docentes solo revisan resultados de sus exámenes.
+    if current_user.rol in ('admin', 'docente'):
+        examen_rev = db.query(Examen).filter(Examen.id == examen_id).first()
+        if examen_rev:
+            _verificar_ownership_examen(examen_rev, current_user)
+
+    # ✅ SEGURIDAD: Un estudiante solo puede revisar su propio resultado.
+    # Docentes/admins pueden revisar cualquiera.
+    if current_user.rol not in ('admin', 'docente'):
+        es_propio = (
+            str(resultado.alumno_id) == str(current_user.id)
+            or str(resultado.alumno_id_unificado) == str(current_user.id)
+        )
+        if not es_propio:
+            logger.warning(
+                f"Acceso denegado: usuario {current_user.id} intentó revisar "
+                f"resultado {resultado_id} de otro alumno"
+            )
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="No tienes permiso para revisar este resultado"
+            )
+    
     preguntas = db.query(Pregunta).filter(Pregunta.examen_id == examen_id).order_by(Pregunta.orden).all()
     detalle = []
     respuestas_alumno = resultado.respuestas or {}
@@ -1092,9 +1554,9 @@ def obtener_revision(
             item["puntos_obtenidos"] = 0
             item["detalle"]["nota"] = "Las preguntas de ensayo no se califican automáticamente"
         elif pregunta.tipo in ('likert', 'estrellas', 'escala_numerica'):
-            item["correcta"] = respuesta is not None
-            item["puntos_obtenidos"] = pregunta.puntos if respuesta is not None else 0
-            item["detalle"]["nota"] = "Pregunta de encuesta"
+            item["correcta"] = None
+            item["puntos_obtenidos"] = 0
+            item["detalle"]["nota"] = "Pregunta de encuesta (no calificada)"
         detalle.append(item)
     return {
         "resultado_id": resultado.id,
@@ -1128,7 +1590,8 @@ def listar_examenes_bulk(
 ):
     if not grupo_ids:
         return {}
-    query = db.query(Examen).filter(Examen.grupo_id.in_(grupo_ids))
+    query = db.query(Examen).options(selectinload(Examen.preguntas)).filter(Examen.grupo_id.in_(grupo_ids))
+    query = _filtrar_examenes_por_rol(query, current_user)
     if estado:
         query = query.filter(Examen.estado == estado)
     if busqueda:
@@ -1172,7 +1635,8 @@ def listar_examenes_por_grupo(
     db: Session = Depends(get_db),
     current_user: Usuario = Depends(get_current_active_user)
 ):
-    query = db.query(Examen).filter(Examen.grupo_id == grupo_id)
+    query = db.query(Examen).options(selectinload(Examen.preguntas)).filter(Examen.grupo_id == grupo_id)
+    query = _filtrar_examenes_por_rol(query, current_user)
     if estado:
         query = query.filter(Examen.estado == estado)
     if busqueda:
@@ -1190,6 +1654,7 @@ def obtener_resumen_examenes(
     current_user: Usuario = Depends(get_current_active_user)
 ):
     query = db.query(Examen)
+    query = _filtrar_examenes_por_rol(query, current_user)
     if grupo_ids:
         query = query.filter(Examen.grupo_id.in_(grupo_ids))
     total = query.count()
@@ -1198,9 +1663,14 @@ def obtener_resumen_examenes(
     cerrados = query.filter(Examen.estado == 'CERRADO').count()
     por_grupo = {}
     if grupo_ids:
-        for gid in grupo_ids:
-            count = db.query(Examen).filter(Examen.grupo_id == gid).count()
-            por_grupo[gid] = count
+        # N+1 fix: un solo COUNT agrupado en lugar de una consulta por grupo
+        conteos_query = db.query(Examen.grupo_id, func.count(Examen.id)).filter(
+            Examen.grupo_id.in_(grupo_ids)
+        )
+        conteos_query = _filtrar_examenes_por_rol(conteos_query, current_user)
+        conteos = conteos_query.group_by(Examen.grupo_id).all()
+        conteos_map = {gid: cnt for gid, cnt in conteos}
+        por_grupo = {gid: conteos_map.get(gid, 0) for gid in grupo_ids}
     return {
         "total": total,
         "publicados": publicados,
@@ -1224,7 +1694,8 @@ def listar_examenes(
     db: Session = Depends(get_db),
     current_user: Usuario = Depends(get_current_active_user)
 ):
-    query = db.query(Examen)
+    query = db.query(Examen).options(selectinload(Examen.preguntas))
+    query = _filtrar_examenes_por_rol(query, current_user)
     if estado:
         query = query.filter(Examen.estado == estado)
     if busqueda:
@@ -1245,7 +1716,9 @@ def listar_examenes_publicados(
     db: Session = Depends(get_db),
     current_user: Usuario = Depends(get_current_active_user)
 ):
-    return db.query(Examen).filter(Examen.estado == 'PUBLICADO').order_by(Examen.created_at.desc()).all()
+    query = db.query(Examen).options(selectinload(Examen.preguntas)).filter(Examen.estado == 'PUBLICADO')
+    query = _filtrar_examenes_por_rol(query, current_user)
+    return query.order_by(Examen.created_at.desc()).all()
 
 
 @router.post("/", response_model=ExamenDetailResponse, status_code=201)
@@ -1266,7 +1739,9 @@ def crear_examen(
         configuracion=data.configuracion.model_dump() if data.configuracion else {},
         intentos_permitidos=data.intentos_permitidos,
         estado='BORRADOR',
-        grupo_id=data.grupo_id
+        grupo_id=data.grupo_id,
+        # ✅ SEGURIDAD: asignar dueño del examen
+        docente_id=str(current_user.id)
     )
     db.add(examen)
     for i, pregunta_data in enumerate(data.preguntas):
@@ -1310,6 +1785,11 @@ def actualizar_examen(
     examen = db.query(Examen).filter(Examen.id == examen_id).first()
     if not examen:
         raise HTTPException(status_code=404, detail="Examen no encontrado")
+    # ✅ SEGURIDAD: verificar ownership
+    _verificar_ownership_examen(examen, current_user)
+    # Asignar dueño si es legacy sin dueño
+    if not examen.docente_id and current_user.rol != 'admin':
+        examen.docente_id = str(current_user.id)
     examen.titulo = data.titulo
     examen.descripcion = data.descripcion
     examen.tiempo_limite = data.tiempo_limite
@@ -1362,6 +1842,8 @@ def eliminar_examen(
     examen = db.query(Examen).filter(Examen.id == examen_id).first()
     if not examen:
         raise HTTPException(status_code=404, detail="Examen no encontrado")
+    # ✅ SEGURIDAD: verificar ownership
+    _verificar_ownership_examen(examen, current_user)
     db.delete(examen)
     db.commit()
     return {"mensaje": "Examen eliminado", "ok": True}
@@ -1377,6 +1859,8 @@ def cambiar_estado_examen(
     examen = db.query(Examen).filter(Examen.id == examen_id).first()
     if not examen:
         raise HTTPException(status_code=404, detail="Examen no encontrado")
+    # ✅ SEGURIDAD: verificar ownership
+    _verificar_ownership_examen(examen, current_user)
     examen.estado = estado
     examen.updated_at = datetime.now(timezone.utc)
     db.commit()
@@ -1392,12 +1876,16 @@ def cambiar_estado_examen(
 # ACCESO PUBLICO A EXAMENES (sin autenticacion)
 # =============================================
 
-@router.get("/publico/{codigo}", response_model=ExamenDetailResponse)
+@router.get("/publico/{codigo}", response_model=None)
 def obtener_examen_publico(
     codigo: str,
     db: Session = Depends(get_db)
 ):
-    """Obtener un examen publico por su codigo (sin login)"""
+    """Obtener un examen publico por su codigo (sin login).
+
+    ✅ SEGURIDAD: la respuesta va sanitizada (sin clave de respuestas). Si el
+    examen tiene password, tampoco se envían las preguntas hasta validarlo.
+    """
     examen = db.query(Examen).filter(
         Examen.codigo == codigo,
         Examen.estado == 'PUBLICADO'
@@ -1407,16 +1895,21 @@ def obtener_examen_publico(
     config = examen.configuracion or {}
     if not config.get('acceso_publico', False):
         raise HTTPException(status_code=403, detail="Este examen no tiene acceso publico habilitado")
-    return examen
+
+    data = _serializar_examen(examen, incluir_respuestas=False)
+    if config.get('password_examen'):
+        data["preguntas"] = []
+        data["requiere_password"] = True
+    return data
 
 
 @router.post("/publico/{codigo}/verificar-password")
 def verificar_password_examen_publico(
     codigo: str,
-    data: dict,
+    data: VerificarPasswordRequest,
     db: Session = Depends(get_db)
 ):
-    """Verificar password de examen publico (sin login)"""
+    """Verificar password de examen publico (sin login)."""
     examen = db.query(Examen).filter(
         Examen.codigo == codigo,
         Examen.estado == 'PUBLICADO'
@@ -1425,87 +1918,132 @@ def verificar_password_examen_publico(
         raise HTTPException(status_code=404, detail="Examen no encontrado")
     config = examen.configuracion or {}
     password_correcto = config.get('password_examen')
-    if password_correcto and data.get('password') != password_correcto:
+    if password_correcto and data.password != password_correcto:
         raise HTTPException(status_code=401, detail="Password incorrecto")
-    return {"ok": True, "mensaje": "Password verificado"}
+    # ✅ El examen (sanitizado) se entrega recién tras validar el password.
+    return {
+        "ok": True,
+        "mensaje": "Password verificado",
+        "examen": _serializar_examen(examen, incluir_respuestas=False),
+    }
 
 
-@router.post("/publico/{codigo}/resultado")
-def guardar_resultado_publico(
+@router.post("/publico/{codigo}/intentos", response_model=IntentoExamenResponse)
+def iniciar_intento_publico(
     codigo: str,
-    data: dict,
+    data: VerificarPasswordRequest,
     db: Session = Depends(get_db)
 ):
-    """Guardar resultado de examen publico/anonimo (sin login)"""
-    from app.models.resultado_examen import ResultadoExamen
-    import uuid
-    
+    """Inicia (o reanuda) un intento público con expiración en el servidor."""
     examen = db.query(Examen).filter(
         Examen.codigo == codigo,
         Examen.estado == 'PUBLICADO'
     ).first()
     if not examen:
         raise HTTPException(status_code=404, detail="Examen no encontrado")
-    
     config = examen.configuracion or {}
     if not config.get('acceso_publico', False):
         raise HTTPException(status_code=403, detail="Este examen no tiene acceso publico habilitado")
-    
+    password_correcto = config.get('password_examen')
+    if password_correcto and data.password != password_correcto:
+        raise HTTPException(status_code=401, detail="Password incorrecto")
+
+    intento = _crear_o_reanudar_intento(
+        db, examen, usuario_id=None, es_publico=True, codigo_publico=codigo,
+    )
+    return _intento_a_dict(intento, examen, 0)
+
+
+@router.post("/publico/{codigo}/resultado", status_code=201)
+def guardar_resultado_publico(
+    codigo: str,
+    data: ResultadoPublicoRequest,
+    db: Session = Depends(get_db)
+):
+    """Guardar resultado de examen publico/anonimo (sin login)."""
+    examen = db.query(Examen).filter(
+        Examen.codigo == codigo,
+        Examen.estado == 'PUBLICADO'
+    ).first()
+    if not examen:
+        raise HTTPException(status_code=404, detail="Examen no encontrado")
+
+    config = examen.configuracion or {}
+    if not config.get('acceso_publico', False):
+        raise HTTPException(status_code=403, detail="Este examen no tiene acceso publico habilitado")
+
     # Verificar password si es requerido
     password_correcto = config.get('password_examen')
-    if password_correcto and data.get('password') != password_correcto:
+    if password_correcto and data.password != password_correcto:
         raise HTTPException(status_code=401, detail="Password incorrecto")
-    
+
     # Verificar ventana de fechas
     if config.get('fecha_inicio'):
-        from datetime import datetime as dt
         try:
-            fecha_inicio = dt.fromisoformat(config['fecha_inicio'].replace('Z', '+00:00'))
-            if dt.now(timezone.utc) < fecha_inicio:
+            fecha_inicio = datetime.fromisoformat(config['fecha_inicio'].replace('Z', '+00:00'))
+            if datetime.now(timezone.utc) < fecha_inicio:
                 raise HTTPException(status_code=400, detail="El examen aun no esta disponible")
         except (ValueError, TypeError):
             pass
-    
+
     if config.get('fecha_fin'):
-        from datetime import datetime as dt
         try:
-            fecha_fin = dt.fromisoformat(config['fecha_fin'].replace('Z', '+00:00'))
-            if dt.now(timezone.utc) > fecha_fin:
+            fecha_fin = datetime.fromisoformat(config['fecha_fin'].replace('Z', '+00:00'))
+            if datetime.now(timezone.utc) > fecha_fin:
                 raise HTTPException(status_code=400, detail="El examen ya no esta disponible")
         except (ValueError, TypeError):
             pass
-    
-    respuestas_alumno = data.get('respuestas', {})
+
+    # ✅ AUTORIDAD DE TIEMPO: el tiempo lo calcula el servidor desde el intento.
+    if not data.intento_id:
+        raise HTTPException(status_code=400, detail="Debes iniciar el intento antes de entregar")
+    tiempo_usado_servidor, entregado_tarde, intento = _resolver_tiempo_desde_intento(
+        db, examen, data.intento_id, es_publico=True, codigo_publico=codigo
+    )
+
+    respuestas_alumno = data.respuestas
     resultado_calculado = calcular_resultado(examen, respuestas_alumno)
-    
+
     es_anonimo = config.get('anonimo', False)
-    alumno_nombre = "Anonimo" if es_anonimo else data.get('alumno_nombre', 'Participante')
-    
+    alumno_nombre = "Anonimo" if es_anonimo else data.alumno_nombre
+    estado_final = 'TRAMPA' if (data.violaciones or 0) >= config.get('limite_violaciones', 3) else 'COMPLETADO'
+    if estado_final == 'TRAMPA':
+        resultado_calculado['calificacion'] = 0
+        resultado_calculado['puntos_obtenidos'] = 0
+        resultado_calculado['correctas'] = 0
+
     resultado = ResultadoExamen(
         id=str(uuid.uuid4()),
         examen_id=examen.id,
-        alumno_id=None if es_anonimo else data.get('alumno_id', 'publico'),
+        alumno_id=None if es_anonimo else data.alumno_id,
         alumno_id_unificado=None,
         alumno_nombre=alumno_nombre,
-        alumno_grado=data.get('alumno_grado', ''),
-        alumno_dni="00000000" if es_anonimo else data.get('alumno_dni', ''),
+        alumno_grado=data.alumno_grado,
+        alumno_dni="00000000" if es_anonimo else data.alumno_dni,
         calificacion=resultado_calculado['calificacion'],
         correctas=resultado_calculado['correctas'],
         total_preguntas=resultado_calculado['total_preguntas'],
         puntos_obtenidos=resultado_calculado['puntos_obtenidos'],
         total_puntos=resultado_calculado['total_puntos'],
-        tiempo_usado=data.get('tiempo_usado', 0),
-        violaciones=data.get('violaciones', 0),
-        estado='TRAMPA' if data.get('violaciones', 0) >= config.get('limite_violaciones', 3) else 'COMPLETADO',
+        tiempo_usado=tiempo_usado_servidor or 0,
+        violaciones=data.violaciones or 0,
+        estado=estado_final,
         respuestas=respuestas_alumno,
-        entregado_en=datetime.now(timezone.utc).isoformat()
+        entregado_por_tiempo=bool(entregado_tarde),
+        # ✅ `entregado_en` es DateTime (no string ISO).
+        entregado_en=datetime.now(timezone.utc)
     )
-    
     db.add(resultado)
+
+    if intento:
+        intento.estado = 'TRAMPA' if estado_final == 'TRAMPA' else 'COMPLETADO'
+        intento.entregado_en = datetime.now(timezone.utc)
+        intento.violaciones = data.violaciones or 0
+
     db.commit()
-    
+
     mostrar_resultados = config.get('mostrar_resultados', True)
-    
+
     return {
         "ok": True,
         "resultado_id": resultado.id,
@@ -1523,7 +2061,7 @@ def guardar_resultado_publico(
 # RUTAS DINÁMICAS - SIEMPRE AL FINAL
 # =============================================
 
-@router.get("/{examen_id}", response_model=ExamenDetailResponse)
+@router.get("/{examen_id}", response_model=None)
 def obtener_examen(
     examen_id: str,
     db: Session = Depends(get_db),
@@ -1532,4 +2070,16 @@ def obtener_examen(
     examen = db.query(Examen).filter(Examen.id == examen_id).first()
     if not examen:
         raise HTTPException(status_code=404, detail="Examen no encontrado")
-    return examen
+
+    es_docente_o_admin = current_user.rol in ('admin', 'docente')
+
+    # ✅ SEGURIDAD: los estudiantes solo acceden a exámenes publicados y
+    # NUNCA reciben la clave de respuestas.
+    if not es_docente_o_admin:
+        if examen.estado != 'PUBLICADO':
+            raise HTTPException(status_code=403, detail="Examen no disponible")
+        return _serializar_examen(examen, incluir_respuestas=False)
+
+    # ✅ SEGURIDAD: los docentes solo gestionan sus propios exámenes.
+    _verificar_ownership_examen(examen, current_user)
+    return _serializar_examen(examen, incluir_respuestas=True)

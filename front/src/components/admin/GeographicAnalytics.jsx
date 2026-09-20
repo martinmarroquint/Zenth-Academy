@@ -2,7 +2,7 @@
 // DASHBOARD DE ANALYTICS GEOGRAFICOS
 // Muestra distribucion de usuarios por region, ciudad, pais
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   Globe, MapPin, Users, Activity, Calendar, Building2,
   Wifi, TrendingUp, RefreshCw, ChevronDown
@@ -18,9 +18,9 @@ const GeographicAnalytics = () => {
 
   useEffect(() => {
     cargarDatos();
-  }, [periodo]);
+  }, [cargarDatos]);
 
-  const cargarDatos = async () => {
+  const cargarDatos = useCallback(async () => {
     setCargando(true);
     setError('');
     try {
@@ -44,7 +44,7 @@ const GeographicAnalytics = () => {
     } finally {
       setCargando(false);
     }
-  };
+  }, [periodo]);
 
   if (cargando && !stats) {
     return (

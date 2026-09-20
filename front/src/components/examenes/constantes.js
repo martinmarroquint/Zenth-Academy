@@ -7,9 +7,9 @@ import {
   Settings, Award, AlertTriangle, BarChart3, Star, Hash
 } from 'lucide-react';
 
-export const COLOR_PRIMARIO = '#188C5D';
-export const COLOR_PRIMARIO_CLARO = '#D1FAE5';
-export const COLOR_PRIMARIO_OSCURO = '#065F46';
+export const COLOR_PRIMARIO = '#0f766e';
+export const COLOR_PRIMARIO_CLARO = '#e6f4f2';
+export const COLOR_PRIMARIO_OSCURO = '#0d5e57';
 export const COLOR_ERROR = '#DC2626';
 export const COLOR_ADVERTENCIA = '#F59E0B';
 export const COLOR_INFO = '#2563EB';
@@ -36,7 +36,7 @@ export const TIPOS_PREGUNTA_CONFIG = [
     nombre: 'Opcion Multiple',
     icon: ListChecks,
     descripcion: 'Una respuesta correcta entre varias opciones',
-    color: '#188C5D',
+    color: '#0f766e',
     bgColor: 'bg-emerald-100',
     textColor: 'text-emerald-700',
     requiereOpciones: true,
@@ -154,7 +154,7 @@ export const ESTADOS_EXAMEN = {
 
 export const ESTADOS_EXAMEN_CONFIG = [
   { id: ESTADOS_EXAMEN.BORRADOR, nombre: 'Borrador', color: '#6B7280', descripcion: 'Examen en edicion, no visible para alumnos' },
-  { id: ESTADOS_EXAMEN.PUBLICADO, nombre: 'Publicado', color: '#188C5D', descripcion: 'Examen disponible para rendir' },
+  { id: ESTADOS_EXAMEN.PUBLICADO, nombre: 'Publicado', color: '#0f766e', descripcion: 'Examen disponible para rendir' },
   { id: ESTADOS_EXAMEN.CERRADO, nombre: 'Cerrado', color: '#DC2626', descripcion: 'Examen cerrado, solo consulta' }
 ];
 
@@ -304,19 +304,20 @@ export const validarPregunta = (pregunta, index) => {
         return `La pregunta ${num} debe tener al menos una afirmacion`;
       }
       break;
-    case TIPOS_PREGUNTA.RELACIONAR:
+    case TIPOS_PREGUNTA.RELACIONAR: {
       const colA = (pregunta.columna_a || []).filter(x => x?.trim());
       const colB = (pregunta.columna_b || []).filter(x => x?.trim());
       if (colA.length < 2 || colB.length < 2) {
         return `La pregunta ${num} debe tener al menos 2 elementos en cada columna`;
       }
       break;
+    }
     case TIPOS_PREGUNTA.ORDENAMIENTO:
       if (((pregunta.elementos || []).filter(x => x?.trim())).length < 2) {
         return `La pregunta ${num} debe tener al menos 2 elementos para ordenar`;
       }
       break;
-    case TIPOS_PREGUNTA.COMPLETAR:
+    case TIPOS_PREGUNTA.COMPLETAR: {
       if (!pregunta.frases || pregunta.frases.length === 0) {
         return `La pregunta ${num} no tiene frases con espacios`;
       }
@@ -327,6 +328,7 @@ export const validarPregunta = (pregunta, index) => {
         return `La pregunta ${num} debe contener al menos un espacio para completar`;
       }
       break;
+    }
     case TIPOS_PREGUNTA.RESPUESTA_CORTA:
       if (!pregunta.respuesta_corta?.trim()) {
         return `La pregunta ${num} no tiene respuesta correcta definida`;

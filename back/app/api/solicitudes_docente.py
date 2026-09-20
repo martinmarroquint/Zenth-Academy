@@ -11,6 +11,7 @@ from datetime import datetime, timezone
 
 from app.database import get_db
 from app.core.dependencies import get_current_active_user, require_admin, require_roles
+from app.core.errors import error_interno
 from app.models.usuario import Usuario
 from app.models.solicitud_docente import SolicitudDocente
 from app.schemas.solicitud_docente import (
@@ -111,8 +112,7 @@ async def crear_solicitud(
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"Error creando solicitud de docente: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail=error_interno(e, "Error creando solicitud de docente"))
 
 
 # =============================================
@@ -139,8 +139,7 @@ async def mis_solicitudes(
         return resultado
         
     except Exception as e:
-        logger.error(f"Error listando solicitudes: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail=error_interno(e, "Error listando solicitudes"))
 
 
 # =============================================
@@ -184,8 +183,7 @@ async def listar_solicitudes(
         }
         
     except Exception as e:
-        logger.error(f"Error listando solicitudes: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail=error_interno(e, "Error listando solicitudes"))
 
 
 # =============================================
@@ -208,8 +206,7 @@ async def contar_pendientes(
         return {"pendientes": total}
         
     except Exception as e:
-        logger.error(f"Error contando solicitudes: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail=error_interno(e, "Error contando solicitudes"))
 
 
 # =============================================
@@ -240,8 +237,7 @@ async def obtener_solicitud(
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"Error obteniendo solicitud: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail=error_interno(e, "Error obteniendo solicitud"))
 
 
 # =============================================
@@ -298,8 +294,7 @@ async def aprobar_solicitud(
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"Error aprobando solicitud: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail=error_interno(e, "Error aprobando solicitud"))
 
 
 # =============================================
@@ -348,8 +343,7 @@ async def rechazar_solicitud(
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"Error rechazando solicitud: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail=error_interno(e, "Error rechazando solicitud"))
 
 
 # =============================================
@@ -394,8 +388,7 @@ async def marcar_en_revision(
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"Error marcando solicitud en revisión: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail=error_interno(e, "Error marcando solicitud en revisión"))
 
 
 # =============================================
@@ -443,5 +436,4 @@ async def cancelar_solicitud(
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"Error cancelando solicitud: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail=error_interno(e, "Error cancelando solicitud"))

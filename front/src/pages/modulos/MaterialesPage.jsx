@@ -14,12 +14,13 @@ import compartirService from '../../services/compartirService';
 import { authService } from '../../services/authService';
 import HistorialComparticiones from '../../components/examenes/HistorialComparticiones';
 import ModalEditarMaterial from '../../components/materiales/ModalEditarMaterial';
+import { useFeedback } from '../../hooks/useFeedback';
 
 const MaterialesPage = () => {
+  const { toast, confirmar } = useFeedback();
   const [materiales, setMateriales] = useState([]);
   const [cargando, setCargando] = useState(true);
   const [error, setError] = useState('');
-  const [copiado, setCopiado] = useState(null);
 
   // Modal de edicion
   const [materialEditando, setMaterialEditando] = useState(null);
@@ -66,8 +67,6 @@ const MaterialesPage = () => {
     inicializar();
   }, [inicializar]);
 
-  const urlSala = (codigo) => `${window.location.origin}/compartir/${codigo}`;
-
   // COMPARTIR EN CLASE
   const abrirCompartir = async () => {
     setAbriendoSala(true);
@@ -90,7 +89,7 @@ const MaterialesPage = () => {
       const data = await compartirService.enviarMaterial(sala.codigo, material.id);
       setSala((prev) => ({ ...prev, ...data }));
     } catch (e) {
-      alert(e.message || 'No se pudo enviar el material');
+      toast.error(e.message || 'No se pudo enviar el material');
     } finally {
       setCargandoAccion(false);
     }
@@ -103,7 +102,7 @@ const MaterialesPage = () => {
       const data = await compartirService.quitarMaterial(sala.codigo);
       setSala((prev) => ({ ...prev, ...data }));
     } catch (e) {
-      alert(e.message || 'No se pudo quitar el material');
+      toast.error(e.message || 'No se pudo quitar el material');
     } finally {
       setCargandoAccion(false);
     }
@@ -111,13 +110,19 @@ const MaterialesPage = () => {
 
   const terminarSesion = async () => {
     if (!sala) return;
-    if (!window.confirm('Terminar la sesion de compartir?')) return;
+    const ok = await confirmar({
+      titulo: 'Terminar sesión',
+      mensaje: '¿Terminar la sesión de compartir?',
+      confirmText: 'Terminar',
+      variant: 'danger',
+    });
+    if (!ok) return;
     setCargandoAccion(true);
     try {
       const data = await compartirService.cerrarSala(sala.codigo);
       setSala((prev) => ({ ...prev, ...data }));
     } catch (e) {
-      alert(e.message || 'No se pudo terminar la sesion');
+      toast.error(e.message || 'No se pudo terminar la sesion');
     } finally {
       setCargandoAccion(false);
     }
@@ -136,7 +141,7 @@ const MaterialesPage = () => {
       setMaterialEditando(null);
       await cargarMateriales();
     } catch (e) {
-      alert(e.message || 'No se pudo guardar el material');
+      toast.error(e.message || 'No se pudo guardar el material');
     } finally {
       setGuardando(false);
     }
@@ -148,12 +153,18 @@ const MaterialesPage = () => {
   };
 
   const handleEliminar = async (material) => {
-    if (!window.confirm(`Eliminar el material "${material.titulo}"?`)) return;
+    const ok = await confirmar({
+      titulo: 'Eliminar material',
+      mensaje: `¿Eliminar el material "${material.titulo}"? Esta acción no se puede deshacer.`,
+      confirmText: 'Eliminar',
+      variant: 'danger',
+    });
+    if (!ok) return;
     try {
       await materialesService.eliminar(material.id);
       await cargarMateriales();
     } catch (e) {
-      alert(e.message || 'No se pudo eliminar el material');
+      toast.error(e.message || 'No se pudo eliminar el material');
     }
   };
 
@@ -162,24 +173,7 @@ const MaterialesPage = () => {
       await materialesService.toggle(material.id);
       await cargarMateriales();
     } catch (e) {
-      alert(e.message || 'No se pudo cambiar el estado del material');
-    }
-  };
-
-  const handleCopiar = async (texto) => {
-    try {
-      await navigator.clipboard.writeText(texto);
-      setCopiado(texto);
-      setTimeout(() => setCopiado(null), 2000);
-    } catch {
-      const textarea = document.createElement('textarea');
-      textarea.value = texto;
-      document.body.appendChild(textarea);
-      textarea.select();
-      document.execCommand('copy');
-      document.body.removeChild(textarea);
-      setCopiado(texto);
-      setTimeout(() => setCopiado(null), 2000);
+      toast.error(e.message || 'No se pudo cambiar el estado del material');
     }
   };
 

@@ -7,6 +7,7 @@ import StarterKit from '@tiptap/starter-kit';
 import Link from '@tiptap/extension-link';
 import Image from '@tiptap/extension-image';
 import Placeholder from '@tiptap/extension-placeholder';
+import { useFeedback } from '../../hooks/useFeedback';
 import {
   Bold,
   Italic,
@@ -27,38 +28,54 @@ import {
 // =============================================
 // BARRA DE HERRAMIENTAS
 // =============================================
+const Button = ({ onClick, active, disabled, children, title }) => (
+  <button
+    onClick={onClick}
+    disabled={disabled}
+    className={`p-1.5 rounded transition-colors ${
+      active ? 'bg-gray-200 text-gray-900' : 'text-gray-500 hover:bg-gray-100 hover:text-gray-700'
+    } disabled:opacity-40 disabled:cursor-not-allowed`}
+    title={title}
+    type="button"
+  >
+    {children}
+  </button>
+);
+
 const MenuBar = ({ editor }) => {
+  const { confirmar } = useFeedback();
+
   if (!editor) {
     return null;
   }
 
-  const addLink = () => {
-    const url = window.prompt('URL del enlace:');
+  const addLink = async () => {
+    const url = await confirmar({
+      titulo: 'Insertar enlace',
+      mensaje: 'Introduce la URL del enlace:',
+      confirmText: 'Insertar',
+      cancelText: 'Cancelar',
+      variant: 'info',
+      input: { placeholder: 'https://...', label: 'URL' },
+    });
     if (url) {
       editor.chain().focus().setLink({ href: url }).run();
     }
   };
 
-  const addImage = () => {
-    const url = window.prompt('URL de la imagen:');
+  const addImage = async () => {
+    const url = await confirmar({
+      titulo: 'Insertar imagen',
+      mensaje: 'Introduce la URL de la imagen:',
+      confirmText: 'Insertar',
+      cancelText: 'Cancelar',
+      variant: 'info',
+      input: { placeholder: 'https://...', label: 'URL' },
+    });
     if (url) {
       editor.chain().focus().setImage({ src: url }).run();
     }
   };
-
-  const Button = ({ onClick, active, disabled, children, title }) => (
-    <button
-      onClick={onClick}
-      disabled={disabled}
-      className={`p-1.5 rounded transition-colors ${
-        active ? 'bg-gray-200 text-gray-900' : 'text-gray-500 hover:bg-gray-100 hover:text-gray-700'
-      } disabled:opacity-40 disabled:cursor-not-allowed`}
-      title={title}
-      type="button"
-    >
-      {children}
-    </button>
-  );
 
   return (
     <div className="flex flex-wrap items-center gap-0.5 p-1.5 border-b border-gray-200 bg-gray-50/80 rounded-t-lg sticky top-0 z-10">

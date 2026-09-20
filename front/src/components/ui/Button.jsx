@@ -91,4 +91,5 @@ const Button = ({
   );
 };
 
-export default Button;
+// ✅ RENDIMIENTO: memoizado (componente puro, no necesita re-render si las props no cambian)
+export default React.memo(Button);

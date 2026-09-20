@@ -9,9 +9,9 @@ const ProtectedRoute = ({ children, allowedRoles = [] }) => {
   const isAuthenticated = authService.isAuthenticated();
   const userRol = authService.getRol();
 
-  // Si no está autenticado, redirigir al login
+  // Si no está autenticado, redirigir al inicio (login)
   if (!isAuthenticated) {
-    return <Navigate to="/login" replace />;
+    return <Navigate to="/" replace />;
   }
 
   // Si hay roles permitidos y el usuario no tiene uno, redirigir al dashboard según su rol

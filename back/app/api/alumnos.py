@@ -13,12 +13,13 @@ from app.core.dependencies import (
     require_docente,
     require_admin
 )
+from app.core.errors import error_interno
 from app.models.usuario import Usuario
 from app.models.alumno import Alumno
 from app.models.curso import Curso, InscripcionCurso, AccesoCurso
 from app.schemas.alumno import (
     AlumnoCreate, AlumnoUpdate, AlumnoResponse, 
-    AlumnoListResponse, MensajeResponse
+    AlumnoListResponse, MensajeResponse, EliminarAlumnosMasivoRequest
 )
 
 logger = logging.getLogger(__name__)
@@ -99,8 +100,7 @@ async def listar_alumnos(
         return [_alumno_to_dict(a) for a in alumnos]
     
     except Exception as e:
-        logger.error(f"❌ Error listando alumnos: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail=error_interno(e, "❌ Error listando alumnos"))
 
 
 # =============================================
@@ -127,8 +127,7 @@ async def buscar_alumnos(
         return [_alumno_to_dict(a) for a in resultados]
     
     except Exception as e:
-        logger.error(f"❌ Error buscando alumnos: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail=error_interno(e, "❌ Error buscando alumnos"))
 
 
 # =============================================
@@ -151,8 +150,7 @@ async def obtener_alumno(
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"❌ Error obteniendo alumno: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail=error_interno(e, "❌ Error obteniendo alumno"))
 
 
 # =============================================
@@ -203,8 +201,7 @@ async def crear_alumno(
         raise
     except Exception as e:
         db.rollback()
-        logger.error(f"❌ Error creando alumno: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail=error_interno(e, "❌ Error creando alumno"))
 
 
 # =============================================
@@ -241,8 +238,7 @@ async def actualizar_alumno(
         raise
     except Exception as e:
         db.rollback()
-        logger.error(f"❌ Error actualizando alumno: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail=error_interno(e, "❌ Error actualizando alumno"))
 
 
 # =============================================
@@ -270,8 +266,7 @@ async def eliminar_alumno(
         raise
     except Exception as e:
         db.rollback()
-        logger.error(f"❌ Error eliminando alumno: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail=error_interno(e, "❌ Error eliminando alumno"))
 
 
 # =============================================
@@ -317,8 +312,7 @@ async def guardar_alumnos_masivo(
     
     except Exception as e:
         db.rollback()
-        logger.error(f"❌ Error guardando alumnos masivo: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail=error_interno(e, "❌ Error guardando alumnos masivo"))
 
 
 # =============================================
@@ -327,13 +321,13 @@ async def guardar_alumnos_masivo(
 
 @router.post("/eliminar-masivo", response_model=MensajeResponse)
 async def eliminar_alumnos_masivo(
-    data: dict,
+    data: EliminarAlumnosMasivoRequest,
     db: Session = Depends(get_db),
     current_user: Usuario = Depends(require_admin)
 ):
     """Elimina múltiples alumnos por IDs (soft delete - solo admin)"""
     try:
-        ids = data.get("ids", [])
+        ids = data.ids
         if not ids:
             raise HTTPException(status_code=400, detail="No se proporcionaron IDs")
         
@@ -346,8 +340,7 @@ async def eliminar_alumnos_masivo(
         raise
     except Exception as e:
         db.rollback()
-        logger.error(f"❌ Error eliminando alumnos masivo: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail=error_interno(e, "❌ Error eliminando alumnos masivo"))
 
 
 # =============================================
@@ -367,8 +360,7 @@ async def obtener_alumnos_por_grupo(
         return [_alumno_to_dict(a) for a in alumnos]
     
     except Exception as e:
-        logger.error(f"❌ Error obteniendo alumnos por grupo: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail=error_interno(e, "❌ Error obteniendo alumnos por grupo"))
 
 
 # =============================================
@@ -442,5 +434,4 @@ async def obtener_alumnos_por_curso(
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"❌ Error obteniendo alumnos por curso: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail=error_interno(e, "❌ Error obteniendo alumnos por curso"))

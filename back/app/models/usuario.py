@@ -19,7 +19,13 @@ class Usuario(Base):
     
     # Credenciales
     email = Column(String(200), unique=True, nullable=False, index=True)
-    password_hash = Column(String(200), nullable=False)
+    # ✅ OAuth: los usuarios que entran con Google/Microsoft NO tienen contraseña
+    password_hash = Column(String(200), nullable=True)
+
+    # ✅ LOGIN SOCIAL (OAuth)
+    auth_provider = Column(String(20), default="local", nullable=True)  # local | google | microsoft
+    google_id = Column(String(100), nullable=True, unique=True, index=True)
+    microsoft_id = Column(String(100), nullable=True, unique=True, index=True)
     
     # Datos personales
     nombres = Column(String(200), nullable=True)
@@ -32,9 +38,6 @@ class Usuario(Base):
     
     # ✅ ROL EDUCATIVO
     rol = Column(String(20), default="estudiante")  # admin, docente, estudiante
-    
-    # ✅ ROL GLOBAL (para compatibilidad)
-    rol_global = Column(String(20), default="usuario")
     
     # Estado
     activo = Column(Boolean, default=True)

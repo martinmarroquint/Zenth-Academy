@@ -43,13 +43,15 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
         # Content Security Policy
         csp_directives = [
             "default-src 'self'",
-            "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://cdn.jsdelivr.net https://unpkg.com",
+            "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://cdn.jsdelivr.net https://unpkg.com https://accounts.google.com",
             "style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net https://unpkg.com https://fonts.googleapis.com",
             "font-src 'self' https://fonts.gstatic.com https://cdn.jsdelivr.net",
             "img-src 'self' data: blob: https:",
-            "connect-src 'self' https://*.supabase.co https://*.supabase.in wss://*.supabase.co",
+            "connect-src 'self' https://*.supabase.co https://*.supabase.in wss://*.supabase.co https://accounts.google.com",
             "media-src 'self'",
             "object-src 'none'",
+            # ✅ Google Identity Services usa un iframe desde accounts.google.com
+            "frame-src 'self' https://accounts.google.com",
             "frame-ancestors 'none'",
             "base-uri 'self'",
             "form-action 'self'",
@@ -57,9 +59,9 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
         
         # En desarrollo, relajar CSP para Vite
         if self.environment == "development":
-            csp_directives[1] = "script-src 'self' 'unsafe-inline' 'unsafe-eval' http://localhost:*"
+            csp_directives[1] = "script-src 'self' 'unsafe-inline' 'unsafe-eval' http://localhost:* https://accounts.google.com"
             csp_directives[2] = "style-src 'self' 'unsafe-inline' http://localhost:*"
-            csp_directives[5] = "connect-src 'self' http://localhost:* https://*.supabase.co"
+            csp_directives[5] = "connect-src 'self' http://localhost:* https://*.supabase.co https://accounts.google.com"
         
         response.headers["Content-Security-Policy"] = "; ".join(csp_directives)
         

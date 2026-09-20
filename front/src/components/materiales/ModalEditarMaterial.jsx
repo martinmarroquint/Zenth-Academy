@@ -1,7 +1,7 @@
 // front/src/components/materiales/ModalEditarMaterial.jsx
 // MODAL PARA EDITAR MATERIAL
 
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { X, Loader2, Link as LinkIcon, FileText, Type } from 'lucide-react';
 
 const TIPOS = [
@@ -11,28 +11,15 @@ const TIPOS = [
 ];
 
 const ModalEditarMaterial = ({ material, onGuardar, onCancelar, cargando }) => {
-  const [form, setForm] = useState({
-    titulo: '',
-    descripcion: '',
-    tipo: 'enlace',
-    contenido: '',
-    nombre_archivo: '',
-    url_archivo: '',
-  });
+  const [form, setForm] = useState(() => ({
+    titulo: material?.titulo || '',
+    descripcion: material?.descripcion || '',
+    tipo: material?.tipo || 'enlace',
+    contenido: material?.contenido || '',
+    nombre_archivo: material?.nombre_archivo || '',
+    url_archivo: material?.url_archivo || '',
+  }));
   const [error, setError] = useState('');
-
-  useEffect(() => {
-    if (material) {
-      setForm({
-        titulo: material.titulo || '',
-        descripcion: material.descripcion || '',
-        tipo: material.tipo || 'enlace',
-        contenido: material.contenido || '',
-        nombre_archivo: material.nombre_archivo || '',
-        url_archivo: material.url_archivo || '',
-      });
-    }
-  }, [material]);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -88,7 +75,7 @@ const ModalEditarMaterial = ({ material, onGuardar, onCancelar, cargando }) => {
               value={form.titulo}
               onChange={(e) => setForm({ ...form, titulo: e.target.value })}
               placeholder="Ej: Guia de estudio - Capitulo 3"
-              className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg outline-none focus:border-indigo-300 focus:ring-2 focus:ring-indigo-100 transition-all"
+              className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg outline-none focus:border-[#0f766e] focus:ring-2 focus:ring-[#0f766e]/20 transition-all"
               autoFocus
             />
           </div>
@@ -100,7 +87,7 @@ const ModalEditarMaterial = ({ material, onGuardar, onCancelar, cargando }) => {
               onChange={(e) => setForm({ ...form, descripcion: e.target.value })}
               rows={2}
               placeholder="Breve descripcion del material"
-              className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg outline-none focus:border-indigo-300 focus:ring-2 focus:ring-indigo-100 transition-all resize-none"
+              className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg outline-none focus:border-[#0f766e] focus:ring-2 focus:ring-[#0f766e]/20 transition-all resize-none"
             />
           </div>
 
@@ -117,11 +104,11 @@ const ModalEditarMaterial = ({ material, onGuardar, onCancelar, cargando }) => {
                     onClick={() => setForm({ ...form, tipo: t.id })}
                     className={`p-3 rounded-xl border text-center transition-all ${
                       activo
-                        ? 'border-indigo-300 bg-indigo-50 ring-2 ring-indigo-100'
+                        ? 'border-[#0f766e]/30 bg-[#e6f4f2] ring-2 ring-[#0f766e]/20'
                         : 'border-gray-200 hover:border-gray-300'
                     }`}
                   >
-                    <Icon className={`w-5 h-5 mx-auto ${activo ? 'text-indigo-600' : 'text-gray-400'}`} />
+                    <Icon className={`w-5 h-5 mx-auto ${activo ? 'text-[#0f766e]' : 'text-gray-400'}`} />
                     <p className="text-xs font-medium text-gray-700 mt-1">{t.label}</p>
                   </button>
                 );
@@ -137,7 +124,7 @@ const ModalEditarMaterial = ({ material, onGuardar, onCancelar, cargando }) => {
                 value={form.contenido}
                 onChange={(e) => setForm({ ...form, contenido: e.target.value })}
                 placeholder="https://..."
-                className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg outline-none focus:border-indigo-300 focus:ring-2 focus:ring-indigo-100 transition-all"
+                className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg outline-none focus:border-[#0f766e] focus:ring-2 focus:ring-[#0f766e]/20 transition-all"
               />
             </div>
           )}
@@ -150,7 +137,7 @@ const ModalEditarMaterial = ({ material, onGuardar, onCancelar, cargando }) => {
                 onChange={(e) => setForm({ ...form, contenido: e.target.value })}
                 rows={4}
                 placeholder="Escribe el contenido del material..."
-                className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg outline-none focus:border-indigo-300 focus:ring-2 focus:ring-indigo-100 transition-all resize-none"
+                className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg outline-none focus:border-[#0f766e] focus:ring-2 focus:ring-[#0f766e]/20 transition-all resize-none"
               />
             </div>
           )}
@@ -164,7 +151,7 @@ const ModalEditarMaterial = ({ material, onGuardar, onCancelar, cargando }) => {
                   value={form.nombre_archivo}
                   onChange={(e) => setForm({ ...form, nombre_archivo: e.target.value })}
                   placeholder="Ej: guia_capitulo3.pdf"
-                  className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg outline-none focus:border-indigo-300 focus:ring-2 focus:ring-indigo-100 transition-all"
+                  className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg outline-none focus:border-[#0f766e] focus:ring-2 focus:ring-[#0f766e]/20 transition-all"
                 />
               </div>
               <div>
@@ -174,7 +161,7 @@ const ModalEditarMaterial = ({ material, onGuardar, onCancelar, cargando }) => {
                   value={form.url_archivo}
                   onChange={(e) => setForm({ ...form, url_archivo: e.target.value })}
                   placeholder="https://..."
-                  className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg outline-none focus:border-indigo-300 focus:ring-2 focus:ring-indigo-100 transition-all"
+                  className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg outline-none focus:border-[#0f766e] focus:ring-2 focus:ring-[#0f766e]/20 transition-all"
                 />
               </div>
             </div>
@@ -191,7 +178,7 @@ const ModalEditarMaterial = ({ material, onGuardar, onCancelar, cargando }) => {
             <button
               type="submit"
               disabled={cargando}
-              className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors text-sm font-medium flex items-center gap-2 disabled:opacity-50"
+              className="px-4 py-2 bg-[#0f766e] text-white rounded-lg hover:bg-[#0d5e57] transition-colors text-sm font-medium flex items-center gap-2 disabled:opacity-50"
             >
               {cargando ? <Loader2 className="w-4 h-4 animate-spin" /> : null}
               {material?.id ? 'Actualizar' : 'Crear'}

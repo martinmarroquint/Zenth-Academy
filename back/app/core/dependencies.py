@@ -34,6 +34,10 @@ def get_current_user(
         user_id: str = payload.get("sub")
         if user_id is None:
             raise credentials_exception
+        # ✅ SEGURIDAD: Solo aceptar tokens de tipo "access".
+        # Evita que un refresh token (larga duración) se use como access token.
+        if payload.get("type") != "access":
+            raise credentials_exception
     except JWTError:
         raise credentials_exception
     

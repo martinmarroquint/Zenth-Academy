@@ -1,7 +1,7 @@
 // front/src/components/examenes/HistorialComparticiones.jsx
 // NUEVO ARCHIVO - HISTORIAL DE COMPARTICIONES
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { 
   ArrowLeft, FolderOpen, Clock, Users, Calendar, 
   Loader2, FileText, ChevronRight, Download 
@@ -13,11 +13,7 @@ const HistorialComparticiones = ({ docenteId, onVolver }) => {
   const [cargando, setCargando] = useState(true);
   const [filtro, setFiltro] = useState('todos'); // todos, activo, cerrado
 
-  useEffect(() => {
-    cargarHistorial();
-  }, []);
-
-  const cargarHistorial = async () => {
+  const cargarHistorial = useCallback(async () => {
     setCargando(true);
     try {
       const data = await examenesService.listarHistorial(docenteId);
@@ -36,7 +32,11 @@ const HistorialComparticiones = ({ docenteId, onVolver }) => {
     } finally {
       setCargando(false);
     }
-  };
+  }, [docenteId]);
+
+  useEffect(() => {
+    cargarHistorial();
+  }, [cargarHistorial]);
 
   const formatFecha = (fecha) => {
     if (!fecha) return 'En curso';

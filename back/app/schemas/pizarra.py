@@ -60,6 +60,11 @@ class SesionPizarraCreate(BaseModel):
     user_agent: Optional[str] = None
 
 
+class ElementosPizarraUpdate(BaseModel):
+    """Body de POST /pizarra/{pizarra_id}/elementos."""
+    elementos: Optional[List[Any]] = []
+
+
 class SesionPizarraResponse(BaseModel):
     id: str
     pizarra_id: str

@@ -13,6 +13,7 @@ from app.models.pizarra import Pizarra, SesionPizarra
 from app.schemas.pizarra import (
     PizarraCreate, PizarraUpdate, PizarraResponse,
     SesionPizarraCreate, SesionPizarraResponse,
+    ElementosPizarraUpdate,
     MensajeResponse
 )
 
@@ -147,13 +148,13 @@ def obtener_elementos(pizarra_id: str, db: Session = Depends(get_db)):
 
 
 @router.post("/{pizarra_id}/elementos")
-def actualizar_elementos(pizarra_id: str, data: dict, db: Session = Depends(get_db)):
+def actualizar_elementos(pizarra_id: str, data: ElementosPizarraUpdate, db: Session = Depends(get_db)):
     """Actualiza los elementos de una pizarra"""
     pizarra = db.query(Pizarra).filter(Pizarra.id == pizarra_id).first()
     if not pizarra:
         raise HTTPException(status_code=404, detail="Pizarra no encontrada")
     
-    pizarra.elementos = data.get('elementos', [])
+    pizarra.elementos = data.elementos
     pizarra.ultima_actividad = datetime.now(timezone.utc)
     pizarra.updated_at = datetime.now(timezone.utc)
     db.commit()

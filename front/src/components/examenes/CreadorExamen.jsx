@@ -9,7 +9,7 @@ import {
   RotateCcw, CheckCircle2, ChevronDown, Lock,
   Clock, Target, Hash, Calendar, Menu, X
 } from 'lucide-react';
-import { COLOR_PRIMARIO, TIPOS_PREGUNTA_CONFIG, CONFIGURACION_EXAMEN_DEFAULT, validarExamen } from './constantes';
+import { COLOR_PRIMARIO, TIPOS_PREGUNTA_CONFIG, CONFIGURACION_EXAMEN_DEFAULT } from './constantes';
 import PreguntaItem from './PreguntaItem';
 
 const ICONOS_POR_TIPO = {
@@ -19,10 +19,31 @@ const ICONOS_POR_TIPO = {
 };
 
 const COLORES_TIPO = {
-  opcion_multiple: '#188C5D', verdadero_falso: '#2563EB',
+  opcion_multiple: '#0f766e', verdadero_falso: '#2563EB',
   relacionar: '#7C3AED', ordenamiento: '#F59E0B',
   completar: '#DC2626', respuesta_corta: '#0891B2', ensayo: '#4F46E5'
 };
+
+const generarIdDuplicado = () => Date.now().toString() + '_dup';
+
+const MenuTiposPregunta = ({ onSelect }) => (
+  <div className="bg-white rounded-lg shadow-lg border border-gray-200 p-1 flex gap-0.5">
+    {TIPOS_PREGUNTA_CONFIG.map((tipo) => {
+      const Icon = ICONOS_POR_TIPO[tipo.id] || ListChecks;
+      const color = COLORES_TIPO[tipo.id] || '#059669';
+      return (
+        <button key={tipo.id} type="button" onClick={() => onSelect(tipo.id)}
+          className="group relative w-9 h-9 rounded-lg flex items-center justify-center hover:bg-gray-100 transition-colors"
+          style={{ WebkitTapHighlightColor: 'transparent' }}>
+          <Icon className="w-4 h-4 transition-transform group-hover:scale-110" style={{ color }}/>
+          <div className="absolute -top-9 left-1/2 -translate-x-1/2 px-2.5 py-1.5 bg-white rounded-lg shadow-lg border border-gray-200 opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none whitespace-nowrap z-[99999]">
+            <p className="text-[11px] font-semibold text-gray-700">{tipo.nombre}</p>
+          </div>
+        </button>
+      );
+    })}
+  </div>
+);
 
 // =============================================
 // SELECT PERSONALIZADO
@@ -211,7 +232,7 @@ const CreadorExamen = ({
     const nuevas = [...preguntas];
     nuevas.splice(idx + 1, 0, {
       ...p, 
-      id: Date.now().toString() + '_dup', 
+      id: generarIdDuplicado(), 
       orden: preguntas.length,
       afirmaciones: (p.afirmaciones || []).map(a => ({ ...a, id: 'vf' + Math.random() })),
       frases: (p.frases || []).map(f => ({ ...f, id: 'fr' + Math.random(), segmentos: (f.segmentos || []).map(s => ({ ...s, id: 'sg' + Math.random() })) }))
@@ -290,25 +311,6 @@ const CreadorExamen = ({
     { campo: 'detectar_tab_change', icon: Monitor, label: 'Detectar cambio de pestaña' },
     { campo: 'mostrar_mejor_nota', icon: RotateCcw, label: 'Mostrar mejor nota' },
   ];
-
-  const MenuTiposPregunta = ({ onSelect }) => (
-    <div className="bg-white rounded-lg shadow-lg border border-gray-200 p-1 flex gap-0.5">
-      {TIPOS_PREGUNTA_CONFIG.map((tipo) => {
-        const Icon = ICONOS_POR_TIPO[tipo.id] || ListChecks;
-        const color = COLORES_TIPO[tipo.id] || '#059669';
-        return (
-          <button key={tipo.id} type="button" onClick={() => onSelect(tipo.id)}
-            className="group relative w-9 h-9 rounded-lg flex items-center justify-center hover:bg-gray-100 transition-colors"
-            style={{ WebkitTapHighlightColor: 'transparent' }}>
-            <Icon className="w-4 h-4 transition-transform group-hover:scale-110" style={{ color }}/>
-            <div className="absolute -top-9 left-1/2 -translate-x-1/2 px-2.5 py-1.5 bg-white rounded-lg shadow-lg border border-gray-200 opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none whitespace-nowrap z-[99999]">
-              <p className="text-[11px] font-semibold text-gray-700">{tipo.nombre}</p>
-            </div>
-          </button>
-        );
-      })}
-    </div>
-  );
 
   const opcionesIntentos = [
     { value: 1, label: '1 intento' }, { value: 2, label: '2 intentos' },
@@ -483,7 +485,9 @@ const CreadorExamen = ({
                     value={datos.configuracion.preguntas_por_examen || 0} 
                     onChange={e => updateConfig('preguntas_por_examen', parseInt(e.target.value) || 0)} 
                     min={0} max={preguntas.length || 50} 
-                    className="w-full px-2.5 py-2 text-xs border border-gray-200 rounded-lg text-center outline-none focus:border-gray-300 transition-colors"
+                    disabled
+                    title="Próximamente: requiere selección de preguntas en el servidor para calificar correctamente"
+                    className="w-full px-2.5 py-2 text-xs border border-gray-200 rounded-lg text-center outline-none focus:border-gray-300 transition-colors disabled:bg-gray-50 disabled:text-gray-300"
                   />
                 </div>
                 <div>
@@ -571,7 +575,7 @@ const CreadorExamen = ({
 
       <style>{`
         * { -webkit-tap-highlight-color: transparent; }
-        *:focus { outline: none !important; }
+        *:focus-visible { outline: 2px solid #0f766e; outline-offset: 2px; }
         .scrollbar-hide { -ms-overflow-style: none; scrollbar-width: none; }
         .scrollbar-hide::-webkit-scrollbar { display: none; }
       `}</style>

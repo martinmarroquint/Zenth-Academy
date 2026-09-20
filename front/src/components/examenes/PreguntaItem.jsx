@@ -22,7 +22,7 @@ const ICONOS_POR_TIPO = {
 };
 
 const COLORES_TIPO = {
-  opcion_multiple: '#188C5D', verdadero_falso: '#2563EB',
+  opcion_multiple: '#0f766e', verdadero_falso: '#2563EB',
   relacionar: '#7C3AED', ordenamiento: '#F59E0B',
   completar: '#DC2626', respuesta_corta: '#0891B2', ensayo: '#4F46E5',
   likert: '#0D9488', estrellas: '#D97706', escala_numerica: '#7C3AED'
@@ -82,14 +82,6 @@ const PreguntaItem = ({
 
   const totalPtsCompletar = (pregunta.frases || []).reduce((sum, f) => sum + (f.puntos || 1), 0);
   const totalEspacios = (pregunta.frases || []).reduce((sum, f) => sum + (f.segmentos || []).filter(s => s.tipo === 'espacio').length, 0);
-
-  // ✅ CORREGIDO: insertar después usando el índice
-  const handleInsertarDespues = () => {
-    if (onAgregarPregunta) {
-      // Pasar el tipo de pregunta y la posición (índice + 1)
-      onAgregarPregunta('opcion_multiple', index + 1);
-    }
-  };
 
   return (
     <div className="group/pregunta bg-white rounded-xl border border-gray-200 hover:border-gray-300 hover:shadow-sm transition-all duration-200">

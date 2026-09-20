@@ -28,6 +28,8 @@ class Examen(Base):
     configuracion = Column(JSON, default=dict)
     intentos_permitidos = Column(Integer, default=1)
     grupo_id = Column(String(100), nullable=True)
+    # ✅ SEGURIDAD: dueño del examen (docente que lo creó). Permite aislar exámenes por docente.
+    docente_id = Column(String(100), nullable=True, index=True)
     created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
     updated_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
 

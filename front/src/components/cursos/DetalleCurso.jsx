@@ -1,13 +1,13 @@
 // front/src/components/cursos/DetalleCurso.jsx
 // VERSIÓN COMPLETA ACTUALIZADA - NAVEGACIÓN CORREGIDA
 
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import {
-  ArrowLeft, Play, Clock, Users, BookOpen,
+  ArrowLeft, Play, Users, BookOpen,
   Award, CheckCircle, Loader2,
   FileText, Video, ChevronDown,
-  Link as LinkIcon, Lock, DollarSign,
+  Lock, DollarSign,
   CreditCard, Send, AlertCircle, Check,
   Settings, GraduationCap, MessageSquare,
   BarChart3, Eye, Download, ThumbsUp,
@@ -19,6 +19,7 @@ import cursosService from '../../services/cursosService';
 import certificadosService from '../../services/certificadosService';
 import examenesService from '../../services/examenesService';
 import { authService } from '../../services/authService';
+import { useModo } from '../../hooks/useModo';
 import { Badge, Button } from '../ui';
 import ForoCurso from './ForoCurso';
 import CalificacionesEstudiante from './CalificacionesEstudiante';
@@ -26,1010 +27,17 @@ import EstudiantesCurso from './EstudiantesCurso';
 import VerCertificado from '../certificados/VerCertificado';
 import PanelSolicitudes from '../docente/PanelSolicitudes';
 import ExamenActivo from '../examenes/ExamenActivo';
-import { resolveImageUrl } from '../../config/api.config';
-
-// ============================================================
-// VIDEO PLAYER
-// ============================================================
-const VideoPlayer = ({ videoId, onComplete, isBlocked = false }) => {
-  const [cargando, setCargando] = useState(true);
-  const [error, setError] = useState(false);
-  const [playing, setPlaying] = useState(false);
-  const [progress, setProgress] = useState(0);
-  const [duration, setDuration] = useState(0);
-  const [currentTime, setCurrentTime] = useState(0);
-  const playerRef = useRef(null);
-  const intervalRef = useRef(null);
-
-  if (isBlocked) {
-    return (
-      <div className="flex flex-col items-center justify-center h-full bg-gray-100 rounded-xl min-h-[300px] border-2 border-dashed border-gray-300">
-        <Lock className="w-16 h-16 text-gray-300 mx-auto mb-4" />
-        <p className="text-gray-400 font-medium">Video bloqueado</p>
-        <p className="text-sm text-gray-300">Solicita acceso para ver este video</p>
-      </div>
-    );
-  }
-
-  const extractVideoId = (url) => {
-    if (!url) return null;
-    if (/^[a-zA-Z0-9_-]{11}$/.test(url)) return url;
-    const patterns = [
-      /(?:youtube\.com\/watch\?v=)([^&]+)/,
-      /(?:youtu\.be\/)([^?]+)/,
-      /(?:youtube\.com\/embed\/)([^?]+)/
-    ];
-    for (const pattern of patterns) {
-      const match = url.match(pattern);
-      if (match) return match[1];
-    }
-    return null;
-  };
-
-  const cleanVideoId = extractVideoId(videoId);
-
-  useEffect(() => {
-    if (!cleanVideoId) {
-      setCargando(false);
-      setError(true);
-      return;
-    }
-
-    const loadYouTubeAPI = () => {
-      if (window.YT && window.YT.Player) {
-        initPlayer();
-        return;
-      }
-
-      window.onYouTubeIframeAPIReady = () => {
-        initPlayer();
-      };
-
-      if (!document.querySelector('script[src*="youtube.com/iframe_api"]')) {
-        const tag = document.createElement('script');
-        tag.src = 'https://www.youtube.com/iframe_api';
-        const firstScriptTag = document.getElementsByTagName('script')[0];
-        firstScriptTag.parentNode.insertBefore(tag, firstScriptTag);
-      }
-    };
-
-    const initPlayer = () => {
-      if (playerRef.current) return;
-      if (!document.getElementById('youtube-player')) return;
-
-      playerRef.current = new window.YT.Player('youtube-player', {
-        height: '100%',
-        width: '100%',
-        videoId: cleanVideoId,
-        playerVars: {
-          modestbranding: 1,
-          rel: 0,
-          showinfo: 0,
-          controls: 0,
-          disablekb: 0,
-          fs: 0,
-          iv_load_policy: 3,
-          autoplay: 0,
-          origin: window.location.origin,
-        },
-        events: {
-          onReady: (event) => {
-            setCargando(false);
-            const dur = event.target.getDuration();
-            setDuration(dur);
-            setPlayer(event.target);
-          },
-          onStateChange: (event) => {
-            const state = event.data;
-            setPlaying(state === 1);
-
-            if (state === 1) {
-              if (intervalRef.current) clearInterval(intervalRef.current);
-              intervalRef.current = setInterval(() => {
-                if (!playerRef.current) return;
-                try {
-                  const current = playerRef.current.getCurrentTime();
-                  const total = playerRef.current.getDuration();
-                  if (total > 0 && current >= 0) {
-                    const pct = Math.min((current / total) * 100, 100);
-                    setProgress(pct);
-                    setCurrentTime(current);
-                    if (pct >= 95) {
-                      onComplete?.();
-                    }
-                  }
-                } catch (e) {
-                  console.warn('Error:', e);
-                }
-              }, 1000);
-            } else {
-              if (intervalRef.current) {
-                clearInterval(intervalRef.current);
-                intervalRef.current = null;
-              }
-            }
-
-            if (state === 0) {
-              try {
-                const current = playerRef.current?.getCurrentTime() || 0;
-                const total = playerRef.current?.getDuration() || 0;
-                if (total > 0 && current >= total - 1) {
-                  setProgress(100);
-                  onComplete?.();
-                }
-              } catch (e) {
-                console.warn('Error:', e);
-              }
-            }
-          },
-          onError: () => {
-            setCargando(false);
-            setError(true);
-          },
-        },
-      });
-    };
-
-    loadYouTubeAPI();
-
-    return () => {
-      if (intervalRef.current) clearInterval(intervalRef.current);
-      if (playerRef.current) {
-        try { playerRef.current.destroy(); } catch (e) {}
-        playerRef.current = null;
-      }
-    };
-  }, [cleanVideoId, onComplete]);
-
-  const togglePlay = () => {
-    if (!playerRef.current) return;
-    try {
-      if (playing) {
-        playerRef.current.pauseVideo();
-      } else {
-        playerRef.current.playVideo();
-      }
-    } catch (e) {
-      console.error('Error:', e);
-    }
-  };
-
-  const formatTime = (seconds) => {
-    if (!seconds || isNaN(seconds) || seconds < 0) return '0:00';
-    const mins = Math.floor(seconds / 60);
-    const secs = Math.floor(seconds % 60);
-    return `${mins}:${secs.toString().padStart(2, '0')}`;
-  };
-
-  if (error || !cleanVideoId) {
-    return (
-      <div className="flex items-center justify-center h-full bg-gray-900 text-white rounded-xl min-h-[300px]">
-        <div className="text-center">
-          <Video className="w-16 h-16 text-gray-600 mx-auto mb-4" />
-          <p className="text-gray-400">Video no disponible</p>
-        </div>
-      </div>
-    );
-  }
-
-  return (
-    <div className="relative w-full bg-black rounded-xl overflow-hidden aspect-video">
-      <div id="youtube-player" className="w-full h-full" />
-
-      {cargando && (
-        <div className="absolute inset-0 flex items-center justify-center bg-black/80">
-          <Loader2 className="w-12 h-12 animate-spin text-white/50" />
-        </div>
-      )}
-
-      {!cargando && (
-        <button
-          onClick={togglePlay}
-          className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-16 h-16 rounded-full bg-white/20 backdrop-blur-sm hover:bg-white/30 transition-all flex items-center justify-center border border-white/30"
-        >
-          {playing ? (
-            <Pause className="w-8 h-8 text-white" />
-          ) : (
-            <Play className="w-8 h-8 text-white ml-1" />
-          )}
-        </button>
-      )}
-
-      {!cargando && (
-        <div className="absolute bottom-0 left-0 right-0 px-4 pb-4">
-          <div className="flex items-center gap-3">
-            <span className="text-white text-xs font-medium min-w-[40px]">
-              {formatTime(currentTime)}
-            </span>
-            <div className="flex-1 h-1 bg-white/30 rounded-full">
-              <div
-                className="h-full bg-white rounded-full transition-all"
-                style={{ width: `${Math.min(progress, 100)}%` }}
-              />
-            </div>
-            <span className="text-white text-xs font-medium min-w-[40px] text-right">
-              {formatTime(duration)}
-            </span>
-          </div>
-        </div>
-      )}
-
-      {progress >= 95 && (
-        <div className="absolute top-4 right-4 bg-emerald-500/90 text-white px-3 py-1.5 rounded-lg text-xs font-medium flex items-center gap-1.5 shadow-lg">
-          <Check className="w-3.5 h-3.5" />
-          Completado
-        </div>
-      )}
-    </div>
-  );
-};
-
-// ============================================================
-// TEXTO ENRIQUECIDO
-// ============================================================
-const RichTextDisplay = ({ content, isBlocked = false }) => {
-  if (isBlocked) {
-    return (
-      <div className="flex flex-col items-center justify-center min-h-[200px] bg-gray-50 rounded-xl border-2 border-dashed border-gray-300 p-8">
-        <Lock className="w-12 h-12 text-gray-300 mx-auto mb-3" />
-        <p className="text-gray-400 font-medium">Contenido bloqueado</p>
-        <p className="text-sm text-gray-300">Solicita acceso para ver este contenido</p>
-      </div>
-    );
-  }
-
-  if (!content) {
-    return (
-      <div className="text-center py-8 text-gray-400">
-        <FileText className="w-12 h-12 mx-auto mb-2 text-gray-300" />
-        <p>No hay contenido disponible</p>
-      </div>
-    );
-  }
-
-  return (
-    <div className="prose prose-slate max-w-none">
-      <div dangerouslySetInnerHTML={{ __html: content }} />
-    </div>
-  );
-};
-
-// ============================================================
-// RECURSOS CON PREVISUALIZACIÓN (VERSIÓN COMPLETA)
-// ============================================================
-const RecursosDisplay = ({ recursos, isBlocked = false }) => {
-  const [previewUrl, setPreviewUrl] = useState(null);
-  const [previewTitle, setPreviewTitle] = useState('');
-  const [previewType, setPreviewType] = useState('');
-  const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState(null);
-  const [isFullscreen, setIsFullscreen] = useState(false);
-  const iframeRef = useRef(null);
-  const modalRef = useRef(null);
-
-  const detectFileType = (url, nombre) => {
-    if (!url) return 'link';
-    
-    const extension = nombre?.split('.').pop()?.toLowerCase() || '';
-    const extensionMap = {
-      'pdf': 'pdf',
-      'doc': 'word',
-      'docx': 'word',
-      'xls': 'excel',
-      'xlsx': 'excel',
-      'ppt': 'powerpoint',
-      'pptx': 'powerpoint',
-      'jpg': 'image',
-      'jpeg': 'image',
-      'png': 'image',
-      'gif': 'image',
-      'svg': 'image',
-      'mp4': 'video',
-      'mp3': 'audio',
-      'zip': 'archive',
-      'rar': 'archive'
-    };
-
-    if (url.includes('drive.google.com') || url.includes('docs.google.com')) {
-      if (url.includes('document')) return 'google-doc';
-      if (url.includes('spreadsheets')) return 'google-sheet';
-      if (url.includes('presentation')) return 'google-slide';
-      if (url.includes('file/d/')) return 'google-file';
-      return 'google-drive';
-    }
-
-    return extensionMap[extension] || 'link';
-  };
-
-  const getDrivePreviewUrl = (url) => {
-    if (!url) return null;
-    
-    if (url.includes('docs.google.com/document')) {
-      return url.replace('/edit', '/preview').replace('/edit?', '/preview?');
-    }
-    if (url.includes('docs.google.com/presentation')) {
-      return url.replace('/edit', '/preview').replace('/edit?', '/preview?');
-    }
-    if (url.includes('docs.google.com/spreadsheets')) {
-      return url.replace('/edit', '/preview').replace('/edit?', '/preview?');
-    }
-    if (url.includes('drive.google.com/file')) {
-      const fileId = url.match(/\/d\/([^\/]+)/)?.[1];
-      if (fileId) {
-        return `https://drive.google.com/file/d/${fileId}/preview`;
-      }
-    }
-    if (url.includes('drive.google.com/open?id=')) {
-      const fileId = url.match(/id=([^&]+)/)?.[1];
-      if (fileId) {
-        return `https://drive.google.com/file/d/${fileId}/preview`;
-      }
-    }
-    if (url.includes('drive.google.com/drive/folders')) {
-      const folderId = url.match(/\/folders\/([^\/]+)/)?.[1];
-      if (folderId) {
-        return `https://drive.google.com/embeddedfolderview?id=${folderId}#list`;
-      }
-    }
-    return null;
-  };
-
-  const getFileIcon = (url, nombre) => {
-    const type = detectFileType(url, nombre);
-    const icons = {
-      'pdf': <FileText className="w-5 h-5 text-red-500" />,
-      'word': <FileText className="w-5 h-5 text-blue-600" />,
-      'excel': <FileText className="w-5 h-5 text-green-600" />,
-      'powerpoint': <FileText className="w-5 h-5 text-orange-500" />,
-      'image': <FileText className="w-5 h-5 text-purple-500" />,
-      'video': <Video className="w-5 h-5 text-red-400" />,
-      'audio': <FileText className="w-5 h-5 text-indigo-500" />,
-      'archive': <FileText className="w-5 h-5 text-yellow-600" />,
-      'google-doc': <FileText className="w-5 h-5 text-blue-500" />,
-      'google-sheet': <FileText className="w-5 h-5 text-green-500" />,
-      'google-slide': <FileText className="w-5 h-5 text-amber-500" />,
-      'google-drive': <FileText className="w-5 h-5 text-[#0f766e]" />,
-      'link': <LinkIcon className="w-5 h-5 text-gray-400" />
-    };
-    return icons[type] || icons.link;
-  };
-
-  const getFileTypeLabel = (url, nombre) => {
-    const type = detectFileType(url, nombre);
-    const labels = {
-      'pdf': 'PDF',
-      'word': 'Word',
-      'excel': 'Excel',
-      'powerpoint': 'PowerPoint',
-      'image': 'Imagen',
-      'video': 'Video',
-      'audio': 'Audio',
-      'archive': 'Comprimido',
-      'google-doc': 'Google Documento',
-      'google-sheet': 'Google Hoja de cálculo',
-      'google-slide': 'Google Presentación',
-      'google-drive': 'Google Drive',
-      'link': 'Enlace'
-    };
-    return labels[type] || 'Documento';
-  };
-
-  const getFileColor = (url, nombre) => {
-    const type = detectFileType(url, nombre);
-    const colors = {
-      'pdf': 'border-red-200 bg-red-50 hover:border-red-300',
-      'word': 'border-blue-200 bg-blue-50 hover:border-blue-300',
-      'excel': 'border-green-200 bg-green-50 hover:border-green-300',
-      'powerpoint': 'border-orange-200 bg-orange-50 hover:border-orange-300',
-      'image': 'border-purple-200 bg-purple-50 hover:border-purple-300',
-      'video': 'border-red-200 bg-red-50 hover:border-red-300',
-      'audio': 'border-indigo-200 bg-indigo-50 hover:border-indigo-300',
-      'archive': 'border-yellow-200 bg-yellow-50 hover:border-yellow-300',
-      'google-doc': 'border-blue-200 bg-blue-50 hover:border-blue-300',
-      'google-sheet': 'border-green-200 bg-green-50 hover:border-green-300',
-      'google-slide': 'border-amber-200 bg-amber-50 hover:border-amber-300',
-      'google-drive': 'border-[#0f766e]/20 bg-[#e6f4f2] hover:border-[#0f766e]/40',
-      'link': 'border-gray-200 bg-gray-50 hover:border-gray-300'
-    };
-    return colors[type] || 'border-gray-200 bg-gray-50 hover:border-gray-300';
-  };
-
-  const handlePreview = (recurso) => {
-    if (isBlocked) {
-      alert('Este contenido está bloqueado. Solicita acceso para ver los recursos.');
-      return;
-    }
-
-    setError(null);
-    setIsLoading(true);
-    setIsFullscreen(false);
-    
-    const preview = getDrivePreviewUrl(recurso.url);
-    
-    if (preview) {
-      setPreviewUrl(preview);
-      setPreviewTitle(recurso.nombre || 'Documento');
-      setPreviewType(detectFileType(recurso.url, recurso.nombre));
-    } else {
-      window.open(recurso.url, '_blank', 'noopener,noreferrer');
-    }
-  };
-
-  const handleIframeLoad = () => {
-    setIsLoading(false);
-  };
-
-  const handleIframeError = () => {
-    setIsLoading(false);
-    setError('No se pudo cargar la vista previa. Puedes abrir el enlace directamente.');
-  };
-
-  const closePreview = () => {
-    setPreviewUrl(null);
-    setPreviewTitle('');
-    setPreviewType('');
-    setError(null);
-    setIsLoading(true);
-    setIsFullscreen(false);
-  };
-
-  const toggleFullscreen = () => {
-    setIsFullscreen(!isFullscreen);
-  };
-
-  useEffect(() => {
-    const handleEsc = (e) => {
-      if (e.key === 'Escape' && previewUrl) {
-        closePreview();
-      }
-    };
-    window.addEventListener('keydown', handleEsc);
-    return () => window.removeEventListener('keydown', handleEsc);
-  }, [previewUrl]);
-
-  useEffect(() => {
-    if (previewUrl) {
-      document.body.style.overflow = 'hidden';
-    } else {
-      document.body.style.overflow = 'unset';
-    }
-    return () => {
-      document.body.style.overflow = 'unset';
-    };
-  }, [previewUrl]);
-
-  useEffect(() => {
-    if (previewUrl) {
-      const timer = setTimeout(() => {
-        setIsLoading(false);
-      }, 8000);
-      return () => clearTimeout(timer);
-    }
-  }, [previewUrl]);
-
-  if (isBlocked) {
-    return (
-      <div className="flex flex-col items-center justify-center min-h-[200px] bg-gray-50 rounded-xl border-2 border-dashed border-gray-300 p-8">
-        <Lock className="w-12 h-12 text-gray-300 mx-auto mb-3" />
-        <p className="text-gray-400 font-medium">Recursos bloqueados</p>
-        <p className="text-sm text-gray-300">Solicita acceso para ver los recursos</p>
-      </div>
-    );
-  }
-
-  if (!recursos || recursos.length === 0) {
-    return (
-      <div className="text-center py-8 text-gray-400">
-        <FileText className="w-12 h-12 mx-auto mb-2 text-gray-300" />
-        <p>No hay recursos disponibles</p>
-      </div>
-    );
-  }
-
-  return (
-    <>
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-        {recursos.map((recurso, index) => {
-          const isDrive = getDrivePreviewUrl(recurso.url) !== null;
-          const fileType = getFileTypeLabel(recurso.url, recurso.nombre);
-          const icon = getFileIcon(recurso.url, recurso.nombre);
-          const colorClass = getFileColor(recurso.url, recurso.nombre);
-          
-          return (
-            <div
-              key={index}
-              className={`group flex items-center gap-3 p-3 rounded-xl border ${colorClass} hover:shadow-md transition-all duration-200 cursor-pointer`}
-              onClick={() => handlePreview(recurso)}
-            >
-              <div className="w-10 h-10 rounded-xl bg-white border border-gray-200 flex items-center justify-center flex-shrink-0 group-hover:scale-105 transition-transform">
-                {icon}
-              </div>
-              <div className="flex-1 min-w-0">
-                <p className="text-sm font-medium text-gray-800 truncate group-hover:text-[#0f766e] transition-colors">
-                  {recurso.nombre || 'Recurso sin nombre'}
-                </p>
-                <div className="flex items-center gap-2 mt-0.5">
-                  <span className="text-xs text-gray-400">{fileType}</span>
-                  {isDrive && (
-                    <span className="text-[10px] font-medium text-[#0f766e] bg-[#e6f4f2] px-1.5 py-0.5 rounded-full">
-                      Drive
-                    </span>
-                  )}
-                </div>
-              </div>
-              <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
-                <button
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    handlePreview(recurso);
-                  }}
-                  className="p-1.5 rounded-lg hover:bg-white/50 text-gray-400 hover:text-[#0f766e] transition-colors"
-                  title="Vista previa"
-                >
-                  <Eye className="w-4 h-4" />
-                </button>
-                <a
-                  href={recurso.url}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  onClick={(e) => e.stopPropagation()}
-                  className="p-1.5 rounded-lg hover:bg-white/50 text-gray-400 hover:text-gray-600 transition-colors"
-                  title="Abrir enlace"
-                >
-                  <Download className="w-4 h-4" />
-                </a>
-              </div>
-            </div>
-          );
-        })}
-      </div>
-
-      {previewUrl && (
-        <div 
-          className={`fixed inset-0 z-[9999] flex items-center justify-center bg-black/60 backdrop-blur-sm transition-all duration-300 ${
-            isFullscreen ? 'p-0' : 'p-2 sm:p-4'
-          }`}
-          onClick={(e) => {
-            if (e.target === e.currentTarget && !isFullscreen) {
-              closePreview();
-            }
-          }}
-        >
-          <div 
-            ref={modalRef}
-            className={`bg-white shadow-2xl flex flex-col overflow-hidden transition-all duration-300 ${
-              isFullscreen 
-                ? 'w-full h-full rounded-none' 
-                : 'w-full max-w-6xl rounded-2xl max-h-[95vh]'
-            }`}
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div className="flex items-center justify-between px-4 sm:px-6 py-3 border-b border-gray-100 flex-shrink-0 bg-white">
-              <div className="flex items-center gap-3 min-w-0">
-                <div className={`w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0 ${
-                  previewType === 'google-slide' ? 'bg-amber-50' :
-                  previewType === 'google-doc' ? 'bg-blue-50' :
-                  previewType === 'google-sheet' ? 'bg-green-50' :
-                  'bg-[#e6f4f2]'
-                }`}>
-                  {getFileIcon(previewUrl, previewTitle)}
-                </div>
-                <div className="min-w-0">
-                  <h3 className="text-sm font-semibold text-gray-900 truncate max-w-[200px] sm:max-w-[400px]">
-                    {previewTitle}
-                  </h3>
-                  <p className="text-xs text-gray-400 flex items-center gap-1">
-                    <span>{getFileTypeLabel(previewUrl, previewTitle)}</span>
-                    <span className="hidden sm:inline">• Vista previa</span>
-                  </p>
-                </div>
-              </div>
-              <div className="flex items-center gap-0.5 flex-shrink-0 ml-2">
-                <button
-                  onClick={toggleFullscreen}
-                  className="p-1.5 sm:p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg transition-colors"
-                  title={isFullscreen ? 'Salir de pantalla completa' : 'Pantalla completa'}
-                >
-                  {isFullscreen ? (
-                    <svg className="w-4 h-4 sm:w-5 sm:h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 9L4 4m0 0l5 5M4 4l5 5m-5-5v5m0-5h5m6 6l5 5m0 0l-5-5m5 5v-5m0 5h-5" />
-                    </svg>
-                  ) : (
-                    <svg className="w-4 h-4 sm:w-5 sm:h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5v-4m0 4h-4m4 0l-5-5" />
-                    </svg>
-                  )}
-                </button>
-                <a
-                  href={previewUrl}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="p-1.5 sm:p-2 text-gray-400 hover:text-[#0f766e] hover:bg-[#e6f4f2] rounded-lg transition-colors"
-                  title="Abrir en nueva ventana"
-                >
-                  <Download className="w-4 h-4 sm:w-5 sm:h-5" />
-                </a>
-                <button
-                  onClick={closePreview}
-                  className="p-1.5 sm:p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg transition-colors"
-                  title="Cerrar (ESC)"
-                >
-                  <X className="w-4 h-4 sm:w-5 sm:h-5" />
-                </button>
-              </div>
-            </div>
-
-            <div className={`flex-1 relative bg-gray-50 ${isFullscreen ? '' : 'min-h-[500px]'}`}>
-              {isLoading && (
-                <div className="absolute inset-0 flex flex-col items-center justify-center bg-gray-50 z-10">
-                  <div className="w-12 h-12 border-4 border-[#e6f4f2] border-t-[#0f766e] rounded-full animate-spin"></div>
-                  <p className="text-sm text-gray-400 mt-4 font-medium">Cargando vista previa...</p>
-                </div>
-              )}
-              
-              {error ? (
-                <div className="flex flex-col items-center justify-center h-full p-6 sm:p-8 text-center">
-                  <div className="w-16 h-16 rounded-full bg-amber-50 flex items-center justify-center mb-4">
-                    <AlertCircle className="w-8 h-8 text-amber-500" />
-                  </div>
-                  <p className="text-sm text-gray-600 max-w-md">{error}</p>
-                  <div className="flex flex-col sm:flex-row items-center gap-3 mt-4">
-                    <a
-                      href={previewUrl}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="px-4 py-2 bg-[#0f766e] text-white rounded-lg hover:bg-[#0d5e57] transition-colors text-sm font-medium w-full sm:w-auto text-center"
-                    >
-                      Abrir enlace directamente
-                    </a>
-                    <button
-                      onClick={closePreview}
-                      className="px-4 py-2 border border-gray-300 text-gray-600 rounded-lg hover:bg-gray-50 transition-colors text-sm w-full sm:w-auto"
-                    >
-                      Cerrar
-                    </button>
-                  </div>
-                </div>
-              ) : (
-                <div className="w-full h-full" style={{ minHeight: '500px' }}>
-                  <iframe
-                    ref={iframeRef}
-                    src={previewUrl}
-                    className="w-full h-full border-0"
-                    allowFullScreen
-                    title={`Vista previa de ${previewTitle}`}
-                    onLoad={handleIframeLoad}
-                    onError={handleIframeError}
-                    sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-presentation"
-                    loading="lazy"
-                    style={{
-                      width: '100%',
-                      height: '100%',
-                      minHeight: '500px',
-                      display: 'block'
-                    }}
-                  />
-                </div>
-              )}
-            </div>
-
-            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between px-4 sm:px-6 py-2.5 border-t border-gray-100 flex-shrink-0 bg-white gap-2 sm:gap-0">
-              <div className="flex items-center gap-3">
-                <span className="text-xs text-gray-400 flex items-center gap-1.5">
-                  <svg className="w-3.5 h-3.5 text-[#0f766e]" viewBox="0 0 24 24" fill="currentColor">
-                    <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 14H9V8h2v8zm4 0h-2V8h2v8z"/>
-                  </svg>
-                  {previewType === 'google-slide' ? 'Google Slides' :
-                   previewType === 'google-doc' ? 'Google Docs' :
-                   previewType === 'google-sheet' ? 'Google Sheets' :
-                   'Google Drive'}
-                </span>
-                <span className="hidden sm:block w-px h-3 bg-gray-200" />
-                <span className="text-xs text-gray-400 hidden sm:inline">
-                  {isFullscreen ? 'Pantalla completa' : 'Vista previa'}
-                </span>
-              </div>
-              <div className="flex items-center gap-2 w-full sm:w-auto justify-end">
-                <button
-                  onClick={closePreview}
-                  className="text-xs text-gray-400 hover:text-gray-600 transition-colors px-3 py-1 hover:bg-gray-100 rounded-lg"
-                >
-                  Cerrar
-                </button>
-                <a
-                  href={previewUrl}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="text-xs font-medium text-white bg-[#0f766e] hover:bg-[#0d5e57] transition-colors px-3 py-1 rounded-lg whitespace-nowrap"
-                >
-                  Abrir en Drive
-                </a>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-
-      <style>{`
-        @keyframes spin {
-          from { transform: rotate(0deg); }
-          to { transform: rotate(360deg); }
-        }
-        .animate-spin {
-          animation: spin 1s linear infinite;
-        }
-        .min-h-\\[500px\\] {
-          min-height: 500px;
-        }
-        @media (max-width: 640px) {
-          .min-h-\\[500px\\] {
-            min-height: 350px;
-          }
-        }
-      `}</style>
-    </>
-  );
-};
-
-// ============================================================
-// COMENTARIOS
-// ============================================================
-const ComentariosLeccion = ({ isBlocked = false }) => {
-  const [comentarios] = useState([
-    {
-      id: 1,
-      usuario: 'Robert Araujo',
-      rol: 'Estudiante',
-      fecha: 'Hace un año',
-      contenido: 'Pfff, este curso promete mucho! Y la edición es tremenda.',
-      likes: 25
-    }
-  ]);
-  const [nuevoComentario, setNuevoComentario] = useState('');
-
-  const handleEnviar = () => {
-    if (!nuevoComentario.trim()) return;
-    setNuevoComentario('');
-  };
-
-  if (isBlocked) {
-    return (
-      <div className="flex flex-col items-center justify-center min-h-[200px] bg-gray-50 rounded-xl border-2 border-dashed border-gray-300 p-8">
-        <Lock className="w-12 h-12 text-gray-300 mx-auto mb-3" />
-        <p className="text-gray-400 font-medium">Comentarios bloqueados</p>
-        <p className="text-sm text-gray-300">Solicita acceso para participar en los comentarios</p>
-      </div>
-    );
-  }
-
-  return (
-    <div className="space-y-6">
-      <div className="flex items-center gap-2">
-        <MessageSquare className="w-5 h-5 text-gray-400" />
-        <h3 className="text-sm font-semibold text-gray-700">Comentarios</h3>
-        <Badge variant="secondary" size="sm">{comentarios.length}</Badge>
-      </div>
-
-      <div className="flex gap-3">
-        <div className="w-10 h-10 rounded-full bg-[#e6f4f2] flex items-center justify-center flex-shrink-0">
-          <span className="text-sm font-medium text-[#0f766e]">T</span>
-        </div>
-        <div className="flex-1">
-          <textarea
-            value={nuevoComentario}
-            onChange={(e) => setNuevoComentario(e.target.value)}
-            placeholder="Escribe tu comentario..."
-            className="w-full px-4 py-3 text-sm border border-gray-200 rounded-xl outline-none focus:border-[#0f766e] focus:ring-2 focus:ring-[#0f766e]/20 transition-all resize-none min-h-[80px]"
-          />
-          <div className="flex justify-end mt-2">
-            <button
-              onClick={handleEnviar}
-              disabled={!nuevoComentario.trim()}
-              className="px-4 py-2 text-sm font-medium text-white bg-[#0f766e] rounded-lg hover:bg-[#0d5e57] transition-colors disabled:opacity-50 flex items-center gap-2"
-            >
-              <Send className="w-4 h-4" />
-              Comentar
-            </button>
-          </div>
-        </div>
-      </div>
-
-      {comentarios.map((comentario) => (
-        <div key={comentario.id} className="border-b border-gray-100 pb-4">
-          <div className="flex gap-3">
-            <div className="w-9 h-9 rounded-full bg-gray-100 flex items-center justify-center flex-shrink-0">
-              <span className="text-sm font-medium text-gray-600">
-                {comentario.usuario.charAt(0)}
-              </span>
-            </div>
-            <div className="flex-1">
-              <div className="flex items-center gap-2 flex-wrap">
-                <span className="text-sm font-medium text-gray-800">{comentario.usuario}</span>
-                <span className="text-xs text-gray-400 bg-gray-100 px-2 py-0.5 rounded-full">{comentario.rol}</span>
-                <span className="text-xs text-gray-400">• {comentario.fecha}</span>
-              </div>
-              <p className="text-sm text-gray-700 mt-1">{comentario.contenido}</p>
-              <button className="flex items-center gap-1 text-xs text-gray-400 hover:text-[#0f766e] transition-colors mt-2">
-                <ThumbsUp className="w-3.5 h-3.5" />
-                {comentario.likes > 0 && comentario.likes}
-              </button>
-            </div>
-          </div>
-        </div>
-      ))}
-    </div>
-  );
-};
-
-// ============================================================
-// FUNCIONES DE UTILIDAD
-// ============================================================
-
-const getBloquesDeLeccion = (leccion) => {
-  if (leccion.bloques && Array.isArray(leccion.bloques)) {
-    return leccion.bloques;
-  }
-  return [];
-};
-
-const getLeccionesDeModulo = (modulo) => {
-  if (modulo.lecciones && Array.isArray(modulo.lecciones)) {
-    return modulo.lecciones;
-  }
-  return [];
-};
-
-const getTipoLeccion = (leccion) => {
-  // ✅ CORREGIDO: Primero verificar tipo directo en la lección (para examenes/cuestionarios asignados)
-  if (leccion.tipo && leccion.tipo !== 'bloque') {
-    return leccion.tipo;
-  }
-  const bloques = getBloquesDeLeccion(leccion);
-  if (bloques.length > 0) {
-    return bloques[0].tipo || 'texto';
-  }
-  return 'texto';
-};
-
-const getTipoIcon = (tipo) => {
-  switch(tipo) {
-    case 'video': return <Video className="w-4 h-4" />;
-    case 'texto': return <FileText className="w-4 h-4" />;
-    case 'quiz': return <BookOpen className="w-4 h-4" />;
-    case 'examen': return <Award className="w-4 h-4" />;
-    case 'recurso': return <LinkIcon className="w-4 h-4" />;
-    default: return <FileText className="w-4 h-4" />;
-  }
-};
-
-const getTipoLabel = (tipo) => {
-  const labels = {
-    video: 'Video',
-    texto: 'Texto',
-    quiz: 'Cuestionario',
-    examen: 'Examen',
-    recurso: 'Recurso'
-  };
-  return labels[tipo] || tipo;
-};
-
-// ============================================================
-// COMPONENTE DE LECCIÓN (con soporte para bloqueado)
-// ============================================================
-const LeccionItem = ({ 
-  leccion, 
-  index, 
-  isCompletada, 
-  isBloqueada, 
-  onClick,
-  modulo 
-}) => {
-  const bloques = getBloquesDeLeccion(leccion);
-  const tipoPrincipal = getTipoLeccion(leccion);
-  const totalBloques = bloques.length;
-
-  if (isBloqueada) {
-    return (
-      <div 
-        className="w-full flex items-center gap-4 px-4 py-3 rounded-xl transition-all duration-200 text-left border border-gray-100/50 bg-gray-50/30 cursor-pointer hover:bg-gray-50/80 group"
-        onClick={onClick}
-      >
-        <div className="w-8 h-8 rounded-full bg-gray-100 flex items-center justify-center text-xs font-medium text-gray-400 flex-shrink-0">
-          {index + 1}
-        </div>
-        <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-2">
-            <p className="text-sm font-medium text-gray-500 truncate group-hover:text-gray-700 transition-colors">
-              {leccion.titulo}
-            </p>
-            <div className="flex items-center gap-1">
-              <Badge variant="secondary" size="sm" className="text-[10px] bg-gray-100/50">
-                {getTipoLabel(tipoPrincipal)}
-              </Badge>
-              {totalBloques > 1 && (
-                <Badge variant="secondary" size="sm" className="text-[10px] bg-gray-100/50">
-                  <Layers className="w-3 h-3 inline mr-0.5" />
-                  {totalBloques}
-                </Badge>
-              )}
-            </div>
-          </div>
-          <div className="flex items-center gap-3 text-xs text-gray-400 mt-0.5">
-            <span className="flex items-center gap-0.5">
-              {getTipoIcon(tipoPrincipal)}
-              {getTipoLabel(tipoPrincipal)}
-            </span>
-            {leccion.duracion && (
-              <>
-                <span>•</span>
-                <span className="flex items-center gap-0.5">
-                  <Clock className="w-3 h-3" />
-                  {leccion.duracion}
-                </span>
-              </>
-            )}
-            <span className="flex items-center gap-0.5 text-gray-300 ml-1">
-              <Lock className="w-3 h-3" />
-              <span className="text-[10px]">Vista previa</span>
-            </span>
-          </div>
-        </div>
-        <div className="flex-shrink-0">
-          <Eye className="w-4 h-4 text-gray-300 group-hover:text-gray-400 transition-colors" />
-        </div>
-      </div>
-    );
-  }
-
-  return (
-    <button
-      onClick={onClick}
-      className={`w-full flex items-center gap-4 px-4 py-3 rounded-xl transition-all duration-200 text-left ${
-        isCompletada ? 'bg-gray-50/50 hover:bg-gray-100' : 'hover:bg-gray-50'
-      } border border-transparent hover:border-gray-200 group`}
-    >
-      <div className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-medium flex-shrink-0 ${
-        isCompletada ? 'bg-[#0f766e] text-white' : 'bg-gray-100 text-gray-500'
-      }`}>
-        {isCompletada ? <Check className="w-4 h-4" /> : index + 1}
-      </div>
-      <div className="flex-1 min-w-0">
-        <div className="flex items-center gap-2">
-          <p className={`text-sm font-medium truncate ${
-            isCompletada ? 'text-gray-500' : 'text-gray-800'
-          }`}>
-            {leccion.titulo}
-          </p>
-          {isCompletada && (
-            <Badge variant="success" size="sm" className="text-[10px]">Completada</Badge>
-          )}
-        </div>
-        <div className="flex items-center gap-2 text-xs text-gray-400">
-          <span className="flex items-center gap-1">
-            {getTipoIcon(tipoPrincipal)}
-            {getTipoLabel(tipoPrincipal)}
-          </span>
-          {totalBloques > 1 && (
-            <>
-              <span>•</span>
-              <span className="flex items-center gap-1">
-                <Layers className="w-3 h-3" />
-                {totalBloques} bloques
-              </span>
-            </>
-          )}
-        </div>
-      </div>
-      <div className="flex-shrink-0">
-        {isCompletada ? (
-          <CheckCircle className="w-5 h-5 text-[#0f766e]" />
-        ) : (
-          <Play className="w-5 h-5 text-gray-300 group-hover:text-[#0f766e] transition-colors" />
-        )}
-      </div>
-    </button>
-  );
-};
+import CourseImage from './CourseImage';
+import { useFeedback } from '../../hooks/useFeedback';
+
+import VideoPlayer from './VideoPlayer';
+import RichTextDisplay from './RichTextDisplay';
+import RecursosDisplay from './RecursosDisplay';
+import ComentariosLeccion from './ComentariosLeccion';
+import LeccionItem from './LeccionItem';
+import {
+  getBloquesDeLeccion, getTipoLeccion, getTipoLabel
+} from './leccionUtils';
 
 // ============================================================
 // COMPONENTE PRINCIPAL
@@ -1044,6 +52,7 @@ const DetalleCurso = ({
   const { cursoId: cursoIdParams } = useParams();
   const cursoId = cursoIdProp || cursoIdParams;
   const navigate = useNavigate();
+  const { toast } = useFeedback();
 
   const [tabActiva, setTabActiva] = useState('contenido');
   const [curso, setCurso] = useState(null);
@@ -1061,10 +70,11 @@ const DetalleCurso = ({
   const [leccionActual, setLeccionActual] = useState(null);
   const [moduloActual, setModuloActual] = useState(null);
   const [mostrandoLeccion, setMostrandoLeccion] = useState(false);
-  const [seccionLeccion, setSeccionLeccion] = useState('contenido');
   const [videoCompletado, setVideoCompletado] = useState(false);
   const [marcando, setMarcando] = useState(false);
-  const [tiempoEnLeccion, setTiempoEnLeccion] = useState(0);
+  // ✅ RENDIMIENTO: tiempo en lección en un ref (no dispara re-render cada segundo).
+  // Solo se lee al intentar completar la lección.
+  const tiempoEnLeccionRef = useRef(0);
 
   // ✅ ESTADOS PARA EXAMEN
   const [examenActivo, setExamenActivo] = useState(null);
@@ -1081,20 +91,25 @@ const DetalleCurso = ({
   const [leccionBloqueadaInfo, setLeccionBloqueadaInfo] = useState(null);
 
   const usuario = authService.getCurrentUser();
-  const esDocente = usuario?.rol === 'docente' || usuario?.rol === 'admin';
-  const esEstudiante = usuario?.rol === 'estudiante';
+  const { esModoEstudiante } = useModo();
+  // ✅ En modo estudiante, un docente/admin se comporta como alumno (sin controles de gestión).
+  const esDocente = (usuario?.rol === 'docente' || usuario?.rol === 'admin') && !esModoEstudiante;
+  const esEstudiante = usuario?.rol === 'estudiante' || esModoEstudiante;
 
   // ✅ HANDLER CORREGIDO PARA VOLVER A CURSOS
   const handleVolverCursos = () => {
-    const rol = usuario?.rol || 'estudiante';
-    
     // Si hay una función onVolver prop, usarla
     if (onVolver) {
       onVolver();
       return;
     }
-    
-    // Navegar a la ruta correcta según el rol
+
+    // Navegar a la ruta correcta según el MODO activo
+    if (esModoEstudiante) {
+      navigate('/estudiante/cursos');
+      return;
+    }
+    const rol = usuario?.rol || 'estudiante';
     if (rol === 'admin') {
       navigate('/admin/cursos');
     } else if (rol === 'docente') {
@@ -1104,7 +119,7 @@ const DetalleCurso = ({
     }
   };
 
-  const tabs = [
+  const tabs = useMemo(() => [
     { id: 'contenido', label: 'Contenido', icon: BookOpen, visible: true },
     { id: 'foro', label: 'Foro', icon: MessageSquare, visible: true },
     ...(esEstudiante ? [{ id: 'calificaciones', label: 'Calificaciones', icon: BarChart3, visible: true }] : []),
@@ -1112,7 +127,7 @@ const DetalleCurso = ({
     ...(esDocente ? [{ id: 'solicitudes', label: 'Solicitudes', icon: Send, visible: true }] : []),
     ...(esDocente ? [{ id: 'certificados', label: 'Certificados', icon: Award, visible: true }] : []),
     ...(esDocente && onEditarCurso ? [{ id: 'configuracion', label: 'Configuración', icon: Settings, visible: true }] : []),
-  ].filter(t => t.visible);
+  ].filter(t => t.visible), [esEstudiante, esDocente, onEditarCurso]);
 
   // Cargar curso
   useEffect(() => {
@@ -1170,28 +185,31 @@ const DetalleCurso = ({
 
   // Timer para trackear tiempo en la leccion
   useEffect(() => {
-    if (!mostrandoLeccion || !leccionActual) return;
+    if (!mostrandoLeccion || !leccionActual?.id) return;
+    
+    // Reiniciar el contador al entrar a una nueva lección
+    tiempoEnLeccionRef.current = 0;
     
     const interval = setInterval(() => {
-      setTiempoEnLeccion(prev => prev + 1000);
+      tiempoEnLeccionRef.current += 1000;
     }, 1000);
     
     return () => clearInterval(interval);
   }, [mostrandoLeccion, leccionActual?.id]);
 
   // Helpers para bloqueo secuencial de modulos
-  const getLeccionesDeModulo = (modulo) => {
+  const getLeccionesDeModulo = useCallback((modulo) => {
     if (!modulo?.lecciones) return [];
     return modulo.lecciones.filter(l => l && l.id);
-  };
+  }, []);
 
-  const isModuloCompleto = (modulo) => {
+  const isModuloCompleto = useCallback((modulo) => {
     const lecciones = getLeccionesDeModulo(modulo);
     if (lecciones.length === 0) return false;
     return lecciones.every(l => leccionesCompletadas.includes(l.id));
-  };
+  }, [getLeccionesDeModulo, leccionesCompletadas]);
 
-  const isModuloBloqueado = (modulo) => {
+  const isModuloBloqueado = useCallback((modulo) => {
     // Si es docente o admin, nunca bloquear
     if (esDocente) return false;
     
@@ -1216,13 +234,13 @@ const DetalleCurso = ({
     }
     
     return false;
-  };
+  }, [esDocente, curso, tieneAcceso, isModuloCompleto]);
 
   // Handlers
-  const handleAbrirLeccion = async (modulo, leccion) => {
+  const handleAbrirLeccion = useCallback(async (modulo, leccion) => {
     // Verificar bloqueo de pago
     if (curso?.precio_tipo === 'pago' && !tieneAcceso && !esDocente) {
-      alert('Este curso requiere acceso. Solicita acceso al docente.');
+      toast.warning('Este curso requiere acceso. Solicita acceso al docente.');
       return;
     }
     
@@ -1232,7 +250,7 @@ const DetalleCurso = ({
         const estadoBloqueo = await cursosService.verificarBloqueoLeccion(curso.id, leccion.id);
         if (estadoBloqueo?.bloqueada) {
           setLeccionBloqueadaInfo(estadoBloqueo);
-          alert(estadoBloqueo.razon || 'Esta leccion esta bloqueada. Completa las lecciones anteriores primero.');
+          toast.warning(estadoBloqueo.razon || 'Esta leccion esta bloqueada. Completa las lecciones anteriores primero.');
           return;
         }
         setLeccionBloqueadaInfo(null);
@@ -1249,16 +267,19 @@ const DetalleCurso = ({
     setLeccionActual(leccion);
     setMostrandoLeccion(true);
     setVideoCompletado(false);
-    setTiempoEnLeccion(0);
-    setSeccionLeccion('contenido');
+    tiempoEnLeccionRef.current = 0;
     window.scrollTo({ top: 0, behavior: 'smooth' });
-  };
+  }, [curso, tieneAcceso, esDocente, esEstudiante, toast]);
 
   const handleCerrarLeccion = () => {
     setMostrandoLeccion(false);
     setLeccionActual(null);
     setModuloActual(null);
   };
+
+  const handleVideoComplete = useCallback(() => {
+    setVideoCompletado(true);
+  }, []);
 
   const handleMarcarCompletada = async () => {
     if (!usuarioId || !curso?.id || !leccionActual?.id) return;
@@ -1270,7 +291,7 @@ const DetalleCurso = ({
     
     // Si tiene video, exigir que este marcado como completado
     if (tieneVideo && !videoCompletado) {
-      alert('Debes ver el video completo antes de marcar la leccion como completada.');
+      toast.warning('Debes ver el video completo antes de marcar la leccion como completada.');
       return;
     }
     
@@ -1278,9 +299,9 @@ const DetalleCurso = ({
     if (tieneTexto && !tieneVideo) {
       // Para texto, dar 3 segundos minimo de lectura
       const tiempoMinimo = 3000;
-      if (tiempoEnLeccion < tiempoMinimo) {
-        const segundos = Math.ceil((tiempoMinimo - tiempoEnLeccion) / 1000);
-        alert(`Debes al menos ${segundos} segundo(s) mas leyendo el contenido antes de marcar como completada.`);
+      if (tiempoEnLeccionRef.current < tiempoMinimo) {
+        const segundos = Math.ceil((tiempoMinimo - tiempoEnLeccionRef.current) / 1000);
+        toast.warning(`Debes al menos ${segundos} segundo(s) mas leyendo el contenido antes de marcar como completada.`);
         return;
       }
     }
@@ -1308,7 +329,7 @@ const DetalleCurso = ({
       }
     } catch (error) {
       const mensaje = error?.response?.data?.detail || error?.message || 'Error al completar la leccion';
-      alert(mensaje);
+      toast.error(mensaje);
       console.error('Error completando leccion:', error);
     } finally {
       setMarcando(false);
@@ -1317,7 +338,7 @@ const DetalleCurso = ({
 
   const handleSolicitarAcceso = async () => {
     if (!mensajeSolicitud.trim()) {
-      alert('Por favor, escribe un mensaje para el docente');
+      toast.warning('Por favor, escribe un mensaje para el docente');
       return;
     }
     setSolicitando(true);
@@ -1328,9 +349,9 @@ const DetalleCurso = ({
       setTieneSolicitudPendiente(true);
       setMostrarFormularioSolicitud(false);
       setMensajeSolicitud('');
-      alert('Solicitud enviada.');
+      toast.success('Solicitud enviada.');
     } catch (e) {
-      alert(e.message || 'No se pudo enviar la solicitud');
+      toast.error(e.message || 'No se pudo enviar la solicitud');
     } finally {
       setSolicitando(false);
     }
@@ -1354,7 +375,7 @@ const DetalleCurso = ({
     try {
       const certs = await certificadosService.listar({ curso_id: cursoId });
       setCertificadosCurso(Array.isArray(certs) ? certs : []);
-    } catch (e) {
+    } catch {
       setCertificadosCurso([]);
     } finally {
       setCargandoCertificados(false);
@@ -1377,18 +398,28 @@ const DetalleCurso = ({
           <div className="bg-white rounded-xl border border-gray-200 overflow-hidden" style={{ minHeight: '600px' }}>
             <ExamenActivo
               examen={examenActivo}
-              alumno={{ id: usuario?.id || usuarioId }}
+              alumno={{
+                id: usuario?.id || usuarioId,
+                nombres: usuario?.nombres,
+                apellidos: usuario?.apellidos,
+                nombre: usuario?.nombre_completo,
+                grado: usuario?.grado,
+                dni: usuario?.dni,
+              }}
               onFinalizar={(resultado) => {
                 setExamenActivo(null);
-                setSeccionLeccion('contenido');
-                // Marcar lección como completada
+                // ✅ CORREGIDO: Enviar nota del examen al progreso del curso
                 if (curso?.id && leccionActual?.id && usuarioId) {
-                  cursosService.completarLeccion(curso.id, leccionActual.id, usuarioId).catch(() => {});
+                  const calificacion = resultado?.calificacion || 0;
+                  const aprobado = calificacion >= (examenActivo?.puntaje_aprobacion || 60);
+                  cursosService.completarLeccion(
+                    curso.id, leccionActual.id, usuarioId, 0,
+                    calificacion, aprobado
+                  ).catch(() => {});
                 }
               }}
               onAbandonar={() => {
                 setExamenActivo(null);
-                setSeccionLeccion('contenido');
               }}
             />
           </div>
@@ -1411,7 +442,7 @@ const DetalleCurso = ({
           <div className="text-center py-12 bg-white rounded-xl border border-gray-200">
             <AlertCircle className="w-12 h-12 text-red-300 mx-auto mb-2" />
             <p className="text-red-500 font-medium">{errorExamen}</p>
-            <button onClick={() => { setErrorExamen(''); setSeccionLeccion('contenido'); }}
+            <button onClick={() => setErrorExamen('')}
               className="mt-3 px-4 py-2 text-sm text-gray-600 hover:text-gray-800">
               Volver
             </button>
@@ -1438,7 +469,7 @@ const DetalleCurso = ({
                   try {
                     const datos = await examenesService.obtenerExamen(contenidoLeccion.examen_id);
                     setExamenActivo(datos);
-                  } catch (e) {
+                  } catch {
                     setErrorExamen('No se pudo cargar el examen. Intenta de nuevo.');
                   } finally {
                     setCargandoExamen(false);
@@ -1465,32 +496,37 @@ const DetalleCurso = ({
       );
     }
 
-    const bloquePrincipal = bloques[0];
-    const contenido = bloquePrincipal.contenido || {};
+    // Lección con bloques: renderizar TODOS los bloques con su componente real
+    return renderTodosLosBloques();
+  };
 
-    switch (bloquePrincipal.tipo) {
+  // Renderizar un bloque individual con su componente real
+  const renderBloque = (bloque, _index, estaBloqueado) => {
+    const contenido = bloque.contenido || {};
+
+    switch (bloque.tipo) {
       case 'video':
-        return <VideoPlayer 
-          videoId={contenido.video_url} 
+        return <VideoPlayer
+          videoId={contenido.video_url}
           isBlocked={estaBloqueado}
-          onComplete={() => setVideoCompletado(true)}
+          onComplete={handleVideoComplete}
         />;
-        
+
       case 'texto':
         return (
           <div className="bg-white rounded-xl border border-gray-200 p-6">
             <RichTextDisplay content={contenido.texto || ''} isBlocked={estaBloqueado} />
           </div>
         );
-        
+
       case 'recurso':
         return (
           <div className="bg-white rounded-xl border border-gray-200 p-6">
             <RecursosDisplay recursos={contenido.archivos || []} isBlocked={estaBloqueado} />
           </div>
         );
-        
-      case 'examen':
+
+      case 'examen': {
         if (estaBloqueado) {
           return (
             <div className="flex flex-col items-center justify-center min-h-[200px] bg-gray-50 rounded-xl border-2 border-dashed border-gray-300 p-8">
@@ -1500,6 +536,64 @@ const DetalleCurso = ({
             </div>
           );
         }
+
+        // ✅ Examen de ESTE bloque activo — renderizar el reproductor real
+        const examenEsDeEsteBloque = examenActivo &&
+          (!contenido.examen_id || String(examenActivo.id) === String(contenido.examen_id));
+
+        if (examenEsDeEsteBloque) {
+          return (
+            <div className="bg-white rounded-xl border border-gray-200 overflow-hidden" style={{ minHeight: '600px' }}>
+              <ExamenActivo
+                examen={examenActivo}
+                alumno={{
+                  id: usuario?.id || usuarioId,
+                  nombres: usuario?.nombres,
+                  apellidos: usuario?.apellidos,
+                  nombre: usuario?.nombre_completo,
+                  grado: usuario?.grado,
+                  dni: usuario?.dni,
+                }}
+                onFinalizar={(resultado) => {
+                  setExamenActivo(null);
+                  // ✅ CORREGIDO: Enviar nota del examen al progreso del curso
+                  if (curso?.id && leccionActual?.id && usuarioId) {
+                    const calificacion = resultado?.calificacion || 0;
+                    const aprobado = calificacion >= (examenActivo?.puntaje_aprobacion || 60);
+                    cursosService.completarLeccion(
+                      curso.id, leccionActual.id, usuarioId, 0,
+                      calificacion, aprobado
+                    ).catch(() => {});
+                  }
+                }}
+                onAbandonar={() => setExamenActivo(null)}
+              />
+            </div>
+          );
+        }
+
+        if (cargandoExamen) {
+          return (
+            <div className="flex flex-col items-center justify-center min-h-[300px] bg-white rounded-xl border border-gray-200">
+              <Loader2 className="w-8 h-8 animate-spin text-[#0f766e] mx-auto mb-3" />
+              <p className="text-gray-500 text-sm">Cargando examen...</p>
+            </div>
+          );
+        }
+
+        if (errorExamen) {
+          return (
+            <div className="text-center py-12 bg-white rounded-xl border border-gray-200">
+              <AlertCircle className="w-12 h-12 text-red-300 mx-auto mb-2" />
+              <p className="text-red-500 font-medium">{errorExamen}</p>
+              <button onClick={() => setErrorExamen('')}
+                className="mt-3 px-4 py-2 text-sm text-gray-600 hover:text-gray-800">
+                Volver
+              </button>
+            </div>
+          );
+        }
+
         return (
           <div className="bg-white rounded-xl border border-gray-200 p-6 text-center">
             <Award className="w-12 h-12 text-amber-500 mx-auto mb-3" />
@@ -1515,7 +609,7 @@ const DetalleCurso = ({
                   try {
                     const datos = await examenesService.obtenerExamen(contenido.examen_id);
                     setExamenActivo(datos);
-                  } catch (e) {
+                  } catch {
                     setErrorExamen('No se pudo cargar el examen. Intenta de nuevo.');
                   } finally {
                     setCargandoExamen(false);
@@ -1530,7 +624,8 @@ const DetalleCurso = ({
             )}
           </div>
         );
-        
+      }
+
       case 'quiz':
         return (
           <div className="text-center py-12 text-gray-400 bg-white rounded-xl border border-gray-200">
@@ -1538,7 +633,7 @@ const DetalleCurso = ({
             <p>Los cuestionarios fueron integrados en el sistema de exámenes</p>
           </div>
         );
-        
+
       default:
         return (
           <div className="text-center py-12 text-gray-400 bg-white rounded-xl border border-gray-200">
@@ -1549,69 +644,39 @@ const DetalleCurso = ({
     }
   };
 
-  // Renderizar lista de bloques adicionales
-  const renderListaBloques = () => {
+  // Renderizar todos los bloques de la lección en orden, con su componente real
+  const renderTodosLosBloques = () => {
     if (!leccionActual) return null;
     const bloques = getBloquesDeLeccion(leccionActual);
     const estaBloqueado = curso?.precio_tipo === 'pago' && !tieneAcceso && !esDocente;
-    
-    const bloquesAdicionales = bloques.slice(1).filter(b => 
-      b.tipo === 'texto' || b.tipo === 'video'
-    );
-    
-    if (bloquesAdicionales.length === 0) {
-      return <p className="text-gray-400 text-sm text-center py-4">No hay contenido adicional</p>;
-    }
 
-    if (estaBloqueado) {
+    if (bloques.length === 0) {
       return (
-        <div className="flex flex-col items-center justify-center min-h-[150px] bg-gray-50 rounded-xl border-2 border-dashed border-gray-300 p-6">
-          <Lock className="w-10 h-10 text-gray-300 mx-auto mb-2" />
-          <p className="text-gray-400 font-medium text-sm">Contenido adicional bloqueado</p>
-          <p className="text-xs text-gray-300">Solicita acceso para ver el contenido completo</p>
+        <div className="text-center py-12 text-gray-400 bg-white rounded-xl border border-gray-200">
+          <FileText className="w-12 h-12 mx-auto mb-2 text-gray-300" />
+          <p>Esta lección no tiene contenido</p>
         </div>
       );
     }
 
     return (
-      <div className="space-y-2">
-        <p className="text-sm font-medium text-gray-700 mb-2">Contenido adicional:</p>
-        {bloquesAdicionales.map((bloque, index) => {
-          const contenido = bloque.contenido || {};
-          let preview = '';
-          
-          if (bloque.tipo === 'texto') {
-            preview = contenido.texto || 'Sin contenido';
-          } else if (bloque.tipo === 'video') {
-            preview = contenido.video_url || 'Sin video';
-          }
-          
-          return (
-            <div key={index} className="flex items-start gap-3 p-3 bg-gray-50 rounded-lg border border-gray-100 hover:bg-gray-100 transition-colors">
-              <div className="w-8 h-8 rounded-full bg-gray-200 flex items-center justify-center text-xs font-medium text-gray-600 flex-shrink-0 mt-0.5">
-                {index + 2}
+      <div className="space-y-6">
+        {bloques.map((bloque, index) => (
+          <div key={bloque.id || index}>
+            {bloques.length > 1 && (
+              <div className="flex items-center gap-2 mb-2">
+                <div className="w-6 h-6 rounded-full bg-[#e6f4f2] flex items-center justify-center text-xs font-semibold text-[#0f766e] flex-shrink-0">
+                  {index + 1}
+                </div>
+                <span className="text-sm font-medium text-gray-700">
+                  {bloque.titulo || `Bloque ${index + 1}`}
+                </span>
+                <Badge variant="secondary" size="sm">{getTipoLabel(bloque.tipo)}</Badge>
               </div>
-              <div className="flex-1 min-w-0">
-                <p className="text-sm font-medium text-gray-800">
-                  {bloque.titulo || `Bloque ${index + 2}`}
-                </p>
-                {bloque.tipo === 'texto' && (
-                  <div className="text-sm text-gray-600 mt-1 prose prose-slate max-w-none">
-                    <div dangerouslySetInnerHTML={{ __html: preview }} />
-                  </div>
-                )}
-                {bloque.tipo === 'video' && (
-                  <p className="text-xs text-gray-500 truncate">
-                    {preview}
-                  </p>
-                )}
-              </div>
-              <Badge variant="secondary" size="sm" className="flex-shrink-0">
-                {getTipoLabel(bloque.tipo)}
-              </Badge>
-            </div>
-          );
-        })}
+            )}
+            {renderBloque(bloque, index, estaBloqueado)}
+          </div>
+        ))}
       </div>
     );
   };
@@ -1747,7 +812,6 @@ const DetalleCurso = ({
           <div>
             <h1 className="text-2xl font-bold text-gray-900">{leccionActual?.titulo || 'Lección sin título'}</h1>
             <div className="flex items-center gap-3 mt-2 text-xs text-gray-400 flex-wrap">
-              <span className="flex items-center gap-1"><Clock className="w-3.5 h-3.5" />{leccionActual?.duracion || 'Sin duración'}</span>
               <span className="flex items-center gap-1"><BookOpen className="w-3.5 h-3.5" />{moduloActual?.titulo || 'Módulo'}</span>
               <span className="flex items-center gap-1"><Layers className="w-3.5 h-3.5" />{bloques.length} bloques</span>
               {esBloqueada && (
@@ -1759,56 +823,16 @@ const DetalleCurso = ({
             </div>
           </div>
 
-          {/* Contenido principal (primer bloque) */}
+          {/* Contenido completo de la lección (todos los bloques, en orden) */}
           {renderContenidoLeccion()}
 
-          {/* Tabs */}
-          <div className="border-b border-gray-200">
-            <nav className="flex gap-4 sm:gap-6 overflow-x-auto">
-              {[
-                { id: 'contenido', label: 'Contenido', icon: FileText },
-                { id: 'recursos', label: 'Recursos', icon: LinkIcon },
-                { id: 'comentarios', label: 'Comentarios', icon: MessageSquare }
-              ].map((tab) => {
-                const Icon = tab.icon;
-                const isActive = seccionLeccion === tab.id;
-                return (
-                  <button
-                    key={tab.id}
-                    onClick={() => setSeccionLeccion(tab.id)}
-                    className={`flex items-center gap-2 pb-3 text-sm font-medium transition-colors whitespace-nowrap ${
-                      isActive ? 'text-[#0f766e] border-b-2 border-[#0f766e]' : 'text-gray-400 hover:text-gray-600'
-                    }`}
-                  >
-                    <Icon className="w-4 h-4" />
-                    {tab.label}
-                  </button>
-                );
-              })}
-            </nav>
-          </div>
-
-          {/* Contenido de tabs */}
-          <div>
-            {seccionLeccion === 'contenido' && (
-              <div className="bg-white rounded-xl border border-gray-200 p-6">
-                {renderListaBloques()}
-              </div>
-            )}
-            
-            {seccionLeccion === 'recursos' && (
-              <div className="bg-white rounded-xl border border-gray-200 p-6">
-                {bloques.filter(b => b.tipo === 'recurso').map((bloque, index) => (
-                  <RecursosDisplay key={index} recursos={bloque.contenido?.archivos || []} isBlocked={esBloqueada} />
-                ))}
-                {bloques.filter(b => b.tipo === 'recurso').length === 0 && (
-                  <p className="text-gray-400 text-center py-4">No hay recursos disponibles</p>
-                )}
-              </div>
-            )}
-            
-            {seccionLeccion === 'comentarios' && <ComentariosLeccion isBlocked={esBloqueada} />}
-          </div>
+          {/* Comentarios (el componente ya incluye su propio encabezado) */}
+          <ComentariosLeccion
+            cursoId={curso?.id || cursoId}
+            leccionId={leccionActual?.id}
+            isBlocked={esBloqueada}
+            usuario={usuario}
+          />
 
           {/* Navegación entre lecciones */}
           {leccionesDelModulo.length > 1 && !esBloqueada && (
@@ -1898,13 +922,11 @@ const DetalleCurso = ({
         {/* Imagen de portada */}
         {curso.imagen_url && (
           <div className="relative h-48 sm:h-56 bg-gradient-to-br from-gray-50 to-gray-100 overflow-hidden">
-            <img 
-              src={resolveImageUrl(curso.imagen_url)} 
+            <CourseImage
+              src={curso.imagen_url}
               alt={curso.titulo}
-              className="w-full h-full object-cover"
-              onError={(e) => {
-                e.target.style.display = 'none';
-              }}
+              className="w-full h-full"
+              imgClassName="w-full h-full object-cover"
             />
             <div className="absolute inset-0 bg-gradient-to-t from-black/20 to-transparent" />
           </div>
@@ -1928,10 +950,6 @@ const DetalleCurso = ({
             <Badge variant="secondary" size="sm" className="gap-1">
               <BookOpen className="w-3 h-3" />
               {curso.modulos?.reduce((acc, m) => acc + getLeccionesDeModulo(m).length, 0) || 0} lecciones
-            </Badge>
-            <Badge variant="secondary" size="sm" className="gap-1">
-              <Clock className="w-3 h-3" />
-              {curso.duracion ? `Duración: ${curso.duracion}` : 'Sin duración definida'}
             </Badge>
             <Badge variant="secondary" size="sm" className="gap-1">
               <Users className="w-3 h-3" />

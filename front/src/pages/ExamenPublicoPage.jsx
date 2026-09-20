@@ -21,6 +21,8 @@ const ExamenPublicoPage = () => {
     grado: '',
     dni: ''
   });
+  const [datosListos, setDatosListos] = useState(false);
+  const [resultado, setResultado] = useState(null);
 
   useEffect(() => {
     const cargarExamen = async () => {
@@ -44,7 +46,9 @@ const ExamenPublicoPage = () => {
     setVerificando(true);
     setPasswordError('');
     try {
-      await examenesService.verificarPasswordExamenPublico(codigo, password);
+      const data = await examenesService.verificarPasswordExamenPublico(codigo, password);
+      // ✅ El backend devuelve el examen (con preguntas) solo tras validar.
+      if (data?.examen) setExamen(data.examen);
       setAccesoConcedido(true);
     } catch (err) {
       setPasswordError(err.message || 'Password incorrecto');
@@ -53,8 +57,9 @@ const ExamenPublicoPage = () => {
     }
   };
 
-  const handleFinalizar = async (resultado) => {
-    // El ExamenActivo ya mane la llamada al endpoint
+  const handleFinalizar = (resultadoFinal) => {
+    // El propio ExamenActivo (modo público) ya persistió el resultado.
+    setResultado(resultadoFinal);
   };
 
   if (cargando) {
@@ -121,7 +126,7 @@ const ExamenPublicoPage = () => {
   }
 
   // Pantalla de informacion del alumno (antes de comenzar)
-  if (!accesoConcedido && !requierePassword) {
+  if (!config.anonimo && !datosListos) {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4">
         <div className="bg-white rounded-2xl shadow-lg border border-gray-200 p-8 max-w-md w-full">
@@ -156,10 +161,41 @@ const ExamenPublicoPage = () => {
             </div>
           )}
 
-          <button onClick={() => setAccesoConcedido(true)}
+          <button onClick={() => setDatosListos(true)}
             className="w-full py-3 bg-[#0f766e] text-white text-sm font-medium rounded-xl hover:bg-[#0d5e57] transition-colors">
             Comenzar Examen
           </button>
+        </div>
+      </div>
+    );
+  }
+
+  // Pantalla de resultado (post-entrega)
+  if (resultado) {
+    const mostrarNota =
+      config.mostrar_resultados !== false &&
+      resultado.calificacion !== null &&
+      resultado.calificacion !== undefined;
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4">
+        <div className="bg-white rounded-2xl shadow-lg border border-gray-200 p-8 max-w-md w-full text-center">
+          <div className="w-14 h-14 rounded-2xl bg-[#e6f4f2] flex items-center justify-center mx-auto mb-4">
+            <Send className="w-7 h-7 text-[#0f766e]" />
+          </div>
+          <h2 className="text-lg font-semibold text-gray-900 mb-1">Examen entregado</h2>
+          <p className="text-sm text-gray-500 mb-4">{examen?.titulo}</p>
+          {mostrarNota ? (
+            <div className="space-y-1">
+              <p className="text-4xl font-bold text-[#0f766e]">
+                {Number(resultado.calificacion).toFixed(1)}%
+              </p>
+              <p className="text-xs text-gray-400">
+                {resultado.correctas ?? 0} / {resultado.total_preguntas ?? 0} correctas
+              </p>
+            </div>
+          ) : (
+            <p className="text-sm text-gray-500">Tu respuesta fue registrada correctamente.</p>
+          )}
         </div>
       </div>
     );
@@ -169,7 +205,14 @@ const ExamenPublicoPage = () => {
   return (
     <ExamenActivo 
       examen={examen}
-      alumno={config.anonimo ? { nombre: 'Anonimo', id: null } : { ...alumnoInfo, id: null }}
+      alumno={
+        config.anonimo
+          ? { nombre: 'Anónimo', id: 'publico' }
+          : { nombre: alumnoInfo.nombre || 'Participante', grado: alumnoInfo.grado, dni: alumnoInfo.dni, id: 'publico' }
+      }
+      modoPublico
+      codigoPublico={codigo}
+      passwordPublico={password}
       onFinalizar={handleFinalizar}
     />
   );

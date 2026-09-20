@@ -9,8 +9,10 @@ import {
 import alumnosService from '../../services/alumnosService';
 import CargarAlumnos from './CargarAlumnos';
 import SelectorAlumnos from './SelectorAlumnos';
+import { useFeedback } from '../../hooks/useFeedback';
 
 const PanelAlumnos = ({ onVolver, onSeleccionar, seleccionInicial = [] }) => {
+  const { confirmar } = useFeedback();
   const [alumnos, setAlumnos] = useState([]);
   const [cargando, setCargando] = useState(true);
   const [error, setError] = useState('');
@@ -55,7 +57,13 @@ const PanelAlumnos = ({ onVolver, onSeleccionar, seleccionInicial = [] }) => {
   };
 
   const handleEliminarAlumno = async (id) => {
-    if (!window.confirm('¿Eliminar este alumno?')) return;
+    const ok = await confirmar({
+      titulo: 'Eliminar alumno',
+      mensaje: '¿Eliminar este alumno? Esta acción no se puede deshacer.',
+      confirmText: 'Eliminar',
+      variant: 'danger',
+    });
+    if (!ok) return;
     try {
       await alumnosService.eliminar(id);
       await cargarAlumnos();
@@ -68,7 +76,13 @@ const PanelAlumnos = ({ onVolver, onSeleccionar, seleccionInicial = [] }) => {
 
   const handleEliminarSeleccionados = async () => {
     if (seleccionados.length === 0) return;
-    if (!window.confirm(`¿Eliminar ${seleccionados.length} alumnos?`)) return;
+    const ok = await confirmar({
+      titulo: 'Eliminar alumnos',
+      mensaje: `¿Eliminar ${seleccionados.length} alumnos? Esta acción no se puede deshacer.`,
+      confirmText: 'Eliminar',
+      variant: 'danger',
+    });
+    if (!ok) return;
     
     for (const id of seleccionados) {
       try {
@@ -172,7 +186,7 @@ const PanelAlumnos = ({ onVolver, onSeleccionar, seleccionInicial = [] }) => {
             {onSeleccionar && !modoSeleccion && (
               <button
                 onClick={() => setModoSeleccion(true)}
-                className="px-3 py-1.5 text-xs font-medium text-indigo-600 bg-indigo-50 rounded-lg hover:bg-indigo-100 transition-colors flex items-center gap-1.5"
+                className="px-3 py-1.5 text-xs font-medium text-[#0f766e] bg-[#e6f4f2] rounded-lg hover:bg-[#d1ece8] transition-colors flex items-center gap-1.5"
               >
                 <UserPlus className="w-3.5 h-3.5" />
                 Seleccionar

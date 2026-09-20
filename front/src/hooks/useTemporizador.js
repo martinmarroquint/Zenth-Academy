@@ -34,10 +34,13 @@ const useTemporizador = (configuracion = {}) => {
     alertasRef.current = alertas;
   }, [alertas]);
 
-  useEffect(() => {
+  const [tiempoTotalPrevio, setTiempoTotalPrevio] = useState(tiempoTotalSegundos);
+
+  if (tiempoTotalSegundos !== tiempoTotalPrevio) {
+    setTiempoTotalPrevio(tiempoTotalSegundos);
     setTiempoRestante(tiempoTotalSegundos);
     setProgreso(100);
-  }, [tiempoTotalSegundos]);
+  }
 
   const verificarAlertas = useCallback((tiempo) => {
     const alertasConfig = alertasRef.current;

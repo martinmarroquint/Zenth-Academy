@@ -69,7 +69,7 @@ const CompartirSala = () => {
   const [error, setError] = useState('');
   const [qrKey, setQrKey] = useState(0);
   const [segundosRestantes, setSegundosRestantes] = useState(30);
-  const [expirando, setExpirando] = useState(false);
+  const [_expirando, setExpirando] = useState(false);
   const pollRef = useRef(null);
   const timerRef = useRef(null);
 
@@ -244,7 +244,7 @@ const CompartirSala = () => {
                     href={materialActivo.tipo === 'enlace' ? materialActivo.contenido : materialActivo.url_archivo}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="flex-1 px-6 py-4 bg-indigo-600 hover:bg-indigo-700 text-white rounded-2xl text-lg font-semibold flex items-center justify-center gap-2 transition-colors"
+                    className="flex-1 px-6 py-4 bg-[#0f766e] hover:bg-[#0d5e57] text-white rounded-2xl text-lg font-semibold flex items-center justify-center gap-2 transition-colors"
                   >
                     <ExternalLink className="w-5 h-5" />
                     {materialActivo.tipo === 'enlace' ? 'Abrir material' : 'Descargar archivo'}

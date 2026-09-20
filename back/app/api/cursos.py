@@ -3,7 +3,7 @@
 # VERSIÓN CORREGIDA - CON CAST A STRING PARA EVITAR ERRORES DE TIPO
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status, Body, Response, UploadFile, File
-from sqlalchemy import func, cast, String
+from sqlalchemy import func, cast, String, or_
 from sqlalchemy.orm import Session
 from typing import List, Optional
 import uuid
@@ -15,12 +15,19 @@ from datetime import datetime, timezone
 
 from app.database import get_db
 from app.core.dependencies import get_current_active_user, require_docente, require_admin
+from app.core.errors import error_interno
+from app.core.cache import (
+    cache, invalidar_cursos, invalidar_solicitudes,
+    CLAVE_CATALOGO_CURSOS, CLAVE_SOLICITUDES,
+)
 from app.models.usuario import Usuario
 from app.models.curso import (
     Curso, InscripcionCurso, AccesoCurso, SolicitudAccesoCurso,
     ProgresoLeccion, EvaluacionLeccion
 )
 from app.models.certificado import Certificado
+from app.models.resultado_examen import ResultadoExamen
+from app.models.comentario_leccion import ComentarioLeccion, LikeComentarioLeccion
 from app.schemas.curso import (
     CursoCreate, CursoUpdate, CursoResponse,
     InscripcionCursoResponse,
@@ -30,7 +37,8 @@ from app.schemas.curso import (
     ProgresoLeccionResponse, ProgresoLeccionUpdate,
     EvaluacionLeccionCreate, EvaluacionLeccionResponse,
     LeccionBloqueadaResponse,
-    AsignarNotaRequest
+    AsignarNotaRequest, LiberarLeccionRequest,
+    ComentarioLeccionCreate, ComentarioLeccionResponse, ComentarioLeccionLikeResponse
 )
 
 logger = logging.getLogger(__name__)
@@ -281,10 +289,17 @@ def _verificar_bloqueo_leccion_internal(
             return resultado
         
         # Secuencial: todas las lecciones anteriores (dentro del mismo módulo y anteriores) deben estar completas
+        # ✅ FIX: antes el `break` solo cortaba el bucle interno de lecciones, así que se
+        # seguían acumulando lecciones de MÓDULOS POSTERIORES. En cursos multimódulo eso
+        # bloqueaba incorrectamente la primera lección del primer módulo.
         lecciones_requeridas = []
+        encontrada = False
         for modulo in curso.modulos or []:
+            if encontrada:
+                break
             for prev in modulo.get("lecciones", []):
                 if str(prev.get("id")) == str(leccion_id):
+                    encontrada = True
                     break
                 lecciones_requeridas.append(str(prev.get("id")))
         
@@ -360,8 +375,7 @@ async def mis_cursos(
             for insc in inscripciones
         ]
     except Exception as e:
-        logger.error(f"Error listando inscripciones: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail=error_interno(e, "Error listando inscripciones"))
 
 
 @router.get("/mis-solicitudes", response_model=List[SolicitudAccesoResponse])
@@ -375,9 +389,14 @@ async def mis_solicitudes(
             cast(SolicitudAccesoCurso.estudiante_id, String) == str(current_user.id)
         ).order_by(SolicitudAccesoCurso.created_at.desc()).all()
         
+        curso_ids = {solicitud.curso_id for solicitud in solicitudes if solicitud.curso_id}
+        cursos_map = {
+            str(c.id): c
+            for c in db.query(Curso).filter(Curso.id.in_(curso_ids)).all()
+        } if curso_ids else {}
         result = []
         for solicitud in solicitudes:
-            curso = db.query(Curso).filter(Curso.id == solicitud.curso_id).first()
+            curso = cursos_map.get(str(solicitud.curso_id))
             result.append({
                 "id": str(solicitud.id),
                 "curso_id": str(solicitud.curso_id),
@@ -396,8 +415,7 @@ async def mis_solicitudes(
             })
         return result
     except Exception as e:
-        logger.error(f"Error listando solicitudes: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail=error_interno(e, "Error listando solicitudes"))
 
 
 @router.get("/solicitudes-pendientes", response_model=List[SolicitudAccesoResponse])
@@ -408,6 +426,13 @@ async def solicitudes_pendientes(
     current_user: Usuario = Depends(require_docente)
 ):
     """Docente: Lista todas las solicitudes de acceso de sus cursos (pendientes, aprobadas y rechazadas)"""
+    # ✅ RENDIMIENTO: caché corta (15 s) — el panel de solicitudes hace polling
+    # cada 60 s, así que esto evita ir a Supabase en cada petición.
+    clave_cache = f"{CLAVE_SOLICITUDES}:{current_user.id}:{curso_id}:{estado}"
+    cacheado = cache.get(clave_cache)
+    if cacheado is not None:
+        return cacheado
+
     try:
         query = db.query(SolicitudAccesoCurso).join(
             Curso, SolicitudAccesoCurso.curso_id == Curso.id
@@ -423,9 +448,14 @@ async def solicitudes_pendientes(
         
         solicitudes = query.order_by(SolicitudAccesoCurso.created_at.desc()).all()
         
+        curso_ids = {solicitud.curso_id for solicitud in solicitudes if solicitud.curso_id}
+        cursos_map = {
+            str(c.id): c
+            for c in db.query(Curso).filter(Curso.id.in_(curso_ids)).all()
+        } if curso_ids else {}
         result = []
         for solicitud in solicitudes:
-            curso = db.query(Curso).filter(Curso.id == solicitud.curso_id).first()
+            curso = cursos_map.get(str(solicitud.curso_id))
             result.append({
                 "id": str(solicitud.id),
                 "curso_id": str(solicitud.curso_id),
@@ -442,10 +472,10 @@ async def solicitudes_pendientes(
                 "created_at": solicitud.created_at,
                 "updated_at": solicitud.updated_at,
             })
+        cache.set(clave_cache, result, ttl=15)
         return result
     except Exception as e:
-        logger.error(f"Error listando solicitudes pendientes: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail=error_interno(e, "Error listando solicitudes pendientes"))
 
 
 @router.post("/solicitudes/{solicitud_id}/aprobar", response_model=SolicitudAccesoResponse)
@@ -514,6 +544,8 @@ async def aprobar_solicitud(
         
         logger.info(f"Docente {current_user.id} aprobo solicitud {solicitud_id} para estudiante {solicitud.estudiante_id}")
         
+        invalidar_cursos()
+        invalidar_solicitudes()
         return {
             "id": str(solicitud.id),
             "curso_id": str(solicitud.curso_id),
@@ -535,8 +567,7 @@ async def aprobar_solicitud(
         raise
     except Exception as e:
         db.rollback()
-        logger.error(f"Error aprobando solicitud: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail=error_interno(e, "Error aprobando solicitud"))
 
 
 @router.post("/solicitudes/{solicitud_id}/rechazar", response_model=SolicitudAccesoResponse)
@@ -568,6 +599,7 @@ async def rechazar_solicitud(
         
         logger.info(f"Docente {current_user.id} rechazo solicitud {solicitud_id}")
         
+        invalidar_solicitudes()
         return {
             "id": str(solicitud.id),
             "curso_id": str(solicitud.curso_id),
@@ -589,8 +621,7 @@ async def rechazar_solicitud(
         raise
     except Exception as e:
         db.rollback()
-        logger.error(f"Error rechazando solicitud: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail=error_interno(e, "Error rechazando solicitud"))
 
 
 # =============================================
@@ -637,6 +668,7 @@ async def solicitar_acceso_curso(
         
         logger.info(f"Estudiante {current_user.id} solicito acceso al curso {id}")
         
+        invalidar_solicitudes()
         return {
             "id": str(solicitud.id),
             "curso_id": str(solicitud.curso_id),
@@ -658,8 +690,7 @@ async def solicitar_acceso_curso(
         raise
     except Exception as e:
         db.rollback()
-        logger.error(f"Error solicitando acceso: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail=error_interno(e, "Error solicitando acceso"))
 
 
 @router.post("/{id}/inscribirse", response_model=InscripcionCursoResponse)
@@ -710,9 +741,29 @@ async def inscribirse_curso(
             lecciones_completadas=[]
         )
         db.add(inscripcion)
+
+        # ✅ FIX: garantizar AccesoCurso al inscribirse. Sin esto, los cursos
+        # gratuitos quedaban inaccesibles: `completar_leccion` exige AccesoCurso
+        # y devolvía 403 "No tienes acceso a este curso".
+        tiene_acceso_activo = _verificar_acceso(db, id, str(current_user.id))
+        if not tiene_acceso_activo:
+            acceso = AccesoCurso(
+                id=str(uuid.uuid4()),
+                curso_id=id,
+                estudiante_id=str(current_user.id),
+                estudiante_nombre=current_user.nombre_completo,
+                activo=True,
+                tipo_acceso="vitalicio",
+                fecha_inicio=datetime.now(timezone.utc),
+                activado_por=str(current_user.id),
+                comentario="Acceso automático por inscripción",
+            )
+            db.add(acceso)
+
         curso.estudiantes_count = (curso.estudiantes_count or 0) + 1
         db.commit()
         db.refresh(inscripcion)
+        invalidar_cursos()
         logger.info(f"Usuario {current_user.id} inscrito en curso {id}")
         
         return {
@@ -731,8 +782,7 @@ async def inscribirse_curso(
         raise
     except Exception as e:
         db.rollback()
-        logger.error(f"Error inscribiendo usuario: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail=error_interno(e, "Error inscribiendo usuario"))
 
 
 @router.delete("/{id}/inscripcion", response_model=MensajeResponse)
@@ -758,8 +808,7 @@ async def desinscribirse_curso(
         return {"mensaje": "Inscripcion eliminada", "ok": True}
     except Exception as e:
         db.rollback()
-        logger.error(f"Error desinscribiendo usuario: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail=error_interno(e, "Error desinscribiendo usuario"))
 
 
 @router.delete("/{id}/inscripcion/{estudiante_id}", response_model=MensajeResponse)
@@ -821,8 +870,7 @@ async def desinscribir_estudiante_docente(
         raise
     except Exception as e:
         db.rollback()
-        logger.error(f"Error desinscribiendo estudiante: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail=error_interno(e, "Error desinscribiendo estudiante"))
 
 
 @router.put("/{curso_id}/calificaciones/{estudiante_id}/{leccion_id}", response_model=dict)
@@ -884,8 +932,7 @@ async def asignar_nota_manual(
         raise
     except Exception as e:
         db.rollback()
-        logger.error(f"Error asignando nota manual: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail=error_interno(e, "Error asignando nota manual"))
 
 
 @router.post("/{id}/publicar", response_model=CursoResponse)
@@ -918,13 +965,13 @@ async def publicar_curso(
             tiene_acceso = True
             tiene_solicitud_pendiente = False
         
+        invalidar_cursos()
         return _curso_to_dict(curso, tiene_acceso, tiene_solicitud_pendiente)
     except HTTPException:
         raise
     except Exception as e:
         db.rollback()
-        logger.error(f"Error publicando curso: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail=error_interno(e, "Error publicando curso"))
 
 
 @router.get("/{id}/accesos", response_model=List[AccesoCursoResponse])
@@ -954,8 +1001,7 @@ async def listar_accesos_curso(
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"Error listando accesos: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail=error_interno(e, "Error listando accesos"))
 
 
 @router.get("/{id}/estudiantes", response_model=dict)
@@ -1030,8 +1076,7 @@ async def listar_estudiantes_curso(
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"Error listando estudiantes del curso: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail=error_interno(e, "Error listando estudiantes del curso"))
 
 
 @router.get("/{id}/estudiantes/exportar")
@@ -1120,8 +1165,7 @@ async def exportar_estudiantes_csv(
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"Error exportando estudiantes del curso: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail=error_interno(e, "Error exportando estudiantes del curso"))
 
 
 @router.post("/{id}/acceso", response_model=AccesoCursoResponse)
@@ -1204,8 +1248,7 @@ async def activar_acceso_directo(
         raise
     except Exception as e:
         db.rollback()
-        logger.error(f"Error activando acceso directo: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail=error_interno(e, "Error activando acceso directo"))
 
 
 @router.delete("/{id}/acceso/{estudiante_id}", response_model=MensajeResponse)
@@ -1247,8 +1290,7 @@ async def desactivar_acceso(
         raise
     except Exception as e:
         db.rollback()
-        logger.error(f"Error desactivando acceso: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail=error_interno(e, "Error desactivando acceso"))
 
 
 @router.get("/{id}/tiene-acceso/{estudiante_id}", response_model=dict)
@@ -1274,8 +1316,7 @@ async def verificar_acceso_estudiante(
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"Error verificando acceso: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail=error_interno(e, "Error verificando acceso"))
 
 
 @router.get("/{curso_id}/progreso/{usuario_id}", response_model=ProgresoCursoResponse)
@@ -1329,8 +1370,7 @@ async def obtener_progreso(
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"Error obteniendo progreso: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail=error_interno(e, "Error obteniendo progreso"))
 
 
 @router.get("/{curso_id}/progreso-detallado", response_model=dict)
@@ -1437,13 +1477,43 @@ async def obtener_progreso_detallado(
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"Error obteniendo progreso detallado: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail=error_interno(e, "Error obteniendo progreso detallado"))
 
 
 # =============================================
 # COMPLETAR LECCIÓN, PROGRESO, EVALUACIONES Y BLOQUEOS
 # =============================================
+
+def _nota_confiable_desde_examen(db: Session, leccion: dict, estudiante_id: str) -> Optional[float]:
+    """
+    ✅ SEGURIDAD: Deriva la nota de una lección-examen desde el ResultadoExamen
+    almacenado en el servidor (fuente confiable), en lugar de confiar en el
+    valor que envía el cliente. Devuelve None si la lección no es un examen,
+    o si el estudiante aún no tiene un resultado válido.
+    """
+    try:
+        contenido = (leccion or {}).get("contenido") or {}
+        examen_id = contenido.get("examen_id")
+        if not examen_id:
+            return None
+        resultados = db.query(ResultadoExamen).filter(
+            ResultadoExamen.examen_id == str(examen_id),
+            or_(
+                cast(ResultadoExamen.alumno_id, String) == str(estudiante_id),
+                cast(ResultadoExamen.alumno_id_unificado, String) == str(estudiante_id)
+            )
+        ).all()
+        if not resultados:
+            return None
+        validos = [r for r in resultados if r.estado != 'TRAMPA' and r.calificacion is not None]
+        if not validos:
+            return None
+        mejor = max(validos, key=lambda r: r.calificacion or 0)
+        return float(mejor.calificacion)
+    except Exception as e:
+        logger.warning(f"No se pudo derivar la nota desde el examen: {e}")
+        return None
+
 
 @router.post("/{curso_id}/lecciones/{leccion_id}/completar", response_model=dict)
 async def completar_leccion(
@@ -1506,8 +1576,14 @@ async def completar_leccion(
             progreso.tiempo_invertido = (progreso.tiempo_invertido or 0) + data.tiempo_invertido
         if not progreso.fecha_liberacion:
             progreso.fecha_liberacion = datetime.now(timezone.utc)
-        # FASE F: persistir nota/aprobado de la evaluación embebida
-        if data.nota is not None:
+        # ✅ SEGURIDAD: para lecciones tipo examen, la nota se deriva del resultado
+        # almacenado en el servidor. NO se confía en el valor enviado por el cliente.
+        nota_examen = _nota_confiable_desde_examen(db, leccion, estudiante_id)
+        if nota_examen is not None:
+            progreso.nota = nota_examen
+            progreso.aprobado = nota_examen >= 10
+        elif data.nota is not None and current_user.rol in ["admin", "docente"]:
+            # Solo docentes/admins pueden fijar notas manualmente vía este endpoint
             progreso.nota = data.nota
             progreso.aprobado = bool(data.aprobado) if data.aprobado is not None else (data.nota >= 10)
         
@@ -1541,6 +1617,7 @@ async def completar_leccion(
         _actualizar_progreso_curso(db, curso_id, estudiante_id)
         db.refresh(inscripcion)
         
+        invalidar_cursos()
         return {
             "curso_id": curso_id,
             "usuario_id": estudiante_id,
@@ -1557,8 +1634,7 @@ async def completar_leccion(
         raise
     except Exception as e:
         db.rollback()
-        logger.error(f"Error completando lección: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail=error_interno(e, "Error completando lección"))
 
 
 @router.post("/{curso_id}/lecciones/{leccion_id}/progreso", response_model=ProgresoLeccionResponse)
@@ -1588,12 +1664,15 @@ async def actualizar_progreso_leccion(
                 progreso.fecha_completado = datetime.now(timezone.utc)
         if data.tiempo_invertido is not None:
             progreso.tiempo_invertido = data.tiempo_invertido
-        if data.nota is not None:
-            progreso.nota = data.nota
-        if data.aprobado is not None:
-            progreso.aprobado = data.aprobado
-            if data.aprobado and not progreso.fecha_liberacion:
-                progreso.fecha_liberacion = datetime.now(timezone.utc)
+        # ✅ SEGURIDAD: solo docentes/admins pueden fijar nota y aprobado.
+        # Un estudiante no puede auto-calificarse por esta vía.
+        if current_user.rol in ["admin", "docente"]:
+            if data.nota is not None:
+                progreso.nota = data.nota
+            if data.aprobado is not None:
+                progreso.aprobado = data.aprobado
+                if data.aprobado and not progreso.fecha_liberacion:
+                    progreso.fecha_liberacion = datetime.now(timezone.utc)
         
         db.commit()
         db.refresh(progreso)
@@ -1608,8 +1687,7 @@ async def actualizar_progreso_leccion(
         raise
     except Exception as e:
         db.rollback()
-        logger.error(f"Error actualizando progreso de lección: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail=error_interno(e, "Error actualizando progreso de lección"))
 
 
 @router.get("/{curso_id}/leccion/{leccion_id}/estado-bloqueo", response_model=LeccionBloqueadaResponse)
@@ -1633,8 +1711,7 @@ async def estado_bloqueo_leccion(
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"Error verificando bloqueo de lección: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail=error_interno(e, "Error verificando bloqueo de lección"))
 
 
 @router.post("/{curso_id}/lecciones/{leccion_id}/evaluacion", response_model=EvaluacionLeccionResponse)
@@ -1689,8 +1766,7 @@ async def configurar_evaluacion(
         raise
     except Exception as e:
         db.rollback()
-        logger.error(f"Error configurando evaluación: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail=error_interno(e, "Error configurando evaluación"))
 
 
 @router.get("/{curso_id}/lecciones/{leccion_id}/evaluacion", response_model=Optional[EvaluacionLeccionResponse])
@@ -1709,8 +1785,7 @@ async def obtener_evaluacion(
         return evaluacion
         
     except Exception as e:
-        logger.error(f"Error obteniendo evaluación: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail=error_interno(e, "Error obteniendo evaluación"))
 
 
 @router.delete("/{curso_id}/lecciones/{leccion_id}/evaluacion", response_model=MensajeResponse)
@@ -1747,15 +1822,14 @@ async def eliminar_evaluacion(
         raise
     except Exception as e:
         db.rollback()
-        logger.error(f"Error eliminando evaluación: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail=error_interno(e, "Error eliminando evaluación"))
 
 
 @router.post("/{curso_id}/lecciones/{leccion_id}/liberar", response_model=ProgresoLeccionResponse)
 async def liberar_leccion(
     curso_id: str,
     leccion_id: str,
-    data: dict = Body(default={}, description="Body opcional con { estudiante_id: str }"),
+    data: Optional[LiberarLeccionRequest] = Body(default=None),
     db: Session = Depends(get_db),
     current_user: Usuario = Depends(require_docente)
 ):
@@ -1771,7 +1845,7 @@ async def liberar_leccion(
                 detail="No tienes permiso para liberar lecciones de este curso"
             )
         
-        estudiante_id = data.get("estudiante_id") if isinstance(data, dict) else None
+        estudiante_id = data.estudiante_id if data else None
         if not estudiante_id:
             raise HTTPException(status_code=400, detail="Se requiere estudiante_id para liberar una lección")
         
@@ -1796,8 +1870,7 @@ async def liberar_leccion(
         raise
     except Exception as e:
         db.rollback()
-        logger.error(f"Error liberando lección: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail=error_interno(e, "Error liberando lección"))
 
 
 # =============================================
@@ -1817,6 +1890,17 @@ async def listar_cursos(
     current_user: Usuario = Depends(get_current_active_user)
 ):
     """Lista todos los cursos con informacion de acceso para el usuario actual"""
+    # ✅ RENDIMIENTO: cada consulta a Supabase cuesta ~300-400 ms de latencia.
+    # El catálogo cambia poco, así que cacheamos la respuesta completa por
+    # usuario+filtros durante 60 s. Se invalida al crear/editar/publicar cursos.
+    clave_cache = (
+        f"{CLAVE_CATALOGO_CURSOS}:{current_user.id}:"
+        f"{categoria}:{nivel}:{estado}:{docente_id}:{titulo}:{limit}:{offset}"
+    )
+    cacheado = cache.get(clave_cache)
+    if cacheado is not None:
+        return cacheado
+
     try:
         query = db.query(Curso)
         if categoria:
@@ -1832,11 +1916,35 @@ async def listar_cursos(
         cursos = query.order_by(Curso.created_at.desc()).offset(offset).limit(limit).all()
         
         usuario_id = str(current_user.id)
-        
+        curso_ids = [str(c.id) for c in cursos]
+
+        # N+1 fix: precargar accesos y solicitudes del usuario en dos consultas
+        accesos_activos = db.query(AccesoCurso).filter(
+            AccesoCurso.curso_id.in_(curso_ids),
+            AccesoCurso.estudiante_id == usuario_id,
+            AccesoCurso.activo == True
+        ).all() if curso_ids else []
+        ahora = datetime.now(timezone.utc)
+        cursos_con_acceso = set()
+        for acceso in accesos_activos:
+            if acceso.fecha_expiracion and acceso.fecha_expiracion < ahora:
+                acceso.activo = False
+                db.commit()
+                continue
+            cursos_con_acceso.add(str(acceso.curso_id))
+
+        solicitudes_pendientes = db.query(SolicitudAccesoCurso).filter(
+            SolicitudAccesoCurso.curso_id.in_(curso_ids),
+            SolicitudAccesoCurso.estudiante_id == usuario_id,
+            SolicitudAccesoCurso.estado == "pendiente"
+        ).all() if curso_ids else []
+        cursos_con_solicitud = {str(s.curso_id) for s in solicitudes_pendientes}
+
         result = []
         for curso in cursos:
-            tiene_acceso = _verificar_acceso(db, curso.id, usuario_id)
-            tiene_solicitud_pendiente = _tiene_solicitud_pendiente(db, curso.id, usuario_id)
+            cid = str(curso.id)
+            tiene_acceso = cid in cursos_con_acceso
+            tiene_solicitud_pendiente = cid in cursos_con_solicitud
             
             if str(curso.docente_id) == usuario_id:
                 tiene_acceso = True
@@ -1844,10 +1952,10 @@ async def listar_cursos(
             
             result.append(_curso_to_dict(curso, tiene_acceso, tiene_solicitud_pendiente))
         
+        cache.set(clave_cache, result, ttl=60)
         return result
     except Exception as e:
-        logger.error(f"Error listando cursos: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail=error_interno(e, "Error listando cursos"))
 
 
 @router.get("/{id}", response_model=CursoResponse)
@@ -1874,8 +1982,7 @@ async def obtener_curso(
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"Error obteniendo curso: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail=error_interno(e, "Error obteniendo curso"))
 
 
 @router.post("/", response_model=CursoResponse, status_code=201)
@@ -1920,13 +2027,13 @@ async def crear_curso(
         db.commit()
         db.refresh(curso)
         logger.info(f"Curso creado: {curso.id} - {curso.titulo[:50]}")
+        invalidar_cursos()
         return _curso_to_dict(curso, True, False)
     except HTTPException:
         raise
     except Exception as e:
         db.rollback()
-        logger.error(f"Error creando curso: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail=error_interno(e, "Error creando curso"))
 
 
 @router.put("/{id}", response_model=CursoResponse)
@@ -1962,13 +2069,13 @@ async def actualizar_curso(
             tiene_acceso = True
             tiene_solicitud_pendiente = False
         
+        invalidar_cursos()
         return _curso_to_dict(curso, tiene_acceso, tiene_solicitud_pendiente)
     except HTTPException:
         raise
     except Exception as e:
         db.rollback()
-        logger.error(f"Error actualizando curso: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail=error_interno(e, "Error actualizando curso"))
 
 
 @router.delete("/{id}", response_model=MensajeResponse)
@@ -1989,15 +2096,29 @@ async def eliminar_curso(
                 detail="No tienes permiso para eliminar este curso"
             )
         
+        # Limpieza explícita de comentarios de lección (el modelo no usa ForeignKey)
+        ids_comentarios = [
+            str(c.id) for c in db.query(ComentarioLeccion).filter(
+                cast(ComentarioLeccion.curso_id, String) == id
+            ).all()
+        ]
+        if ids_comentarios:
+            db.query(LikeComentarioLeccion).filter(
+                cast(LikeComentarioLeccion.comentario_id, String).in_(ids_comentarios)
+            ).delete(synchronize_session=False)
+            db.query(ComentarioLeccion).filter(
+                cast(ComentarioLeccion.curso_id, String) == id
+            ).delete(synchronize_session=False)
+
         db.delete(curso)
         db.commit()
+        invalidar_cursos()
         return {"mensaje": "Curso eliminado correctamente", "ok": True}
     except HTTPException:
         raise
     except Exception as e:
         db.rollback()
-        logger.error(f"Error eliminando curso: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail=error_interno(e, "Error eliminando curso"))
 
 
 # =============================================
@@ -2164,8 +2285,7 @@ async def subir_imagen_curso(
         raise
     except Exception as e:
         db.rollback()
-        logger.error(f"Error subiendo imagen de curso: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail=error_interno(e, "Error subiendo imagen de curso"))
 
 
 @router.delete("/{id}/imagen")
@@ -2204,5 +2324,273 @@ async def eliminar_imagen_curso(
         raise
     except Exception as e:
         db.rollback()
-        logger.error(f"Error eliminando imagen de curso: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail=error_interno(e, "Error eliminando imagen de curso"))
+
+
+# =============================================
+# COMENTARIOS POR LECCIÓN
+# Independientes del Foro del curso. Docente del curso y admin acceden
+# siempre; los estudiantes necesitan acceso activo al curso.
+# =============================================
+
+def _puede_acceder_leccion(db: Session, curso: Curso, current_user: Usuario) -> bool:
+    """Docentes y admin acceden siempre; estudiantes requieren acceso al curso."""
+    if current_user.rol in ["admin", "docente"]:
+        return True
+    return _verificar_acceso(db, str(curso.id), str(current_user.id))
+
+
+def _puede_eliminar_comentario_leccion(curso: Curso, comentario: ComentarioLeccion, current_user: Usuario) -> bool:
+    """Puede eliminar: el autor, el docente dueño del curso o un admin."""
+    if current_user.rol == "admin":
+        return True
+    if str(comentario.usuario_id) == str(current_user.id):
+        return True
+    if curso.docente_id and str(curso.docente_id) == str(current_user.id):
+        return True
+    return False
+
+
+def _comentario_leccion_to_dict(
+    comentario: ComentarioLeccion,
+    usuario_id: str,
+    puede_eliminar: bool,
+    liked_by_me: bool = False,
+) -> dict:
+    return {
+        "id": str(comentario.id),
+        "curso_id": str(comentario.curso_id),
+        "leccion_id": str(comentario.leccion_id),
+        "usuario_id": str(comentario.usuario_id),
+        "usuario_nombre": comentario.usuario_nombre,
+        "usuario_rol": comentario.usuario_rol,
+        "contenido": comentario.contenido,
+        "likes_count": comentario.likes_count or 0,
+        "liked_by_me": liked_by_me,
+        "es_mio": str(comentario.usuario_id) == str(usuario_id),
+        "puede_eliminar": puede_eliminar,
+        "created_at": comentario.created_at.isoformat() if comentario.created_at else None,
+        "updated_at": comentario.updated_at.isoformat() if comentario.updated_at else None,
+    }
+
+
+@router.get(
+    "/{curso_id}/lecciones/{leccion_id}/comentarios",
+    response_model=List[ComentarioLeccionResponse],
+)
+async def listar_comentarios_leccion(
+    curso_id: str,
+    leccion_id: str,
+    db: Session = Depends(get_db),
+    current_user: Usuario = Depends(get_current_active_user),
+):
+    """Lista los comentarios de una lección (requiere acceso al curso)."""
+    try:
+        curso = db.query(Curso).filter(Curso.id == curso_id).first()
+        if not curso:
+            raise HTTPException(status_code=404, detail="Curso no encontrado")
+
+        if not _puede_acceder_leccion(db, curso, current_user):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="No tienes acceso a este curso",
+            )
+
+        comentarios = db.query(ComentarioLeccion).filter(
+            cast(ComentarioLeccion.curso_id, String) == curso_id,
+            cast(ComentarioLeccion.leccion_id, String) == leccion_id,
+        ).order_by(ComentarioLeccion.created_at.asc()).all()
+
+        usuario_id = str(current_user.id)
+        mis_likes = set()
+        if comentarios:
+            ids = [str(c.id) for c in comentarios]
+            mis_likes = {
+                str(l.comentario_id)
+                for l in db.query(LikeComentarioLeccion).filter(
+                    cast(LikeComentarioLeccion.comentario_id, String).in_(ids),
+                    cast(LikeComentarioLeccion.usuario_id, String) == usuario_id,
+                ).all()
+            }
+
+        return [
+            _comentario_leccion_to_dict(
+                c,
+                usuario_id,
+                _puede_eliminar_comentario_leccion(curso, c, current_user),
+                liked_by_me=str(c.id) in mis_likes,
+            )
+            for c in comentarios
+        ]
+    except HTTPException:
+        raise
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=error_interno(e, "Error listando comentarios de lección"))
+
+
+@router.post(
+    "/{curso_id}/lecciones/{leccion_id}/comentarios",
+    response_model=ComentarioLeccionResponse,
+    status_code=201,
+)
+async def crear_comentario_leccion(
+    curso_id: str,
+    leccion_id: str,
+    data: ComentarioLeccionCreate,
+    db: Session = Depends(get_db),
+    current_user: Usuario = Depends(get_current_active_user),
+):
+    """Crea un comentario en una lección (requiere acceso al curso)."""
+    try:
+        curso = db.query(Curso).filter(Curso.id == curso_id).first()
+        if not curso:
+            raise HTTPException(status_code=404, detail="Curso no encontrado")
+
+        if not _puede_acceder_leccion(db, curso, current_user):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="No tienes acceso a este curso",
+            )
+
+        leccion, _, _ = _encontrar_leccion_y_anterior(curso, leccion_id)
+        if leccion is None:
+            raise HTTPException(status_code=404, detail="Lección no encontrada en el curso")
+
+        contenido = (data.contenido or "").strip()
+        if not contenido:
+            raise HTTPException(status_code=400, detail="El comentario no puede estar vacío")
+
+        comentario = ComentarioLeccion(
+            id=str(uuid.uuid4()),
+            curso_id=curso_id,
+            leccion_id=leccion_id,
+            usuario_id=str(current_user.id),
+            usuario_nombre=current_user.nombre_completo,
+            usuario_rol=current_user.rol,
+            contenido=contenido,
+            likes_count=0,
+        )
+        db.add(comentario)
+        db.commit()
+        db.refresh(comentario)
+        logger.info(f"Comentario de lección creado: {comentario.id} (curso={curso_id}, leccion={leccion_id})")
+
+        return _comentario_leccion_to_dict(
+            comentario,
+            str(current_user.id),
+            _puede_eliminar_comentario_leccion(curso, comentario, current_user),
+            liked_by_me=False,
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=error_interno(e, "Error creando comentario de lección"))
+
+
+@router.delete(
+    "/{curso_id}/lecciones/{leccion_id}/comentarios/{comentario_id}",
+    response_model=MensajeResponse,
+)
+async def eliminar_comentario_leccion(
+    curso_id: str,
+    leccion_id: str,
+    comentario_id: str,
+    db: Session = Depends(get_db),
+    current_user: Usuario = Depends(get_current_active_user),
+):
+    """Elimina un comentario (autor, docente del curso o admin)."""
+    try:
+        curso = db.query(Curso).filter(Curso.id == curso_id).first()
+        if not curso:
+            raise HTTPException(status_code=404, detail="Curso no encontrado")
+
+        comentario = db.query(ComentarioLeccion).filter(
+            ComentarioLeccion.id == comentario_id,
+            cast(ComentarioLeccion.curso_id, String) == curso_id,
+            cast(ComentarioLeccion.leccion_id, String) == leccion_id,
+        ).first()
+        if not comentario:
+            raise HTTPException(status_code=404, detail="Comentario no encontrado")
+
+        if not _puede_eliminar_comentario_leccion(curso, comentario, current_user):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="No tienes permiso para eliminar este comentario",
+            )
+
+        db.query(LikeComentarioLeccion).filter(
+            cast(LikeComentarioLeccion.comentario_id, String) == comentario_id
+        ).delete(synchronize_session=False)
+        db.delete(comentario)
+        db.commit()
+        return {"mensaje": "Comentario eliminado correctamente", "ok": True}
+    except HTTPException:
+        raise
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=error_interno(e, "Error eliminando comentario de lección"))
+
+
+@router.post(
+    "/{curso_id}/lecciones/{leccion_id}/comentarios/{comentario_id}/like",
+    response_model=ComentarioLeccionLikeResponse,
+)
+async def dar_like_comentario_leccion(
+    curso_id: str,
+    leccion_id: str,
+    comentario_id: str,
+    db: Session = Depends(get_db),
+    current_user: Usuario = Depends(get_current_active_user),
+):
+    """Alterna el like del usuario actual sobre un comentario de lección."""
+    try:
+        curso = db.query(Curso).filter(Curso.id == curso_id).first()
+        if not curso:
+            raise HTTPException(status_code=404, detail="Curso no encontrado")
+
+        if not _puede_acceder_leccion(db, curso, current_user):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="No tienes acceso a este curso",
+            )
+
+        comentario = db.query(ComentarioLeccion).filter(
+            ComentarioLeccion.id == comentario_id,
+            cast(ComentarioLeccion.curso_id, String) == curso_id,
+            cast(ComentarioLeccion.leccion_id, String) == leccion_id,
+        ).first()
+        if not comentario:
+            raise HTTPException(status_code=404, detail="Comentario no encontrado")
+
+        usuario_id = str(current_user.id)
+        existente = db.query(LikeComentarioLeccion).filter(
+            cast(LikeComentarioLeccion.comentario_id, String) == comentario_id,
+            cast(LikeComentarioLeccion.usuario_id, String) == usuario_id,
+        ).first()
+
+        if existente:
+            db.delete(existente)
+            comentario.likes_count = max((comentario.likes_count or 0) - 1, 0)
+            liked = False
+        else:
+            db.add(LikeComentarioLeccion(
+                id=str(uuid.uuid4()),
+                comentario_id=comentario_id,
+                usuario_id=usuario_id,
+            ))
+            comentario.likes_count = (comentario.likes_count or 0) + 1
+            liked = True
+
+        db.commit()
+        return {
+            "comentario_id": comentario_id,
+            "liked": liked,
+            "likes_count": comentario.likes_count or 0,
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=error_interno(e, "Error alternando like de comentario"))

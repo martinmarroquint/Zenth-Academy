@@ -1,6 +1,6 @@
 // src/components/examenes/ResultadosExamen.jsx
 // VERSION CORREGIDA - COLORES CON PUNTAJE_APROBACION
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { 
   Search, Download, Trash2, BarChart3, RotateCcw, 
   ChevronDown, ChevronRight, ArrowLeft, Target, Users,
@@ -8,8 +8,10 @@ import {
 } from 'lucide-react';
 import { COLOR_PRIMARIO } from './constantes';
 import examenesService from '../../services/examenesService';
+import { useFeedback } from '../../hooks/useFeedback';
 
 const ResultadosExamen = ({ examenId, examenes, alumnos, onVolver }) => {
+  const { confirmar } = useFeedback();
   const examen = (examenes || []).find(e => e.id === examenId) || null;
   const [resultados, setResultados] = useState([]);
   const [busqueda, setBusqueda] = useState('');
@@ -18,14 +20,14 @@ const ResultadosExamen = ({ examenId, examenes, alumnos, onVolver }) => {
   const [expandirAlumnos, setExpandirAlumnos] = useState({});
   const [mensaje, setMensaje] = useState(null);
 
-  useEffect(() => { if (examenId) cargarResultados(); }, [examenId]);
-
-  const cargarResultados = async () => {
+  const cargarResultados = useCallback(async () => {
     setCargando(true);
     try { const data = await examenesService.listarResultados(examenId); setResultados(data || []); } 
     catch { setResultados([]); } 
     finally { setCargando(false); }
-  };
+  }, [examenId]);
+
+  useEffect(() => { if (examenId) cargarResultados(); }, [examenId, cargarResultados]);
 
   const mostrarMensaje = (t) => { setMensaje(t); setTimeout(() => setMensaje(null), 2000); };
 
@@ -95,13 +97,25 @@ const ResultadosExamen = ({ examenId, examenes, alumnos, onVolver }) => {
   };
 
   const handleLimpiar = async () => {
-    if (!window.confirm('Eliminar todos los resultados?')) return;
+    const ok = await confirmar({
+      titulo: 'Limpiar resultados',
+      mensaje: '¿Eliminar todos los resultados? Esta acción no se puede deshacer.',
+      confirmText: 'Eliminar',
+      variant: 'danger',
+    });
+    if (!ok) return;
     try { await examenesService.limpiarResultados(examenId); setResultados([]); mostrarMensaje('Resultados eliminados'); } 
     catch { mostrarMensaje('Error al limpiar'); }
   };
 
   const handleReiniciarIntento = async (alumnoId, nombre) => {
-    if (!window.confirm(`Reiniciar intento de ${nombre}?`)) return;
+    const ok = await confirmar({
+      titulo: 'Reiniciar intento',
+      mensaje: `¿Reiniciar el intento de ${nombre}?`,
+      confirmText: 'Reiniciar',
+      variant: 'warning',
+    });
+    if (!ok) return;
     try { await examenesService.eliminarResultadoAlumno(examenId, alumnoId); await cargarResultados(); mostrarMensaje('Intento reiniciado'); } 
     catch { mostrarMensaje('Error al reiniciar'); }
   };
@@ -300,8 +314,8 @@ const ResultadosExamen = ({ examenId, examenes, alumnos, onVolver }) => {
         @keyframes fadeIn { from { opacity: 0; transform: translateY(-4px); } to { opacity: 1; transform: translateY(0); } }
         .animate-fadeIn { animation: fadeIn 0.2s ease-out; }
         * { -webkit-tap-highlight-color: transparent; }
-        *:focus { outline: none !important; }
-        input:focus, button:focus { outline: none !important; box-shadow: none !important; }
+        *:focus-visible { outline: 2px solid #0f766e; outline-offset: 2px; }
+        input:focus-visible, button:focus-visible { outline: 2px solid #0f766e; outline-offset: 2px; }
       `}</style>
     </div>
   );

@@ -284,6 +284,25 @@ class ExamenesService {
     return this.request(`/examenes/${id}`);
   }
 
+  // ✅ Autoridad de tiempo: inicia/reanuda un intento en el servidor.
+  iniciarIntento(examenId) {
+    return this.request(`/examenes/${examenId}/intentos`, { method: 'POST' });
+  }
+
+  async iniciarIntentoPublico(codigo, password = null) {
+    const baseUrl = import.meta.env.VITE_API_URL || 'http://localhost:8000/api/v1';
+    const response = await fetch(`${baseUrl}/examenes/publico/${codigo}/intentos`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ password })
+    });
+    if (!response.ok) {
+      const error = await response.json().catch(() => ({ detail: 'No se pudo iniciar el intento' }));
+      throw new Error(error.detail || 'No se pudo iniciar el intento');
+    }
+    return response.json();
+  }
+
   crearExamen(data) {
     return this.request('/examenes/', { 
       method: 'POST', 
@@ -319,6 +338,42 @@ class ExamenesService {
       method: 'POST', 
       body: JSON.stringify(data) 
     });
+  }
+
+  /**
+   * Reintenta enviar los resultados guardados offline (localStorage).
+   * Se llama al entrar al área autenticada (una vez por carga de página).
+   *
+   * - Descarta entradas legacy sin `intento_id` (el backend ahora las rechaza).
+   * - Descarta errores permanentes (4xx salvo 401/429); conserva los transitorios.
+   */
+  async reintentarResultadosPendientes() {
+    let pendientes = [];
+    try {
+      pendientes = JSON.parse(localStorage.getItem('resultados_pendientes') || '[]');
+    } catch {
+      return;
+    }
+    if (!Array.isArray(pendientes) || pendientes.length === 0) return;
+
+    const restantes = [];
+    for (const datos of pendientes) {
+      // Entradas legacy (sin intento) ya no son aceptadas por el backend.
+      if (!datos || !datos.intento_id) continue;
+
+      try {
+        await this.guardarResultado(datos);
+      } catch (e) {
+        const status = e?.status;
+        const transitorio = !status || status >= 500 || status === 401 || status === 429;
+        if (transitorio) restantes.push(datos);
+      }
+    }
+    if (restantes.length === 0) {
+      localStorage.removeItem('resultados_pendientes');
+    } else {
+      localStorage.setItem('resultados_pendientes', JSON.stringify(restantes));
+    }
   }
 
   listarResultados(examenId) {

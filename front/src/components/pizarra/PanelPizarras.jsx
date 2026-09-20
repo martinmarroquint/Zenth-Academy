@@ -1,26 +1,24 @@
 // front/src/components/pizarra/PanelPizarras.jsx
 // COMPONENTE COMPLETO - PANEL DE PIZARRAS
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   Plus, Search, Edit3, Trash2, Users, Eye,
   PenTool, Grid, LayoutGrid, Calendar, Lock, Globe,
   ChevronRight, Loader2, Copy, Link as LinkIcon
 } from 'lucide-react';
 import pizarraService from '../../services/pizarraService';
+import { useFeedback } from '../../hooks/useFeedback';
 
 const PanelPizarras = ({ usuarioId, onAbrirPizarra, onCrearPizarra }) => {
+  const { confirmar } = useFeedback();
   const [pizarras, setPizarras] = useState([]);
   const [cargando, setCargando] = useState(true);
   const [busqueda, setBusqueda] = useState('');
   const [filtroTipo, setFiltroTipo] = useState('todos');
   const [vista, setVista] = useState('grid');
 
-  useEffect(() => {
-    cargarPizarras();
-  }, []);
-
-  const cargarPizarras = async () => {
+  const cargarPizarras = useCallback(async () => {
     setCargando(true);
     try {
       const data = await pizarraService.listar({ creado_por: usuarioId });
@@ -30,10 +28,20 @@ const PanelPizarras = ({ usuarioId, onAbrirPizarra, onCrearPizarra }) => {
     } finally {
       setCargando(false);
     }
-  };
+  }, [usuarioId]);
+
+  useEffect(() => {
+    cargarPizarras();
+  }, [cargarPizarras]);
 
   const eliminarPizarra = async (id) => {
-    if (!window.confirm('¿Eliminar esta pizarra?')) return;
+    const ok = await confirmar({
+      titulo: 'Eliminar pizarra',
+      mensaje: '¿Eliminar esta pizarra? Esta acción no se puede deshacer.',
+      confirmText: 'Eliminar',
+      variant: 'danger',
+    });
+    if (!ok) return;
     try {
       await pizarraService.eliminar(id);
       await cargarPizarras();

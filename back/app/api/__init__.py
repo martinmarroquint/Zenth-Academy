@@ -17,6 +17,7 @@ from app.api import (
     compartir,
     solicitudes_docente,
     geo_analytics,
+    media,
 )
 
 # Configuracion publica de cliente (marca Zenth Academy)
@@ -145,6 +146,15 @@ api_router.include_router(
     cliente_router,
     prefix="/config/cliente",
     tags=["Configuracion"]
+)
+
+# =============================================
+# MEDIA / PROXY DE IMÁGENES (público)
+# =============================================
+api_router.include_router(
+    media.router,
+    prefix="/media",
+    tags=["Media"]
 )
 
 # =============================================

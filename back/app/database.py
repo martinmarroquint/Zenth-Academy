@@ -2,6 +2,8 @@
 from sqlalchemy import create_engine, text
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker, Session
+from sqlalchemy.ext.compiler import compiles
+from sqlalchemy.dialects.postgresql import UUID as _PG_UUID, JSONB as _PG_JSONB
 from typing import Generator, Tuple, Dict, Any
 import logging
 import time
@@ -12,19 +14,61 @@ import re
 logger = logging.getLogger(__name__)
 
 # =====================================================
+# ✅ COMPATIBILIDAD SQLITE (desarrollo local sin Supabase)
+# Los modelos usan tipos PostgreSQL (UUID, JSONB). Estos shims permiten
+# levantar el proyecto con SQLite local sin modificar ningún modelo.
+# Solo afectan al dialecto SQLite; en PostgreSQL se usan los tipos nativos.
+# =====================================================
+
+@compiles(_PG_UUID, "sqlite")
+def _compile_uuid_sqlite(type_, compiler, **kw):  # noqa: ARG001
+    return "CHAR(36)"
+
+
+@compiles(_PG_JSONB, "sqlite")
+def _compile_jsonb_sqlite(type_, compiler, **kw):  # noqa: ARG001
+    return "JSON"
+
+
+# =====================================================
 # CONFIGURACIÓN DEL ENGINE OPTIMIZADA PARA SUPABASE
 # =====================================================
 
 def create_database_engine():
     """
-    Crea el engine de base de datos con configuración optimizada para Supabase
+    Crea el engine de base de datos.
+
+    Soporta dos modos según `SUPABASE_DATABASE_URL`:
+      - `sqlite:///...` → SQLite local (desarrollo sin Supabase)
+      - `postgresql://...` → Supabase/PostgreSQL (configuración optimizada)
     """
     # Obtener la URL
     database_url = settings.SUPABASE_DATABASE_URL
-    
+    es_sqlite = database_url.lower().startswith("sqlite")
+
+    # ---------- MODO SQLITE (DESARROLLO LOCAL) ----------
+    if es_sqlite:
+        from sqlalchemy.pool import StaticPool
+
+        logger.info("🔧 Modo SQLite local activado (sin Supabase)")
+
+        engine_config = {
+            "connect_args": {"check_same_thread": False},
+            "echo": settings.DEBUG and settings.is_development,
+            "echo_pool": settings.DEBUG and settings.is_development,
+        }
+        # En memoria necesitamos una única conexión compartida
+        if ":memory:" in database_url:
+            engine_config["poolclass"] = StaticPool
+
+        engine = create_engine(database_url, **engine_config)
+        logger.info(f"✅ Engine SQLite creado: {database_url}")
+        return engine
+
+    # ---------- MODO POSTGRESQL / SUPABASE ----------
     # Detectar si es pooler y necesita el project_id en connect_args
     is_pooler = "pooler" in database_url.lower()
-    
+
     # Configuración base de connect_args
     connect_args = {
         "connect_timeout": 10,
@@ -34,33 +78,43 @@ def create_database_engine():
         "keepalives_count": 5,
         "sslmode": "require",
     }
-    
-    # ✅ Si es pooler, agregar el project_id en options
+
+    # ✅ Si es pooler, agregar el project_id en options.
+    # Se EXTRAE del usuario de la URL (antes estaba hardcodeado y quedaba
+    # desincronizado si cambiabas de proyecto Supabase).
     if is_pooler:
-        # Extraer el project_id de la URL o usar el de settings
-        project_id = "rpphjdgalniijuktnorf"  # Tu project ID
-        
-        # Verificar si ya tiene options en la URL
-        if "options=" not in database_url:
-            # Agregar options a la URL
-            if "?" in database_url:
-                database_url += f"&options=project%3D{project_id}"
-            else:
-                database_url += f"?options=project%3D{project_id}"
-        
-        # También agregar en connect_args como respaldo
-        connect_args["options"] = f"-c project={project_id}"
-        
-        logger.info(f"🔧 Configuración para pooler: project_id={project_id}")
-    
+        project_id = None
+        m = re.search(r"postgres\.([a-z0-9]+)@", database_url)
+        if m:
+            project_id = m.group(1)
+        elif settings.SUPABASE_DB_USER and "." in settings.SUPABASE_DB_USER:
+            project_id = settings.SUPABASE_DB_USER.split(".", 1)[1]
+
+        if project_id:
+            if "options=" not in database_url:
+                sep = "&" if "?" in database_url else "?"
+                database_url += f"{sep}options=project%3D{project_id}"
+            connect_args["options"] = f"-c project={project_id}"
+            logger.info(f"🔧 Configuración para pooler: project_id={project_id}")
+        else:
+            logger.warning("⚠️ No se pudo extraer el project_id de la URL del pooler")
+
     # Configuración del engine
+    # ✅ RENDIMIENTO (medido): cada consulta cuesta ~300-400 ms de latencia de red
+    # hacia Supabase. `pool_pre_ping=True` agregaba un `SELECT 1` extra por CADA
+    # checkout del pool (+~100 ms por consulta, +20% de latencia total).
+    # El pooler de Supabase (pgbouncer) ya valida las conexiones del lado servidor,
+    # así que desactivamos el pre_ping y reciclamos antes de que el pooler las cierre.
     engine_config = {
-        "pool_pre_ping": True,
-        "pool_recycle": 3600,
-        "pool_size": 5,
-        "max_overflow": 10,
-        "echo": settings.DEBUG,
-        "echo_pool": settings.DEBUG,
+        "pool_pre_ping": False,
+        "pool_recycle": 300,          # reciclar antes de que el pooler cierre la conexión
+        "pool_size": 10,              # más conexiones listas = menos espera
+        "max_overflow": 20,
+        "pool_timeout": 10,
+        # ✅ SEGURIDAD: echo SQL SOLO en desarrollo (nunca en producción),
+        # para no filtrar datos sensibles en los logs.
+        "echo": settings.DEBUG and settings.is_development,
+        "echo_pool": settings.DEBUG and settings.is_development,
         "connect_args": connect_args,
     }
     

@@ -9,6 +9,7 @@ import uuid
 import logging
 import os
 import asyncio
+import secrets
 
 from app.database import get_db
 from app.models.usuario import Usuario
@@ -18,7 +19,7 @@ from app.schemas.auth import (
     LoginRequest, TokenResponse, RegisterRequest, RegisterResponse,
     UserResponse, UserUpdateRequest, ChangePasswordRequest,
     UserCreateRequest, UserListResponse, MensajeResponse,
-    RefreshRequest, TokenRefreshResponse
+    RefreshRequest, TokenRefreshResponse, GoogleLoginRequest
 )
 from app.core.security import (
     create_access_token, create_refresh_token, decode_token, hash_token,
@@ -30,13 +31,15 @@ from app.core.security_logger import (
     log_login_attempt, log_unauthorized_access, log_password_change
 )
 from app.core.geo_service import log_login_geo
+from app.core.google_auth import verificar_id_token_google
 from datetime import timedelta, datetime, timezone
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
 
-# ✅ UUID REAL DE LA EMPRESA ZENTH ACADEMY
-EMPRESA_ID_DEFAULT = "ada6b7c4-162e-457c-9d2a-89006be2b8c9"
+# ✅ UUID de la empresa por defecto (configurable por entorno, no hardcodeado)
+from app.config import settings as _settings
+EMPRESA_ID_DEFAULT = _settings.EMPRESA_ID_DEFAULT
 
 
 def _user_dict(user: Usuario) -> dict:
@@ -117,10 +120,12 @@ async def login(
     # Verificar si está bloqueado
     check_login_allowed(form_data.username)
     
-    # ✅ FILTRAR POR EMAIL Y EMPRESA (UUID)
+    # ✅ FIX CRÍTICO: buscar SOLO por email (es único en la tabla).
+    # Antes se filtraba también por `empresa_id == EMPRESA_ID_DEFAULT`, lo que
+    # dejaba FUERA a usuarios legítimos con empresa_id NULL o distinto
+    # (ej: docente@zenth.com y estudiante@zenth.com no podían iniciar sesión).
     user = db.query(Usuario).filter(
-        Usuario.email == form_data.username,
-        Usuario.empresa_id == EMPRESA_ID_DEFAULT
+        Usuario.email == form_data.username
     ).first()
     
     if not user:
@@ -199,6 +204,88 @@ async def login(
         )
     )
     
+    tokens = _crear_tokens(db, user)
+    return {
+        "access_token": tokens["access_token"],
+        "refresh_token": tokens["refresh_token"],
+        "expires_in": tokens["expires_in"],
+        "token_type": "bearer",
+        "user": _user_dict(user)
+    }
+
+
+@router.post("/google", response_model=TokenResponse)
+async def login_google(
+    data: GoogleLoginRequest,
+    db: Session = Depends(get_db),
+    _rate_limited = Depends(rate_limit(10, 60)),
+):
+    """Login con Google.
+
+    El frontend obtiene un ID token con Google Identity Services y lo envía aquí.
+    Validamos el token con las claves públicas de Google y, si es válido,
+    emitimos NUESTRO JWT (el rol/empresa se mantienen intactos).
+    """
+    if not _settings.GOOGLE_CLIENT_ID:
+        raise HTTPException(status_code=503, detail="Login con Google no está configurado")
+
+    try:
+        info = verificar_id_token_google(data.credential)
+    except ValueError as e:
+        raise HTTPException(status_code=401, detail=str(e))
+
+    email = (info.get("email") or "").lower().strip()
+    if not email:
+        raise HTTPException(status_code=401, detail="Google no devolvió un correo")
+    if not info.get("email_verified", False):
+        raise HTTPException(status_code=401, detail="El correo de Google no está verificado")
+
+    google_sub = info.get("sub")
+    user = db.query(Usuario).filter(Usuario.email == email).first()
+
+    if not user:
+        # ✅ Nuevo usuario: entra como estudiante (mismo flujo que el registro)
+        user = Usuario(
+            id=str(uuid.uuid4()),
+            email=email,
+            nombres=info.get("given_name"),
+            apellidos=info.get("family_name"),
+            foto_url=info.get("picture"),
+            rol="estudiante",
+            empresa_id=EMPRESA_ID_DEFAULT,
+            activo=True,
+            email_verificado=True,
+            auth_provider="google",
+            google_id=google_sub,
+            fecha_registro=datetime.now(timezone.utc),
+        )
+        db.add(user)
+        db.commit()
+        db.refresh(user)
+        logger.info(f"Nuevo usuario registrado vía Google: {email}")
+    else:
+        # ✅ Vinculación: no duplicar usuarios; solo asociar el proveedor
+        if not user.google_id and google_sub:
+            ya_usado = db.query(Usuario).filter(
+                Usuario.google_id == google_sub, Usuario.id != user.id
+            ).first()
+            if not ya_usado:
+                user.google_id = google_sub
+        if not user.auth_provider or user.auth_provider == "local":
+            user.auth_provider = "google"
+        if not user.email_verificado:
+            user.email_verificado = True
+        if not user.foto_url and info.get("picture"):
+            user.foto_url = info.get("picture")
+        db.commit()
+        db.refresh(user)
+
+    if not user.activo:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Usuario inactivo")
+
+    user.ultimo_acceso = datetime.now(timezone.utc)
+    db.commit()
+
     tokens = _crear_tokens(db, user)
     return {
         "access_token": tokens["access_token"],
@@ -318,13 +405,19 @@ async def refresh_token(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Sesión expirada. Inicie sesión nuevamente."
         )
-    if record.expires_at < datetime.utcnow():
-        record.revoked = True
-        db.commit()
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Sesión expirada. Inicie sesión nuevamente."
-        )
+    # ✅ FIX: `record.expires_at` puede venir con timezone (Postgres) o sin ella (SQLite).
+    # Comparar aware vs naive lanzaba TypeError. Normalizamos a UTC aware.
+    expira = record.expires_at
+    if expira is not None:
+        if expira.tzinfo is None:
+            expira = expira.replace(tzinfo=timezone.utc)
+        if expira < datetime.now(timezone.utc):
+            record.revoked = True
+            db.commit()
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Sesión expirada. Inicie sesión nuevamente."
+            )
 
     user = db.query(Usuario).filter(
         Usuario.id == sub,
@@ -661,12 +754,33 @@ async def crear_admin_inicial(
     db: Session = Depends(get_db),
     request: Request = None
 ):
-    bootstrap_key = os.getenv("BOOTSTRAP_KEY", "zenthacademy-bootstrap")
+    # ✅ SEGURIDAD: sin valor por defecto. Si no está configurado, el endpoint queda deshabilitado.
+    bootstrap_key = os.getenv("BOOTSTRAP_KEY")
+    admin_password = os.getenv("ADMIN_BOOTSTRAP_PASSWORD")
+
+    if not bootstrap_key or not admin_password:
+        logger.warning(
+            "Intento de usar /seed/admin sin BOOTSTRAP_KEY/ADMIN_BOOTSTRAP_PASSWORD configurados"
+        )
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Inicialización deshabilitada. Configure BOOTSTRAP_KEY y ADMIN_BOOTSTRAP_PASSWORD."
+        )
+
     provided = request.headers.get("X-Bootstrap-Key", "")
-    if provided != bootstrap_key:
+    # Comparación en tiempo constante para evitar timing attacks
+    if not secrets.compare_digest(provided, bootstrap_key):
+        logger.warning("Intento de seed admin con llave inválida")
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Llave de inicialización inválida"
+        )
+
+    # ✅ SEGURIDAD: validar fortaleza mínima de la contraseña de bootstrap
+    if len(admin_password) < 12:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="ADMIN_BOOTSTRAP_PASSWORD debe tener al menos 12 caracteres"
         )
 
     email = "admin@zenthacademy.com"
@@ -692,7 +806,8 @@ async def crear_admin_inicial(
         email_verificado=True,
         fecha_registro=datetime.now(timezone.utc)
     )
-    user.set_password("Admin123!")
+    # ✅ SEGURIDAD: contraseña provista por entorno, nunca hardcodeada
+    user.set_password(admin_password)
     
     db.add(user)
     db.commit()
@@ -717,3 +832,136 @@ async def crear_admin_inicial(
         "ultimo_acceso": user.ultimo_acceso,
         "fecha_registro": user.fecha_registro
     }
+
+
+# =============================================
+# LOGIN SOCIAL (OAuth 2.0): GOOGLE / MICROSOFT
+# =============================================
+from fastapi.responses import RedirectResponse  # noqa: E402
+from urllib.parse import urlencode  # noqa: E402
+from app.core import oauth as oauth_lib  # noqa: E402
+
+
+@router.get("/oauth/providers")
+async def oauth_providers():
+    """Indica qué proveedores de login social están configurados."""
+    return oauth_lib.proveedores_disponibles()
+
+
+@router.get("/oauth/{provider}/login")
+async def oauth_login(provider: str, redirect: Optional[str] = None):
+    """Redirige al usuario al proveedor (Google/Microsoft) para autenticarse."""
+    provider = (provider or "").lower()
+    if provider not in ("google", "microsoft"):
+        raise HTTPException(status_code=400, detail="Proveedor no soportado")
+
+    state = oauth_lib.generar_state(redirect or "")
+    url = oauth_lib.url_autorizacion(provider, state)
+    if not url:
+        raise HTTPException(
+            status_code=503,
+            detail=f"El inicio de sesión con {provider.title()} no está configurado",
+        )
+    return RedirectResponse(url)
+
+
+@router.get("/oauth/{provider}/callback")
+async def oauth_callback(
+    provider: str,
+    code: Optional[str] = None,
+    state: Optional[str] = None,
+    error: Optional[str] = None,
+    db: Session = Depends(get_db),
+):
+    """Recibe el callback del proveedor, crea/vincula el usuario y emite NUESTRO JWT."""
+    from app.config import settings as _s
+    frontend = _s.FRONTEND_URL.rstrip("/")
+
+    def volver_al_login(motivo: str):
+        return RedirectResponse(f"{frontend}/login?error={motivo}")
+
+    provider = (provider or "").lower()
+    if provider not in ("google", "microsoft"):
+        return volver_al_login("proveedor_invalido")
+    if error:
+        return volver_al_login("cancelado")
+    if not code or not state:
+        return volver_al_login("parametros_faltantes")
+
+    # 1) Validar state (anti-CSRF)
+    destino = oauth_lib.validar_state(state)
+    if destino is None:
+        logger.warning(f"State OAuth inválido o expirado ({provider})")
+        return volver_al_login("sesion_expirada")
+
+    # 2) Intercambiar el código por los datos del usuario
+    datos = await oauth_lib.intercambiar_codigo(provider, code)
+    if not datos or not datos.get("email"):
+        return volver_al_login("oauth_fallido")
+
+    email = datos["email"]
+
+    # 3) Buscar por ID del proveedor, luego por email (vincular cuenta existente)
+    if provider == "google":
+        user = db.query(Usuario).filter(Usuario.google_id == datos["provider_id"]).first()
+    else:
+        user = db.query(Usuario).filter(Usuario.microsoft_id == datos["provider_id"]).first()
+
+    if not user:
+        user = db.query(Usuario).filter(Usuario.email == email).first()
+
+    if user:
+        # Vincular proveedor y completar datos faltantes
+        if provider == "google" and not user.google_id:
+            user.google_id = datos["provider_id"]
+        if provider == "microsoft" and not user.microsoft_id:
+            user.microsoft_id = datos["provider_id"]
+        if not user.foto_url and datos.get("foto_url"):
+            user.foto_url = datos["foto_url"]
+        if not user.nombres and datos.get("nombres"):
+            user.nombres = datos["nombres"]
+        if not user.apellidos and datos.get("apellidos"):
+            user.apellidos = datos["apellidos"]
+        if datos.get("email_verificado"):
+            user.email_verificado = True
+        logger.info(f"Login social ({provider}): cuenta vinculada {email}")
+    else:
+        # Crear usuario nuevo (rol estudiante por defecto)
+        user = Usuario(
+            id=str(uuid.uuid4()),
+            email=email,
+            password_hash=None,
+            auth_provider=provider,
+            nombres=datos.get("nombres") or email.split("@")[0],
+            apellidos=datos.get("apellidos") or "",
+            foto_url=datos.get("foto_url"),
+            rol="estudiante",
+            empresa_id=EMPRESA_ID_DEFAULT,
+            activo=True,
+            email_verificado=bool(datos.get("email_verificado")),
+            fecha_registro=datetime.now(timezone.utc),
+        )
+        if provider == "google":
+            user.google_id = datos["provider_id"]
+        else:
+            user.microsoft_id = datos["provider_id"]
+        db.add(user)
+        logger.info(f"Login social ({provider}): usuario nuevo {email}")
+
+    if not user.activo:
+        return volver_al_login("usuario_inactivo")
+
+    # 4) Emitir NUESTROS tokens
+    user.ultimo_acceso = datetime.now(timezone.utc)
+    db.commit()
+    db.refresh(user)
+
+    tokens = _crear_tokens(db, user)
+
+    # 5) Volver al frontend con los tokens
+    params = urlencode({
+        "access_token": tokens["access_token"],
+        "refresh_token": tokens.get("refresh_token", ""),
+        "redirect": destino or "",
+    })
+    return RedirectResponse(f"{frontend}/auth/callback?{params}")

@@ -1,7 +1,7 @@
 # app/schemas/examenes.py
 # VERSION ACTUALIZADA - CON HISTORIAL Y COMPARTIR
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, AliasChoices
 from typing import Optional, List, Any, Dict
 from datetime import datetime
 
@@ -16,6 +16,31 @@ class AsistenciaGrupoSchema(BaseModel):
     alumno_id: str
     fecha: str
     presente: bool = True
+
+class AsistenciaItem(BaseModel):
+    """Item de asistencia tal como lo envía el cliente.
+    Campos opcionales y extra permitido para no alterar el
+    diccionario que se persiste en Grupo.asistencias."""
+    alumno_id: Optional[str] = None
+    fecha: Optional[str] = None
+    presente: bool = True
+
+    class Config:
+        extra = "allow"
+
+class AlumnoGuardarItem(BaseModel):
+    """Item de la lista de /examenes/alumnos."""
+    id: Optional[str] = None
+    dni: Optional[str] = None
+    nombres: Optional[str] = None
+    apellidos: Optional[str] = None
+    grado: Optional[str] = None
+    email: Optional[str] = None
+    grupo: Optional[str] = None
+    grupo_id: Optional[str] = None
+
+    class Config:
+        extra = "allow"
 
 class GrupoCreate(BaseModel):
     nombre: str
@@ -42,6 +67,15 @@ class GrupoResponse(BaseModel):
 
     class Config:
         from_attributes = True
+
+
+class RecursoGrupoCreate(BaseModel):
+    """Body de /examenes/grupos/{grupo_id}/recursos."""
+    tipo: str = "link"
+    nombre: str = "Sin nombre"
+    descripcion: str = ""
+    url: Optional[str] = None
+    contenido: str = ""
 
 
 # ========== PREGUNTA ==========
@@ -105,10 +139,23 @@ class PreguntaResponse(PreguntaBase):
 
 # ========== EXAMEN ==========
 class ConfiguracionExamen(BaseModel):
-    aleatorizarPreguntas: bool = False
-    aleatorizarOpciones: bool = False
-    preguntasPorExamen: int = 0
-    mostrarUnaSolaPregunta: bool = False
+    # ✅ FIX: los nombres se alinearon a snake_case, que es lo que envía el
+    # frontend (CONFIGURACION_EXAMEN_DEFAULT) y lo que lee ExamenActivo.
+    # Antes 6 campos estaban en camelCase, así que Pydantic los descartaba y
+    # los ajustes de aleatorización / una-pregunta-por-vez nunca se guardaban.
+    # Se aceptan además los nombres legacy camelCase por compatibilidad.
+    aleatorizar_preguntas: bool = Field(
+        False, validation_alias=AliasChoices("aleatorizar_preguntas", "aleatorizarPreguntas")
+    )
+    aleatorizar_opciones: bool = Field(
+        False, validation_alias=AliasChoices("aleatorizar_opciones", "aleatorizarOpciones")
+    )
+    preguntas_por_examen: int = Field(
+        0, validation_alias=AliasChoices("preguntas_por_examen", "preguntasPorExamen")
+    )
+    mostrar_una_sola_pregunta: bool = Field(
+        False, validation_alias=AliasChoices("mostrar_una_sola_pregunta", "mostrarUnaSolaPregunta")
+    )
     mostrar_resultados: bool = True
     mostrar_respuestas: bool = False
     detectar_copy_paste: bool = False
@@ -119,8 +166,12 @@ class ConfiguracionExamen(BaseModel):
     limite_violaciones: int = 3
     accion_violaciones: str = "anular"
     password_examen: Optional[str] = None
-    modoEstricto: bool = True
-    umbralTrampa: int = 3
+    modo_estricto: bool = Field(
+        True, validation_alias=AliasChoices("modo_estricto", "modoEstricto")
+    )
+    umbral_trampa: int = Field(
+        3, validation_alias=AliasChoices("umbral_trampa", "umbralTrampa")
+    )
     acceso_publico: bool = False
     anonimo: bool = False
 
@@ -184,6 +235,8 @@ class ResultadoCreate(BaseModel):
     eventos_seguridad: Optional[List[Dict]] = None
     entregado_por_tiempo: bool = False
     estado: str = 'COMPLETADO'
+    # ✅ Autoridad de tiempo: id del intento iniciado en el servidor.
+    intento_id: Optional[str] = None
 
 class ResultadoResponse(BaseModel):
     id: str
@@ -202,10 +255,41 @@ class ResultadoResponse(BaseModel):
     tiempo_restante: int = 0
     violaciones: int
     estado: str
+    entregado_por_tiempo: bool = False
     entregado_en: Optional[datetime] = None
 
     class Config:
         from_attributes = True
+
+
+# ========== ACCESO PÚBLICO A EXÁMENES ==========
+class VerificarPasswordRequest(BaseModel):
+    """Body de /examenes/publico/{codigo}/verificar-password."""
+    password: Optional[str] = None
+
+
+class ResultadoPublicoRequest(BaseModel):
+    """Body de /examenes/publico/{codigo}/resultado (sin login)."""
+    password: Optional[str] = None
+    respuestas: Dict[str, Any] = {}
+    alumno_nombre: str = 'Participante'
+    alumno_id: Optional[str] = 'publico'
+    alumno_grado: str = ''
+    alumno_dni: str = ''
+    tiempo_usado: int = 0
+    violaciones: int = 0
+    intento_id: Optional[str] = None
+
+
+class IntentoExamenResponse(BaseModel):
+    """Respuesta al iniciar/reanudar un intento."""
+    intento_id: str
+    examen_id: str
+    expira_en: datetime
+    segundos_restantes: int
+    tiempo_limite: int
+    intentos_permitidos: int
+    intentos_usados: int
 
 
 # ========== HISTORIAL DE COMPARTICIONES ==========
@@ -243,6 +327,17 @@ class CompartirAlumnosRequest(BaseModel):
     grupo_id: str
     alumnos_ids: List[str]
     session_id: str
+
+
+class VincularGrupoCarpetaRequest(BaseModel):
+    """Body de /examenes/sincronizar/vincular."""
+    session_id: Optional[str] = None
+    grupo_id: Optional[str] = None
+
+
+class SincronizarIniciarRequest(BaseModel):
+    """Body de /examenes/sincronizar/iniciar."""
+    session_id: Optional[str] = None
 
 
 # ========== ALUMNOS CONECTADOS ==========

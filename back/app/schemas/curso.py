@@ -358,10 +358,12 @@ class EvaluacionLeccionResponse(BaseModel):
 class LeccionBloqueadaResponse(BaseModel):
     bloqueada: bool
     tipo_bloqueo: str
-    razon: str
-    fecha_liberacion: Optional[datetime]
-    evaluacion_pendiente: Optional[bool]
-    lecciones_requeridas: Optional[List[str]]
+    # ✅ FIX: `razon` es None cuando la lección NO está bloqueada.
+    # Declararlo `str` provocaba ResponseValidationError (500) en ese caso.
+    razon: Optional[str] = None
+    fecha_liberacion: Optional[datetime] = None
+    evaluacion_pendiente: Optional[bool] = None
+    lecciones_requeridas: Optional[List[str]] = None
 
 
 # =============================================
@@ -420,3 +422,41 @@ class AsignarNotaRequest(BaseModel):
 class MensajeResponse(BaseModel):
     mensaje: str
     ok: bool = True
+
+
+class LiberarLeccionRequest(BaseModel):
+    """Body opcional de /cursos/{curso_id}/lecciones/{leccion_id}/liberar."""
+    estudiante_id: Optional[str] = None
+
+
+# =============================================
+# SCHEMAS DE COMENTARIOS POR LECCIÓN
+# =============================================
+
+class ComentarioLeccionCreate(BaseModel):
+    contenido: str = Field(..., min_length=1, max_length=2000)
+
+
+class ComentarioLeccionResponse(BaseModel):
+    id: str
+    curso_id: str
+    leccion_id: str
+    usuario_id: str
+    usuario_nombre: Optional[str] = None
+    usuario_rol: Optional[str] = None
+    contenido: str
+    likes_count: int = 0
+    liked_by_me: bool = False
+    es_mio: bool = False
+    puede_eliminar: bool = False
+    created_at: Optional[datetime] = None
+    updated_at: Optional[datetime] = None
+
+    class Config:
+        from_attributes = True
+
+
+class ComentarioLeccionLikeResponse(BaseModel):
+    comentario_id: str
+    liked: bool
+    likes_count: int = 0

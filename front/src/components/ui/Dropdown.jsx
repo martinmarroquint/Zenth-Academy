@@ -52,11 +52,6 @@ const Dropdown = ({
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
-  // Resetear highlighted index cuando cambian las opciones filtradas
-  useEffect(() => {
-    setHighlightedIndex(-1);
-  }, [filteredOptions]);
-
   // Scroll al elemento destacado
   useEffect(() => {
     if (highlightedIndex >= 0 && listRef.current) {
@@ -123,6 +118,7 @@ const Dropdown = ({
     e.stopPropagation();
     onChange('');
     setSearchTerm('');
+    setHighlightedIndex(-1);
     if (inputRef.current) {
       inputRef.current.focus();
     }
@@ -131,6 +127,7 @@ const Dropdown = ({
   const handleInputChange = (e) => {
     const value = e.target.value;
     setSearchTerm(value);
+    setHighlightedIndex(-1);
     if (!isOpen) {
       setIsOpen(true);
     }
@@ -324,4 +321,4 @@ const Dropdown = ({
   );
 };
 
-export default Dropdown;
+export default React.memo(Dropdown);

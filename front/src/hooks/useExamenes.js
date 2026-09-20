@@ -16,7 +16,7 @@ const useExamenes = () => {
     setCargando(true);
     setError(null);
     try {
-      const data = await examenesService.listar(filtros);
+      const data = await examenesService.listarExamenes(filtros);
       setExamenes(data || []);
       return data;
     } catch (e) {
@@ -59,7 +59,7 @@ const useExamenes = () => {
   const crearExamen = useCallback(async (datos) => {
     setError(null);
     try {
-      const creada = await examenesService.crear(datos);
+      const creada = await examenesService.crearExamen(datos);
       setExamenes(prev => [creada, ...prev]);
       return creada;
     } catch (e) {
@@ -75,7 +75,7 @@ const useExamenes = () => {
   const actualizarExamen = useCallback(async (id, datos) => {
     setError(null);
     try {
-      const actualizado = await examenesService.actualizar(id, datos);
+      const actualizado = await examenesService.actualizarExamen(id, datos);
       setExamenes(prev => prev.map(e => e.id === id ? actualizado : e));
       return actualizado;
     } catch (e) {
@@ -91,7 +91,7 @@ const useExamenes = () => {
   const eliminarExamen = useCallback(async (id) => {
     setError(null);
     try {
-      await examenesService.eliminar(id);
+      await examenesService.eliminarExamen(id);
       setExamenes(prev => prev.filter(e => e.id !== id));
     } catch (e) {
       setError(e.message);
@@ -106,7 +106,7 @@ const useExamenes = () => {
   const obtenerExamen = useCallback(async (id) => {
     setError(null);
     try {
-      return await examenesService.obtener(id);
+      return await examenesService.obtenerExamen(id);
     } catch (e) {
       setError(e.message);
       console.error('Error obteniendo examen:', e);
@@ -134,7 +134,7 @@ const useExamenes = () => {
   const obtenerResultados = useCallback(async (examenId) => {
     setError(null);
     try {
-      return await examenesService.obtenerResultados(examenId);
+      return await examenesService.listarResultados(examenId);
     } catch (e) {
       setError(e.message);
       console.error('Error obteniendo resultados:', e);

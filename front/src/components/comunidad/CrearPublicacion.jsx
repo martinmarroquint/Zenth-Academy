@@ -59,7 +59,7 @@ const CrearPublicacion = ({ publicacion = null, cursoId = null, onGuardar, onVol
         <button
           onClick={handleGuardar}
           disabled={cargando || !datos.titulo.trim()}
-          className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors flex items-center gap-2 text-sm disabled:opacity-50"
+          className="px-4 py-2 bg-[#0f766e] text-white rounded-lg hover:bg-[#0d5e57] transition-colors flex items-center gap-2 text-sm disabled:opacity-50"
         >
           {cargando ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
           {cargando ? 'Publicando...' : 'Publicar'}
@@ -107,7 +107,7 @@ const CrearPublicacion = ({ publicacion = null, cursoId = null, onGuardar, onVol
               type="checkbox"
               checked={datos.destacado}
               onChange={(e) => setDatos({ ...datos, destacado: e.target.checked })}
-              className="w-4 h-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
+              className="w-4 h-4 rounded border-gray-300 text-[#0f766e] focus:ring-[#0f766e]/20"
             />
             Destacar publicación
           </label>

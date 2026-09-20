@@ -13,13 +13,14 @@ import {
 } from 'lucide-react';
 import examenesService from '../../services/examenesService';
 import cursosService from '../../services/cursosService';
-import { authService } from '../../services/authService';
 import CreadorExamen from './CreadorExamen';
 import ResultadosExamen from './ResultadosExamen';
 import { COLOR_PRIMARIO } from './constantes';
+import { useFeedback } from '../../hooks/useFeedback';
 
-const PanelAdminExamenes = ({ onSalir }) => {
-  const usuario = authService.getCurrentUser();
+const PanelAdminExamenes = ({ onSalir: _onSalir }) => {
+
+  const { confirmar } = useFeedback();
 
   // =============================================
   // ESTADO
@@ -113,7 +114,7 @@ const PanelAdminExamenes = ({ onSalir }) => {
 
   const guardarExamen = async (datosExamen) => {
     try {
-      const { grupoId, ...datos } = datosExamen;
+      const { grupoId: _grupoId, ...datos } = datosExamen;
       if (examenEditar) {
         await examenesService.actualizarExamen(examenEditar.id, { ...datos, grupo_id: null });
         mostrarMensaje('ok', 'Examen actualizado correctamente');
@@ -142,7 +143,13 @@ const PanelAdminExamenes = ({ onSalir }) => {
   };
 
   const eliminarExamen = async (examen) => {
-    if (!window.confirm(`Eliminar el examen "${examen.titulo}"? Se borraran tambien sus preguntas y resultados.`)) return;
+    const ok = await confirmar({
+      titulo: 'Eliminar examen',
+      mensaje: `¿Eliminar el examen "${examen.titulo}"? Se borrarán también sus preguntas y resultados.`,
+      confirmText: 'Eliminar',
+      variant: 'danger',
+    });
+    if (!ok) return;
     try {
       await examenesService.eliminarExamen(examen.id);
       mostrarMensaje('ok', 'Examen eliminado');
@@ -303,8 +310,8 @@ const PanelAdminExamenes = ({ onSalir }) => {
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-8">
         <div className="flex items-center gap-3">
-          <div className="w-11 h-11 rounded-2xl bg-indigo-50 flex items-center justify-center flex-shrink-0">
-            <FileQuestion className="w-5 h-5 text-indigo-500" />
+          <div className="w-11 h-11 rounded-2xl bg-[#e6f4f2] flex items-center justify-center flex-shrink-0">
+            <FileQuestion className="w-5 h-5 text-[#0f766e]" />
           </div>
           <div>
             <h1 className="text-2xl font-semibold text-gray-900 tracking-tight">Examenes</h1>
@@ -325,8 +332,8 @@ const PanelAdminExamenes = ({ onSalir }) => {
       {/* KPIs */}
       <div className="grid grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4 mb-8">
         <div className="bg-white rounded-2xl border border-gray-100 p-4 flex items-center gap-3 shadow-sm">
-          <div className="w-10 h-10 rounded-xl bg-indigo-50 flex items-center justify-center flex-shrink-0">
-            <FileQuestion className="w-5 h-5 text-indigo-500" />
+          <div className="w-10 h-10 rounded-xl bg-[#e6f4f2] flex items-center justify-center flex-shrink-0">
+            <FileQuestion className="w-5 h-5 text-[#0f766e]" />
           </div>
           <div className="min-w-0">
             <p className="text-xl font-bold text-gray-900 leading-tight">{totales.total}</p>
@@ -362,7 +369,7 @@ const PanelAdminExamenes = ({ onSalir }) => {
             value={busqueda}
             onChange={(e) => setBusqueda(e.target.value)}
             placeholder="Buscar por titulo o codigo..."
-            className="w-full pl-9 pr-4 py-2.5 text-sm bg-white border border-gray-200 rounded-xl outline-none focus:border-indigo-300 focus:ring-2 focus:ring-indigo-100 transition-all"
+            className="w-full pl-9 pr-4 py-2.5 text-sm bg-white border border-gray-200 rounded-xl outline-none focus:border-[#0f766e] focus:ring-2 focus:ring-[#0f766e]/20 transition-all"
           />
         </div>
         <div className="flex items-center gap-2 flex-wrap">
@@ -443,7 +450,7 @@ const PanelAdminExamenes = ({ onSalir }) => {
                   <button
                     onClick={() => abrirAsignar(examen)}
                     title="Asignar a curso"
-                    className="inline-flex items-center gap-1.5 px-2.5 py-2 text-[11px] font-medium text-indigo-600 bg-indigo-50 hover:bg-indigo-100 rounded-lg transition-colors"
+                    className="inline-flex items-center gap-1.5 px-2.5 py-2 text-[11px] font-medium text-[#0f766e] bg-[#e6f4f2] hover:bg-[#d1ece8] rounded-lg transition-colors"
                   >
                     <Link2 className="w-3.5 h-3.5" />Asignar
                   </button>
@@ -623,7 +630,7 @@ const PanelAdminExamenes = ({ onSalir }) => {
                 <select
                   value={cursoSel}
                   onChange={(e) => seleccionarCurso(e.target.value)}
-                  className="w-full px-3.5 py-2.5 text-sm bg-white border border-gray-200 rounded-xl outline-none focus:border-indigo-300 focus:ring-2 focus:ring-indigo-100 transition-all"
+                  className="w-full px-3.5 py-2.5 text-sm bg-white border border-gray-200 rounded-xl outline-none focus:border-[#0f766e] focus:ring-2 focus:ring-[#0f766e]/20 transition-all"
                 >
                   <option value="">Selecciona un curso...</option>
                   {cursos.map(c => (
@@ -642,7 +649,7 @@ const PanelAdminExamenes = ({ onSalir }) => {
                   <select
                     value={moduloSel}
                     onChange={(e) => { setModuloSel(e.target.value); setLeccionSel('__nueva__'); }}
-                    className="w-full px-3.5 py-2.5 text-sm bg-white border border-gray-200 rounded-xl outline-none focus:border-indigo-300 focus:ring-2 focus:ring-indigo-100 transition-all"
+                    className="w-full px-3.5 py-2.5 text-sm bg-white border border-gray-200 rounded-xl outline-none focus:border-[#0f766e] focus:ring-2 focus:ring-[#0f766e]/20 transition-all"
                   >
                     <option value="">Selecciona un modulo...</option>
                     {(cursoData.modulos || []).map(m => (
@@ -669,7 +676,7 @@ const PanelAdminExamenes = ({ onSalir }) => {
                           setTituloLeccion(lec?.titulo || '');
                         }
                       }}
-                      className="w-full px-3.5 py-2.5 text-sm bg-white border border-gray-200 rounded-xl outline-none focus:border-indigo-300 focus:ring-2 focus:ring-indigo-100 transition-all"
+                      className="w-full px-3.5 py-2.5 text-sm bg-white border border-gray-200 rounded-xl outline-none focus:border-[#0f766e] focus:ring-2 focus:ring-[#0f766e]/20 transition-all"
                     >
                       <option value="__nueva__">Crear nueva leccion</option>
                       {leccionesModulo(moduloSel).map(l => (
@@ -684,12 +691,12 @@ const PanelAdminExamenes = ({ onSalir }) => {
                       value={tituloLeccion}
                       onChange={(e) => setTituloLeccion(e.target.value)}
                       placeholder="Titulo de la leccion"
-                      className="w-full px-3.5 py-2.5 text-sm bg-white border border-gray-200 rounded-xl outline-none focus:border-indigo-300 focus:ring-2 focus:ring-indigo-100 transition-all"
+                      className="w-full px-3.5 py-2.5 text-sm bg-white border border-gray-200 rounded-xl outline-none focus:border-[#0f766e] focus:ring-2 focus:ring-[#0f766e]/20 transition-all"
                     />
                   </div>
-                  <div className="flex items-start gap-2 bg-indigo-50 rounded-xl p-3">
-                    <Layers className="w-4 h-4 text-indigo-400 flex-shrink-0 mt-0.5" />
-                    <p className="text-[11px] text-indigo-600 leading-relaxed">
+                  <div className="flex items-start gap-2 bg-[#e6f4f2] rounded-xl p-3">
+                    <Layers className="w-4 h-4 text-[#0f766e] flex-shrink-0 mt-0.5" />
+                    <p className="text-[11px] text-[#0f766e] leading-relaxed">
                       El examen se enlazara a la leccion. Los estudiantes la veran dentro del curso y el progreso se actualizara al aprobarla.
                     </p>
                   </div>

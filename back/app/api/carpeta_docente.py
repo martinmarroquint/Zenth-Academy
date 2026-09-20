@@ -9,6 +9,7 @@ import logging
 
 from app.database import get_db
 from app.core.dependencies import require_docente
+from app.core.errors import error_interno
 from app.models.carpeta_docente import CarpetaDocente
 from app.schemas.carpeta_docente import (
     CarpetaDocenteCreate, CarpetaDocenteUpdate,
@@ -54,8 +55,7 @@ async def obtener_carpeta(
         return _carpeta_to_dict(carpeta)
     except Exception as e:
         db.rollback()
-        logger.error(f"Error obteniendo carpeta: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail=error_interno(e, "Error obteniendo carpeta"))
 
 
 @router.put("/{id}", response_model=CarpetaDocenteResponse)
@@ -79,8 +79,7 @@ async def actualizar_carpeta(
         raise
     except Exception as e:
         db.rollback()
-        logger.error(f"Error actualizando carpeta: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail=error_interno(e, "Error actualizando carpeta"))
 
 
 @router.post("/{docente_id}/sync", response_model=CarpetaDocenteResponse)
@@ -117,8 +116,7 @@ async def sincronizar_carpeta(
         return _carpeta_to_dict(carpeta)
     except Exception as e:
         db.rollback()
-        logger.error(f"Error sincronizando carpeta: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail=error_interno(e, "Error sincronizando carpeta"))
 
 
 @router.delete("/{id}", response_model=MensajeResponse)
@@ -138,5 +136,4 @@ async def eliminar_carpeta(
         raise
     except Exception as e:
         db.rollback()
-        logger.error(f"Error eliminando carpeta: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail=error_interno(e, "Error eliminando carpeta"))

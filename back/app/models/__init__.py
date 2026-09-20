@@ -10,30 +10,33 @@ from app.models.grupo import Grupo
 from app.models.curso import Curso, InscripcionCurso
 from app.models.pizarra import Pizarra, SesionPizarra
 from app.models.post import Post, Comentario, LikePost
+from app.models.comentario_leccion import ComentarioLeccion, LikeComentarioLeccion  # ✅ COMENTARIOS POR LECCIÓN
 from app.models.certificado import Certificado
 from app.models.historial_comparticion import HistorialComparticion
 from app.models.carpeta_docente import CarpetaDocente
 from app.models.integracion_edm import IntegracionEDM, EventoIntegracion
-from app.models.empresa import Empresa
-from app.models.cliente import Cliente
-from app.models.personal import Personal
 from app.models.material_compartido import MaterialCompartido  # ✅ NUEVO
 from app.models.solicitud_docente import SolicitudDocente  # ✅ SOLICITUDES DOCENTE
 from app.models.login_geo_log import LoginGeoLog  # ✅ GEOLOCALIZACION
+from app.models.refresh_token import RefreshToken  # ✅ REFRESH TOKENS (JWT)
+from app.models.intento_examen import IntentoExamen  # ✅ INTENTOS DE EXAMEN (autoridad de tiempo)
 
 
 __all__ = [
-    "Usuario", "Empresa", "Cliente", "Personal",
+    "Usuario",
     "Alumno",  # ✅ Modelo principal
     "AlumnoExamen",  # ✅ Legacy - solo lectura
     "Examen", "Pregunta", "ResultadoExamen", "Grupo",
     "Pizarra", "SesionPizarra",
     "Curso", "InscripcionCurso",
     "Post", "Comentario", "LikePost",
+    "ComentarioLeccion", "LikeComentarioLeccion",  # ✅ COMENTARIOS POR LECCIÓN
     "Certificado",
     "IntegracionEDM", "EventoIntegracion",
     "HistorialComparticion", "CarpetaDocente",
     "MaterialCompartido",  # ✅ NUEVO
     "SolicitudDocente",  # ✅ SOLICITUDES DOCENTE
     "LoginGeoLog",  # ✅ GEOLOCALIZACION
+    "RefreshToken",  # ✅ REFRESH TOKENS (JWT)
+    "IntentoExamen",  # ✅ INTENTOS DE EXAMEN (autoridad de tiempo)
 ]

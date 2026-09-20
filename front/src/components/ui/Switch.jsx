@@ -61,4 +61,4 @@ const Switch = ({
   );
 };
 
-export default Switch;
+export default React.memo(Switch);

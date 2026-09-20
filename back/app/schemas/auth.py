@@ -11,6 +11,11 @@ class LoginRequest(BaseModel):
     password: str = Field(..., min_length=6)
 
 
+class GoogleLoginRequest(BaseModel):
+    """Body de POST /auth/google: ID token (credential) de Google Identity Services."""
+    credential: str = Field(..., min_length=20)
+
+
 class TokenResponse(BaseModel):
     access_token: str
     refresh_token: Optional[str] = None

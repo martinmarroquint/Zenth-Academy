@@ -9,6 +9,7 @@ import logging
 
 from app.database import get_db
 from app.core.dependencies import require_roles
+from app.core.errors import error_interno
 from app.models.certificado import Certificado
 from app.schemas.certificado import (
     CertificadoCreate, CertificadoUpdate, CertificadoResponse, MensajeResponse
@@ -47,7 +48,20 @@ async def listar_certificados(
 ):
     try:
         query = db.query(Certificado)
-        if estudiante_id:
+        # ✅ SEGURIDAD: un estudiante SOLO puede ver sus propios certificados.
+        # Antes podía pasar ?estudiante_id=<otro> y listar certificados ajenos (IDOR).
+        if current_user.rol == "estudiante":
+            if estudiante_id and str(estudiante_id) != str(current_user.id):
+                logger.warning(
+                    f"Acceso denegado: estudiante {current_user.id} intentó listar "
+                    f"certificados de estudiante_id={estudiante_id}"
+                )
+                raise HTTPException(
+                    status_code=403,
+                    detail="No tienes permiso para ver los certificados de otro estudiante"
+                )
+            query = query.filter(Certificado.estudiante_id == str(current_user.id))
+        elif estudiante_id:
             query = query.filter(Certificado.estudiante_id == estudiante_id)
         if curso_id:
             query = query.filter(Certificado.curso_id == curso_id)
@@ -55,9 +69,10 @@ async def listar_certificados(
             query = query.filter(Certificado.estado == estado)
         certificados = query.order_by(Certificado.created_at.desc()).offset(offset).limit(limit).all()
         return [_cert_to_dict(c) for c in certificados]
+    except HTTPException:
+        raise
     except Exception as e:
-        logger.error(f"Error listando certificados: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail=error_interno(e, "Error listando certificados"))
 
 
 @router.get("/{id}", response_model=CertificadoResponse)
@@ -70,12 +85,17 @@ async def obtener_certificado(
         certificado = db.query(Certificado).filter(Certificado.id == id).first()
         if not certificado:
             raise HTTPException(status_code=404, detail="Certificado no encontrado")
+        # ✅ SEGURIDAD: un estudiante solo puede ver SU certificado
+        if current_user.rol == "estudiante" and str(certificado.estudiante_id) != str(current_user.id):
+            raise HTTPException(
+                status_code=403,
+                detail="No tienes permiso para ver este certificado"
+            )
         return _cert_to_dict(certificado)
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"Error obteniendo certificado: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail=error_interno(e, "Error obteniendo certificado"))
 
 
 @router.post("/", response_model=CertificadoResponse, status_code=201)
@@ -110,8 +130,7 @@ async def crear_certificado(
         raise
     except Exception as e:
         db.rollback()
-        logger.error(f"Error creando certificado: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail=error_interno(e, "Error creando certificado"))
 
 
 @router.put("/{id}", response_model=CertificadoResponse)
@@ -135,8 +154,7 @@ async def actualizar_certificado(
         raise
     except Exception as e:
         db.rollback()
-        logger.error(f"Error actualizando certificado: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail=error_interno(e, "Error actualizando certificado"))
 
 
 @router.delete("/{id}", response_model=MensajeResponse)
@@ -157,5 +175,4 @@ async def eliminar_certificado(
         raise
     except Exception as e:
         db.rollback()
-        logger.error(f"Error cancelando certificado: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail=error_interno(e, "Error cancelando certificado"))

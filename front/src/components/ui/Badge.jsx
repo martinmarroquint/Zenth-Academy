@@ -39,4 +39,5 @@ const Badge = ({
   );
 };
 
-export default Badge;
+// ✅ RENDIMIENTO: memoizado (componente puro, no necesita re-render si las props no cambian)
+export default React.memo(Badge);

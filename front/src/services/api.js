@@ -175,9 +175,9 @@ export const apiClient = {
           localStorage.removeItem('userData');
           localStorage.removeItem('refresh_token');
 
-          // Redirigir al login si no estamos ya en login
-          if (!window.location.pathname.includes('/login')) {
-            window.location.href = '/login';
+          // Redirigir al inicio (login único) si no estamos ya ahí
+          if (window.location.pathname !== '/') {
+            window.location.href = '/';
           }
         }
         
@@ -191,7 +191,11 @@ export const apiClient = {
           errorMessage = await response.text().catch(() => errorMessage);
         }
         
-        throw new Error(errorMessage);
+        // ✅ Adjuntar el status para que los llamadores distingan errores
+        // permanentes (4xx) de transitorios (red / 5xx).
+        const httpError = new Error(errorMessage);
+        httpError.status = response.status;
+        throw httpError;
       }
       
       // Si la respuesta es 204 No Content
@@ -522,7 +526,7 @@ export const logout = () => {
   localStorage.removeItem('user');
   localStorage.removeItem('userData');
   localStorage.removeItem('refresh_token');
-  window.location.href = '/login';
+  window.location.href = '/';
 };
 
 // =====================================================

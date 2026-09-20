@@ -10,6 +10,7 @@ from datetime import datetime, timezone
 
 from app.database import get_db
 from app.core.dependencies import require_docente
+from app.core.errors import error_interno
 from app.models.historial_comparticion import HistorialComparticion
 from app.schemas.examenes import (
     HistorialComparticionCreate,
@@ -44,8 +45,7 @@ def listar_historial(
         
         return query.order_by(HistorialComparticion.fecha_inicio.desc()).all()
     except Exception as e:
-        logger.error(f"Error en listar_historial: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail=error_interno(e, "Error en listar_historial"))
 
 
 @router.get("/comparticiones/{comparticion_id}", response_model=HistorialComparticionResponse)
@@ -59,8 +59,7 @@ def obtener_historial(comparticion_id: str, db: Session = Depends(get_db)):
             raise HTTPException(status_code=404, detail="No encontrado")
         return historial
     except Exception as e:
-        logger.error(f"Error en obtener_historial: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail=error_interno(e, "Error en obtener_historial"))
 
 
 @router.post("/comparticiones", response_model=HistorialComparticionResponse, status_code=201)
@@ -85,8 +84,7 @@ def crear_historial(data: HistorialComparticionCreate, db: Session = Depends(get
         return historial
     except Exception as e:
         db.rollback()
-        logger.error(f"Error en crear_historial: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail=error_interno(e, "Error en crear_historial"))
 
 
 @router.put("/comparticiones/{comparticion_id}/cerrar", response_model=MensajeResponse)
@@ -131,5 +129,4 @@ def cerrar_historial(comparticion_id: str, db: Session = Depends(get_db)):
         raise
     except Exception as e:
         db.rollback()
-        logger.error(f"❌ Error en cerrar_historial: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail=error_interno(e, "❌ Error en cerrar_historial"))

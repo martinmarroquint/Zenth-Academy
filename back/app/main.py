@@ -23,9 +23,6 @@ from app.database import (
 )
 from app.api import api_router
 
-# MIDDLEWARE MULTI-EMPRESA
-from app.core.middleware_empresa import EmpresaContextMiddleware
-
 # =====================================================
 # CONFIGURACION DE LOGGING
 # =====================================================
@@ -147,9 +144,6 @@ app.add_middleware(
     compresslevel=6
 )
 
-app.add_middleware(EmpresaContextMiddleware)
-logger.info("Middleware multi-empresa registrado")
-
 # =====================================================
 # MIDDLEWARE DE SEGURIDAD - HEADERS
 # =====================================================
@@ -266,6 +260,13 @@ async def system_info():
 
 @app.exception_handler(404)
 async def custom_404_handler(request: Request, exc):
+    # ✅ Si el 404 viene de un endpoint real (HTTPException con `detail`),
+    # se conserva el mensaje original (p.ej. "Examen no encontrado"). Antes
+    # se reemplazaba TODO por "El endpoint solicitado no existe", ocultando
+    # errores legítimos al frontend.
+    detail = getattr(exc, "detail", None)
+    if detail and str(detail).lower() not in ("not found", "404"):
+        return JSONResponse(status_code=404, content={"detail": detail})
     return JSONResponse(status_code=404, content={
         "error": "Not Found",
         "message": "El endpoint solicitado no existe",
@@ -298,7 +299,18 @@ async def startup_event():
     logger.info(f"Debug: {settings.DEBUG}")
     logger.info(f"Base de datos: {settings.SUPABASE_DB_HOST}:{settings.SUPABASE_DB_PORT}/{settings.SUPABASE_DB_NAME}")
     logger.info(f"CORS origenes: {len(ALLOWED_ORIGINS)}")
-    logger.info(f"Middleware multi-empresa: ACTIVO")
+
+    # =============================================
+    # ✅ MODO SQLITE (DESARROLLO LOCAL): crear todas las tablas
+    # =============================================
+    if settings.SUPABASE_DATABASE_URL.lower().startswith("sqlite"):
+        try:
+            from app.database import engine as _sqlite_engine, Base as _Base
+            import app.models  # noqa: F401  -> registra todos los modelos
+            _Base.metadata.create_all(bind=_sqlite_engine)
+            logger.info("✅ Modo SQLite: tablas creadas/verificadas")
+        except Exception as e:
+            logger.error(f"❌ Error creando tablas en SQLite: {e}")
     
     # =============================================
     # ✅ FORZAR RECARGA DE METADATOS DE SQLAlchemy
@@ -401,6 +413,169 @@ async def startup_event():
         import traceback as tb
         logger.warning(tb.format_exc())
     
+    # =============================================
+    # ✅ MIGRACIÓN: docente_id en tabla examenes (ownership de exámenes)
+    # =============================================
+    try:
+        from app.database import engine as _engine
+        from sqlalchemy import inspect as _inspect, text as _text
+        
+        _insp = _inspect(_engine)
+        if 'examenes' in _insp.get_table_names():
+            _cols = [c['name'] for c in _insp.get_columns('examenes')]
+            if 'docente_id' not in _cols:
+                logger.info("🔄 Agregando columna 'docente_id' a tabla examenes...")
+                with _engine.connect() as _conn:
+                    _conn.execute(_text(
+                        "ALTER TABLE examenes ADD COLUMN IF NOT EXISTS docente_id VARCHAR(100);"
+                    ))
+                    _conn.execute(_text(
+                        "CREATE INDEX IF NOT EXISTS idx_examen_docente_id ON examenes(docente_id);"
+                    ))
+                    # Backfill: derivar dueño desde el grupo cuando sea posible
+                    try:
+                        _conn.execute(_text("""
+                            UPDATE examenes e
+                            SET docente_id = g.docente_id
+                            FROM grupos g
+                            WHERE e.grupo_id = g.id
+                              AND e.docente_id IS NULL
+                              AND g.docente_id IS NOT NULL
+                              AND g.docente_id <> 'default';
+                        """))
+                    except Exception as _bf:
+                        logger.warning(f"⚠️ No se pudo hacer backfill de docente_id: {_bf}")
+                    _conn.commit()
+                logger.info("✅ Columna 'docente_id' agregada a tabla examenes")
+            else:
+                logger.info("✅ Columna 'docente_id' ya existe en tabla examenes")
+    except Exception as e:
+        logger.warning(f"⚠️ Error migrando docente_id en examenes: {e}")
+
+    # =============================================
+    # ✅ SINCRONIZACIÓN DE ESQUEMA (evita "schema drift" con Supabase)
+    # 1) Crea tablas del modelo que falten (ej: login_geo_log)
+    # 2) Agrega columnas que falten en tablas existentes (ej: escala_* en preguntas)
+    # Es idempotente: no toca nada que ya exista.
+    # =============================================
+    try:
+        from app.database import engine as _eng2, Base as _Base2
+        from sqlalchemy import inspect as _insp2, text as _text2
+
+        # 1) Tablas faltantes
+        antes = set(_insp2(_eng2).get_table_names())
+        _Base2.metadata.create_all(bind=_eng2, checkfirst=True)
+        despues = set(_insp2(_eng2).get_table_names())
+        creadas = sorted(despues - antes)
+        if creadas:
+            logger.info(f"✅ Tablas creadas automáticamente: {', '.join(creadas)}")
+
+        # 2) Columnas faltantes en tablas conocidas (tipos de encuesta)
+        COLUMNAS_ESPERADAS = {
+            "preguntas": {
+                "escala_opciones": "INTEGER",
+                "escala_max": "INTEGER",
+                "escala_min": "INTEGER",
+                "escala_paso": "INTEGER",
+                "escala_min_label": "VARCHAR(100)",
+                "escala_max_label": "VARCHAR(100)",
+            },
+            # ✅ LOGIN SOCIAL (OAuth)
+            "usuarios": {
+                "auth_provider": "VARCHAR(20) DEFAULT 'local'",
+                "google_id": "VARCHAR(100)",
+                "microsoft_id": "VARCHAR(100)",
+            },
+        }
+        insp2 = _insp2(_eng2)
+        tablas_actuales = set(insp2.get_table_names())
+        for tabla, columnas in COLUMNAS_ESPERADAS.items():
+            if tabla not in tablas_actuales:
+                continue
+            existentes = {c["name"] for c in insp2.get_columns(tabla)}
+            faltan = {k: v for k, v in columnas.items() if k not in existentes}
+            if not faltan:
+                continue
+            logger.info(f"🔄 Agregando {len(faltan)} columna(s) a '{tabla}'...")
+            with _eng2.connect() as _conn2:
+                for col, tipo in faltan.items():
+                    _conn2.execute(_text2(
+                        f"ALTER TABLE {tabla} ADD COLUMN IF NOT EXISTS {col} {tipo};"
+                    ))
+                _conn2.commit()
+            logger.info(f"✅ Columnas agregadas a '{tabla}': {', '.join(faltan.keys())}")
+
+        # 3) ✅ OAUTH: permitir usuarios sin contraseña + índices únicos
+        if "usuarios" in tablas_actuales:
+            with _eng2.connect() as _conn3:
+                try:
+                    _conn3.execute(_text2(
+                        "ALTER TABLE usuarios ALTER COLUMN password_hash DROP NOT NULL;"
+                    ))
+                except Exception as _e3:
+                    logger.debug(f"password_hash ya era nullable: {_e3}")
+                try:
+                    _conn3.execute(_text2(
+                        "CREATE UNIQUE INDEX IF NOT EXISTS ix_usuarios_google_id "
+                        "ON usuarios(google_id) WHERE google_id IS NOT NULL;"
+                    ))
+                    _conn3.execute(_text2(
+                        "CREATE UNIQUE INDEX IF NOT EXISTS ix_usuarios_microsoft_id "
+                        "ON usuarios(microsoft_id) WHERE microsoft_id IS NOT NULL;"
+                    ))
+                except Exception as _e3:
+                    logger.warning(f"No se pudieron crear índices OAuth: {_e3}")
+                _conn3.commit()
+    except Exception as e:
+        logger.warning(f"⚠️ Error sincronizando esquema: {e}")
+
+    # =============================================
+    # ✅ MIGRACIÓN MULTI-TENANT
+    # 1) Crea la empresa por defecto si no existe
+    # 2) Rellena usuarios con empresa_id NULL (no podían iniciar sesión)
+    # =============================================
+    try:
+        from app.database import engine as _eng3
+        from sqlalchemy import inspect as _insp3, text as _text3
+
+        _empresa_id = settings.EMPRESA_ID_DEFAULT
+        tablas3 = set(_insp3(_eng3).get_table_names())
+
+        if "empresas" in tablas3:
+            with _eng3.connect() as _c3:
+                existe = _c3.execute(
+                    _text3("SELECT 1 FROM empresas WHERE id = :eid"),
+                    {"eid": _empresa_id},
+                ).first()
+                if not existe:
+                    _c3.execute(
+                        _text3(
+                            "INSERT INTO empresas (id, nombre, subdominio, activo, plan) "
+                            "VALUES (:eid, :nom, :sub, true, 'basico') "
+                            "ON CONFLICT (id) DO NOTHING"
+                        ),
+                        {"eid": _empresa_id, "nom": "Zenth Academy", "sub": "zenth"},
+                    )
+                    _c3.commit()
+                    logger.info(f"✅ Empresa por defecto creada: {_empresa_id}")
+
+        if "usuarios" in tablas3:
+            with _eng3.connect() as _c3:
+                res = _c3.execute(
+                    _text3(
+                        "UPDATE usuarios SET empresa_id = :eid "
+                        "WHERE empresa_id IS NULL"
+                    ),
+                    {"eid": _empresa_id},
+                )
+                _c3.commit()
+                if res.rowcount:
+                    logger.info(
+                        f"✅ {res.rowcount} usuario(s) sin empresa asignados a la empresa por defecto"
+                    )
+    except Exception as e:
+        logger.warning(f"⚠️ Error migrando multi-tenant: {e}")
+
     logger.info(f"Alumnos Unificados: DISPONIBLE")
     logger.info(f"Examenes Online: DISPONIBLE")
     logger.info(f"Grupos de Clases: DISPONIBLE")

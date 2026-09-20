@@ -27,7 +27,7 @@ const CursosPage = () => {
     setVista('detalle');
   };
 
-  const handleGuardarCurso = (cursoGuardado) => {
+  const handleGuardarCurso = (_cursoGuardado) => {
     setVista('lista');
   };
 

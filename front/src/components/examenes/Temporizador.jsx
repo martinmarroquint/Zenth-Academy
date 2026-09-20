@@ -13,7 +13,6 @@ const Temporizador = ({
 }) => {
   const esUrgente = progreso < 25;
   const esAdvertencia = progreso < 50;
-  const esNormal = progreso >= 50;
 
   const getColorProgreso = () => {
     if (esUrgente) return '#DC2626';

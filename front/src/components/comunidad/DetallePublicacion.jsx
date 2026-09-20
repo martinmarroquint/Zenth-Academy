@@ -7,8 +7,10 @@ import {
 import foroService from '../../services/foroService';
 import api from '../../services/api';
 import { authService } from '../../services/authService';
+import { useFeedback } from '../../hooks/useFeedback';
 
 const DetallePublicacion = ({ publicacionId, onVolver, onEditarPublicacion }) => {
+  const { toast } = useFeedback();
   const [publicacion, setPublicacion] = useState(null);
   const [cargando, setCargando] = useState(true);
   const puedeEditar = !!onEditarPublicacion &&
@@ -49,7 +51,7 @@ const DetallePublicacion = ({ publicacionId, onVolver, onEditarPublicacion }) =>
       await cargarPublicacion();
     } catch (e) {
       console.error('Error comentando:', e);
-      alert(e.message || 'No se pudo agregar el comentario');
+      toast.error(e.message || 'No se pudo agregar el comentario');
     } finally {
       setEnviando(false);
     }
@@ -61,7 +63,7 @@ const DetallePublicacion = ({ publicacionId, onVolver, onEditarPublicacion }) =>
       await cargarPublicacion();
     } catch (e) {
       console.error('Error dando like:', e);
-      alert(e.message || 'No se pudo dar like');
+      toast.error(e.message || 'No se pudo dar like');
     }
   };
 
@@ -153,13 +155,13 @@ const DetallePublicacion = ({ publicacionId, onVolver, onEditarPublicacion }) =>
               onChange={(e) => setComentario(e.target.value)}
               placeholder="Escribe un comentario..."
               rows={3}
-              className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg outline-none focus:border-indigo-300 focus:ring-2 focus:ring-indigo-100 transition-all resize-none"
+              className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg outline-none focus:border-[#0f766e] focus:ring-2 focus:ring-[#0f766e]/20 transition-all resize-none"
             />
           </div>
           <button
             onClick={handleComentar}
             disabled={enviando || !comentario.trim()}
-            className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors flex items-center gap-2 text-sm disabled:opacity-50 self-end"
+            className="px-4 py-2 bg-[#0f766e] text-white rounded-lg hover:bg-[#0d5e57] transition-colors flex items-center gap-2 text-sm disabled:opacity-50 self-end"
           >
             {enviando ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
             Enviar

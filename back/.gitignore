@@ -6,6 +6,17 @@
 .env
 .env.*
 !.env.example
+!.env.sqlite.example
+
+# SQLite local (desarrollo sin Supabase)
+*.db
+*.db-journal
+*.sqlite
+*.sqlite3
+
+# Cache de imágenes proxy (se regenera solo)
+static/drive_cache/*
+!static/drive_cache/.gitkeep
 
 # Python
 __pycache__/
@@ -64,3 +75,5 @@ uploads/*
 !uploads/cartera/.gitkeep
 static/fotos_perfil/*
 !static/fotos_perfil/.gitkeep
+static/logos/*
+!static/logos/.gitkeep

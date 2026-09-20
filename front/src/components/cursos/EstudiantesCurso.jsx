@@ -21,8 +21,6 @@ import {
 } from 'lucide-react';
 // ✅ CORREGIDO: usar '../../services' en lugar de '../services'
 import cursosService from '../../services/cursosService';
-import certificadosService from '../../services/certificadosService';
-import { authService } from '../../services/authService';
 
 // ============================================================
 // COMPONENTE DE TOAST NOTIFICATIONS
@@ -105,7 +103,6 @@ const ConfirmModal = ({ isOpen, onClose, onConfirm, title, message, confirmText 
 // COMPONENTE PRINCIPAL
 // ============================================================
 const EstudiantesCurso = ({ cursoId }) => {
-  const usuario = authService.getCurrentUser();
   const [data, setData] = useState(null);
   const [cargando, setCargando] = useState(true);
   const [error, setError] = useState('');
@@ -279,7 +276,7 @@ const EstudiantesCurso = ({ cursoId }) => {
     setNotaEdicion(leccion.nota != null ? String(leccion.nota) : '');
   };
 
-  const guardarNota = async (leccion) => {
+  const guardarNota = async (_leccion) => {
     if (!editandoNota) return;
     const notaNum = parseFloat(notaEdicion);
     if (isNaN(notaNum) || notaNum < 0 || notaNum > 20) {
@@ -392,15 +389,6 @@ const EstudiantesCurso = ({ cursoId }) => {
   }, [data]);
 
   // Alternar orden
-  const toggleOrden = (campo) => {
-    if (ordenarPor === campo) {
-      setOrdenDireccion(ordenDireccion === 'asc' ? 'desc' : 'asc');
-    } else {
-      setOrdenarPor(campo);
-      setOrdenDireccion('asc');
-    }
-  };
-
   if (cargando) {
     return (
       <div className="flex flex-col items-center justify-center py-16">
@@ -597,7 +585,6 @@ const EstudiantesCurso = ({ cursoId }) => {
             {estudiantesPaginados.map((est) => {
               const expandido = estudianteSeleccionado === est.estudiante_id;
               const pct = Math.min(est.progreso || 0, 100);
-              const iconoEstado = est.completado ? 'completado' : (pct > 0 ? 'en_progreso' : 'sin_iniciar');
 
               return (
                 <div key={est.estudiante_id} className="bg-white rounded-xl border border-gray-200 overflow-hidden hover:shadow-md transition-shadow duration-200">

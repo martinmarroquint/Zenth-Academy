@@ -90,7 +90,7 @@ const ForoCurso = ({ cursoId }) => {
       <div className="flex flex-col sm:flex-row sm:items-center justify-between px-4 sm:px-5 py-3 sm:py-4 border-b border-gray-100 gap-3">
         <div className="min-w-0">
           <h3 className="font-semibold text-gray-900 flex items-center gap-2">
-            <MessageCircle className="w-4 h-4 text-indigo-600" />
+            <MessageCircle className="w-4 h-4 text-[#0f766e]" />
             Foro del curso
           </h3>
           <p className="text-xs text-gray-500">Discusión entre estudiantes y docentes</p>
@@ -98,7 +98,7 @@ const ForoCurso = ({ cursoId }) => {
         {puedeCrear && (
           <button
             onClick={() => setCreando(true)}
-            className="px-3 py-2.5 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors flex items-center gap-1.5 text-xs font-medium min-h-[44px] flex-shrink-0"
+            className="px-3 py-2.5 bg-[#0f766e] text-white rounded-lg hover:bg-[#0d5e57] transition-colors flex items-center gap-1.5 text-xs font-medium min-h-[44px] flex-shrink-0"
           >
             <Plus className="w-3.5 h-3.5" />
             Nueva publicación
@@ -115,7 +115,7 @@ const ForoCurso = ({ cursoId }) => {
             value={busqueda}
             onChange={(e) => setBusqueda(e.target.value)}
             placeholder="Buscar en el foro del curso..."
-            className="w-full pl-9 pr-4 py-2 text-sm border border-gray-200 rounded-lg outline-none focus:border-indigo-300 focus:ring-2 focus:ring-indigo-100 transition-all"
+            className="w-full pl-9 pr-4 py-2 text-sm border border-gray-200 rounded-lg outline-none focus:border-[#0f766e] focus:ring-2 focus:ring-[#0f766e]/20 transition-all"
           />
         </div>
       </div>

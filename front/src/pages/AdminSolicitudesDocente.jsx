@@ -1,7 +1,7 @@
 // front/src/pages/AdminSolicitudesDocente.jsx
 // ADMIN: BANDEJA DE ENTRADA DE SOLICITUDES DE DOCENTE
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   GraduationCap, Loader2, AlertCircle, CheckCircle, XCircle,
@@ -9,8 +9,10 @@ import {
   FileText, Link as LinkIcon, MessageSquare, Check, X
 } from 'lucide-react';
 import solicitudesDocenteService from '../services/solicitudesDocenteService';
+import { useFeedback } from '../hooks/useFeedback';
 
 const AdminSolicitudesDocente = () => {
+  const { toast } = useFeedback();
   const navigate = useNavigate();
   const [solicitudes, setSolicitudes] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -19,11 +21,7 @@ const AdminSolicitudesDocente = () => {
   const [comentario, setComentario] = useState('');
   const [procesando, setProcesando] = useState(false);
 
-  useEffect(() => {
-    cargarSolicitudes();
-  }, [filtro]);
-
-  const cargarSolicitudes = async () => {
+  const cargarSolicitudes = useCallback(async () => {
     setLoading(true);
     try {
       const filtros = {};
@@ -37,7 +35,11 @@ const AdminSolicitudesDocente = () => {
     } finally {
       setLoading(false);
     }
-  };
+  }, [filtro]);
+
+  useEffect(() => {
+    cargarSolicitudes();
+  }, [cargarSolicitudes]);
 
   const handleMarcarEnRevision = async (id) => {
     try {
@@ -65,7 +67,7 @@ const AdminSolicitudesDocente = () => {
 
   const handleRechazar = async (id) => {
     if (!comentario.trim()) {
-      alert('Por favor, agrega un comentario explicando el motivo del rechazo');
+      toast.warning('Por favor, agrega un comentario explicando el motivo del rechazo');
       return;
     }
     setProcesando(true);

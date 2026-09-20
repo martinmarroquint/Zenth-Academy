@@ -33,3 +33,14 @@ services:
         sync: false
       - key: JWT_SECRET_KEY
         sync: false
+      # Login con Google (ID token / Google Identity Services)
+      # OJO: las variables con sync:false NO viajan con el código; hay que
+      # definirlas en el dashboard de Render (Environment).
+      - key: GOOGLE_CLIENT_ID
+        sync: false
+      - key: GOOGLE_CLIENT_SECRET
+        sync: false
+      - key: BACKEND_PUBLIC_URL
+        value: https://zenth-academy.onrender.com
+      - key: FRONTEND_URL
+        sync: false

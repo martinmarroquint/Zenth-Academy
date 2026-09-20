@@ -8,6 +8,9 @@ node_modules/
 .env.local
 .env.*.local
 .env.production
+# Excepción: las VITE_* son públicas (van embebidas en el bundle) y el build
+# de producción las necesita. Sin esto, el deploy no tiene VITE_GOOGLE_CLIENT_ID.
+!front/.env.production
 
 # Archivos de construcción
 dist/

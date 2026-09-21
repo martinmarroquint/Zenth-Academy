@@ -89,6 +89,22 @@ class UserUpdateRequest(BaseModel):
     rol: Optional[str] = Field(None, pattern="^(admin|docente|estudiante)$")
 
 
+class SelfUpdateRequest(BaseModel):
+    """✅ SEGURIDAD: campos que un usuario puede editar de SU PROPIO perfil.
+
+    NO incluye `rol`, `activo` ni `empresa_id`: cambiarlos es potestad del admin
+    (endpoint /auth/usuarios). Antes, `PUT /auth/me` aceptaba `rol`, lo que
+    permitía a cualquier usuario autenticado auto-ascenderse a admin.
+    """
+    nombres: Optional[str] = Field(None, max_length=200)
+    apellidos: Optional[str] = Field(None, max_length=200)
+    telefono: Optional[str] = Field(None, max_length=20)
+    foto_url: Optional[str] = Field(None, max_length=500)
+    especialidad: Optional[str] = Field(None, max_length=200)
+    biografia: Optional[str] = None
+    institucion: Optional[str] = Field(None, max_length=200)
+
+
 class ChangePasswordRequest(BaseModel):
     current_password: str = Field(..., min_length=6)
     new_password: str = Field(..., min_length=6)

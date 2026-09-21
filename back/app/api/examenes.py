@@ -156,6 +156,12 @@ def _serializar_pregunta(pregunta: Pregunta, incluir_respuestas: bool) -> dict:
 
 
 def _serializar_examen(examen: Examen, incluir_respuestas: bool) -> dict:
+    config = dict(examen.configuracion or {})
+    requiere_password = bool(config.get("password_examen"))
+    if not incluir_respuestas:
+        # ✅ SEGURIDAD: no exponer la contraseña del examen a estudiantes/público.
+        # Se envía solo el flag `requiere_password`.
+        config.pop("password_examen", None)
     return {
         "id": str(examen.id),
         "codigo": examen.codigo,
@@ -164,7 +170,8 @@ def _serializar_examen(examen: Examen, incluir_respuestas: bool) -> dict:
         "tiempo_limite": examen.tiempo_limite,
         "puntaje_aprobacion": examen.puntaje_aprobacion,
         "estado": examen.estado,
-        "configuracion": examen.configuracion or {},
+        "configuracion": config,
+        "requiere_password": requiere_password,
         "total_preguntas": len(examen.preguntas) if examen.preguntas else 0,
         "intentos_permitidos": examen.intentos_permitidos,
         "grupo_id": examen.grupo_id,
@@ -722,7 +729,7 @@ def iniciar_sesion_carpeta(
 def consultar_estado_carpeta(
     session_id: str,
     db: Session = Depends(get_db),
-    current_user: Usuario = Depends(get_current_active_user)
+    current_user: Usuario = Depends(require_docente)
 ):
     grupo = db.query(Grupo).filter(Grupo.session_activo == session_id).first()
     if grupo:
@@ -764,7 +771,7 @@ def consultar_estado_carpeta(
 def escanear_qr(
     session_id: str,
     db: Session = Depends(get_db),
-    current_user: Usuario = Depends(get_current_active_user)
+    current_user: Usuario = Depends(require_docente)
 ):
     grupos = db.query(Grupo).order_by(Grupo.created_at.desc()).all()
     return {
@@ -789,7 +796,7 @@ def escanear_qr(
 def vincular_grupo_carpeta(
     data: VincularGrupoCarpetaRequest,
     db: Session = Depends(get_db),
-    current_user: Usuario = Depends(get_current_active_user)
+    current_user: Usuario = Depends(require_docente)
 ):
     session_id = data.session_id
     grupo_id = data.grupo_id
@@ -834,7 +841,7 @@ def cerrar_sesion_carpeta(
 def obtener_alumnos_conectados(
     session_id: str,
     db: Session = Depends(get_db),
-    current_user: Usuario = Depends(get_current_active_user)
+    current_user: Usuario = Depends(require_docente)
 ):
     historial = db.query(HistorialComparticion).filter(
         HistorialComparticion.session_id == session_id,
@@ -932,7 +939,7 @@ def listar_alumnos(
     busqueda: Optional[str] = Query(None),
     grupo_id: Optional[str] = Query(None),
     db: Session = Depends(get_db),
-    current_user: Usuario = Depends(get_current_active_user)
+    current_user: Usuario = Depends(require_docente)
 ):
     query = db.query(Alumno)
     if busqueda:
@@ -951,7 +958,7 @@ def buscar_alumnos(
     q: str = Query(..., min_length=2),
     grupo_id: Optional[str] = Query(None),
     db: Session = Depends(get_db),
-    current_user: Usuario = Depends(get_current_active_user)
+    current_user: Usuario = Depends(require_docente)
 ):
     query = db.query(Alumno).filter(
         (Alumno.nombres.ilike(f"%{q}%")) |
@@ -967,7 +974,7 @@ def buscar_alumnos(
 def obtener_alumnos_por_grupo(
     grupo_id: str,
     db: Session = Depends(get_db),
-    current_user: Usuario = Depends(get_current_active_user)
+    current_user: Usuario = Depends(require_docente)
 ):
     grupo = db.query(Grupo).filter(Grupo.id == grupo_id).first()
     if not grupo:
@@ -1613,7 +1620,7 @@ def listar_examenes_bulk(
             "tiempo_limite": examen.tiempo_limite,
             "puntaje_aprobacion": examen.puntaje_aprobacion,
             "estado": examen.estado,
-            "configuracion": examen.configuracion or {},
+            "configuracion": {k: v for k, v in (examen.configuracion or {}).items() if k != "password_examen"},
             "intentos_permitidos": examen.intentos_permitidos,
             "grupo_id": examen.grupo_id,
             "created_at": examen.created_at.isoformat() if examen.created_at else None,

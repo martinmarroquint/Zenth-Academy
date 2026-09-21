@@ -31,6 +31,18 @@ def _carpeta_to_dict(carpeta: CarpetaDocente) -> dict:
     }
 
 
+def _verificar_ownership_carpeta(carpeta: CarpetaDocente, current_user) -> None:
+    """✅ SEGURIDAD: admin puede todo; un docente solo su propia carpeta."""
+    if current_user.rol == "admin":
+        return
+    if str(carpeta.docente_id) != str(current_user.id):
+        logger.warning(
+            f"Acceso denegado: docente {current_user.id} intentó gestionar "
+            f"carpeta {carpeta.id} de {carpeta.docente_id}"
+        )
+        raise HTTPException(status_code=403, detail="No tienes permiso sobre esta carpeta")
+
+
 @router.get("/{docente_id}", response_model=CarpetaDocenteResponse)
 async def obtener_carpeta(
     docente_id: str,
@@ -38,6 +50,9 @@ async def obtener_carpeta(
     current_user=Depends(require_docente)  # ✅ Roles: admin | docente
 ):
     try:
+        # ✅ SEGURIDAD: un docente solo puede ver su propia carpeta.
+        if current_user.rol != "admin" and str(docente_id) != str(current_user.id):
+            raise HTTPException(status_code=403, detail="No tienes permiso sobre esta carpeta")
         carpeta = db.query(CarpetaDocente).filter(
             CarpetaDocente.docente_id == docente_id
         ).first()
@@ -69,6 +84,7 @@ async def actualizar_carpeta(
         carpeta = db.query(CarpetaDocente).filter(CarpetaDocente.id == id).first()
         if not carpeta:
             raise HTTPException(status_code=404, detail="Carpeta no encontrada")
+        _verificar_ownership_carpeta(carpeta, current_user)
         update_data = data.model_dump(exclude_unset=True)
         for field, value in update_data.items():
             setattr(carpeta, field, value)
@@ -90,11 +106,17 @@ async def sincronizar_carpeta(
     current_user=Depends(require_docente)  # ✅ Roles: admin | docente
 ):
     try:
+        # ✅ SEGURIDAD: el dueño es SIEMPRE el usuario autenticado (admin puede indicar otro).
+        if current_user.rol != "admin":
+            docente_id = str(current_user.id)
+
         carpeta = None
         if data.carpeta_id:
             carpeta = db.query(CarpetaDocente).filter(
                 CarpetaDocente.id == data.carpeta_id
             ).first()
+            if carpeta:
+                _verificar_ownership_carpeta(carpeta, current_user)
         if not carpeta:
             carpeta = db.query(CarpetaDocente).filter(
                 CarpetaDocente.docente_id == docente_id
@@ -129,6 +151,7 @@ async def eliminar_carpeta(
         carpeta = db.query(CarpetaDocente).filter(CarpetaDocente.id == id).first()
         if not carpeta:
             raise HTTPException(status_code=404, detail="Carpeta no encontrada")
+        _verificar_ownership_carpeta(carpeta, current_user)
         db.delete(carpeta)
         db.commit()
         return {"mensaje": "Carpeta eliminada correctamente", "ok": True}

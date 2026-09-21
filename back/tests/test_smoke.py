@@ -7,8 +7,15 @@ import pytest
 @pytest.mark.integration
 def test_app_arranca(client):
     """La app responde en un endpoint público."""
-    resp = client.get("/info")
-    assert resp.status_code in (200, 404)
+    resp = client.get("/health")
+    assert resp.status_code == 200, resp.text
+
+
+@pytest.mark.integration
+def test_endpoints_diagnostico_requieren_admin(client):
+    """✅ SEGURIDAD: /info y /db-check exponen infraestructura → solo admin."""
+    assert client.get("/info").status_code == 401
+    assert client.get("/db-check").status_code == 401
 
 
 @pytest.mark.integration

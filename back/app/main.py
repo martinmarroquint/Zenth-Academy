@@ -2,7 +2,7 @@
 # VERSION COMPLETA CON TODOS LOS MÓDULOS - ECOSISTEMA ZENTH ACADEMY
 # ✅ ACTUALIZADO: CORS con dominios de Firebase, verificación y recarga forzada de metadatos en startup
 
-from fastapi import FastAPI, Request
+from fastapi import FastAPI, Request, Depends
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.responses import JSONResponse
@@ -22,6 +22,7 @@ from app.database import (
     check_db_connection
 )
 from app.api import api_router
+from app.core.dependencies import require_admin
 
 # =====================================================
 # CONFIGURACION DE LOGGING
@@ -198,41 +199,34 @@ logger.info(f"Modulos cargados: {', '.join(modulos_existentes)}")
 async def root():
     return {
         "message": settings.PROJECT_NAME,
-        "version": settings.VERSION,
-        "environment": settings.ENVIRONMENT,
         "status": "operational",
-        "jerarquia_roles": ["admin", "docente", "estudiante"],
-        "modulos": modulos_existentes,
         "timestamp": datetime.now(timezone.utc).isoformat()
     }
 
 @app.get("/health", tags=["Sistema"], summary="Health check")
 async def health_check():
-    db_connected, db_message = check_db_connection()
+    # ✅ SEGURIDAD: no exponer detalles de la BD ni el error crudo.
+    db_connected, _db_message = check_db_connection()
     return {
         "status": "healthy" if db_connected else "degraded",
         "timestamp": datetime.now(timezone.utc).isoformat(),
-        "version": settings.VERSION,
-        "environment": settings.ENVIRONMENT,
-        "components": {
-            "database": {"status": "up" if db_connected else "down", "message": db_message},
-            "api": {"status": "up", "modulos_cargados": len(modulos_existentes)}
-        }
     }
 
 @app.get("/db-check", tags=["Sistema"])
-async def db_check():
+async def db_check(_admin=Depends(require_admin)):
+    # ✅ SEGURIDAD: detalle de infraestructura solo para admin.
     return {"database_status": get_db_status(), "timestamp": datetime.now(timezone.utc).isoformat()}
 
 @app.get("/ready", tags=["Sistema"])
 async def readiness_check():
-    db_connected, db_message = check_db_connection()
+    db_connected, _db_message = check_db_connection()
     if not db_connected:
-        return JSONResponse(status_code=503, content={"status": "not ready", "reason": db_message})
+        return JSONResponse(status_code=503, content={"status": "not ready"})
     return {"status": "ready"}
 
 @app.get("/info", tags=["Sistema"])
-async def system_info():
+async def system_info(_admin=Depends(require_admin)):
+    # ✅ SEGURIDAD: inventario de módulos/CORS solo para admin.
     return {
         "name": settings.PROJECT_NAME,
         "version": settings.VERSION,
@@ -243,14 +237,6 @@ async def system_info():
         },
         "cors_origins": ALLOWED_ORIGINS,
         "modulos": modulos_existentes,
-        "examenes_online": "Disponible",
-        "grupos_clases": "Disponible",
-        "pizarra_interactiva": "Disponible",
-        "cursos_edm_team": "Disponible",
-        "foro_docentes": "Disponible",
-        "certificados": "Disponible",
-        "carpeta_docente": "Disponible",
-        "integracion_edm_team": "Disponible",
         "timestamp": datetime.now(timezone.utc).isoformat()
     }
 

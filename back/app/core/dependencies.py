@@ -167,6 +167,9 @@ def get_current_user_optional(
         user_id: str = payload.get("sub")
         if user_id is None:
             return None
+        # ✅ SEGURIDAD: solo tokens de tipo "access" (no refresh tokens).
+        if payload.get("type") != "access":
+            return None
     except JWTError:
         return None
     

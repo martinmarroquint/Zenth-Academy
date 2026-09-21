@@ -1,7 +1,7 @@
 # app/schemas/examenes.py
 # VERSION ACTUALIZADA - CON HISTORIAL Y COMPARTIR
 
-from pydantic import BaseModel, Field, AliasChoices
+from pydantic import BaseModel, Field, AliasChoices, field_validator
 from typing import Optional, List, Any, Dict
 from datetime import datetime
 
@@ -208,6 +208,14 @@ class ExamenResponse(BaseModel):
     grupo_id: Optional[str] = None
     created_at: Optional[datetime] = None
     updated_at: Optional[datetime] = None
+
+    @field_validator("configuracion")
+    @classmethod
+    def _ocultar_secretos(cls, v):
+        """✅ SEGURIDAD: nunca exponer la contraseña del examen en los listados."""
+        if isinstance(v, dict) and "password_examen" in v:
+            return {k: val for k, val in v.items() if k != "password_examen"}
+        return v
 
     class Config:
         from_attributes = True

@@ -36,6 +36,18 @@ def _cert_to_dict(cert: Certificado) -> dict:
     }
 
 
+def _verificar_ownership_certificado(cert: Certificado, current_user) -> None:
+    """✅ SEGURIDAD: admin puede todo; un docente solo los certificados que emitió."""
+    if current_user.rol == "admin":
+        return
+    if str(cert.docente_id) != str(current_user.id):
+        logger.warning(
+            f"Acceso denegado: docente {current_user.id} intentó gestionar "
+            f"certificado {cert.id} de {cert.docente_id}"
+        )
+        raise HTTPException(status_code=403, detail="No tienes permiso sobre este certificado")
+
+
 @router.get("/", response_model=List[CertificadoResponse])
 async def listar_certificados(
     estudiante_id: Optional[str] = Query(None),
@@ -61,6 +73,9 @@ async def listar_certificados(
                     detail="No tienes permiso para ver los certificados de otro estudiante"
                 )
             query = query.filter(Certificado.estudiante_id == str(current_user.id))
+        elif current_user.rol == "docente":
+            # ✅ SEGURIDAD: un docente solo ve los certificados que él emitió.
+            query = query.filter(Certificado.docente_id == str(current_user.id))
         elif estudiante_id:
             query = query.filter(Certificado.estudiante_id == estudiante_id)
         if curso_id:
@@ -91,6 +106,9 @@ async def obtener_certificado(
                 status_code=403,
                 detail="No tienes permiso para ver este certificado"
             )
+        # ✅ SEGURIDAD: un docente solo los que él emitió
+        if current_user.rol == "docente":
+            _verificar_ownership_certificado(certificado, current_user)
         return _cert_to_dict(certificado)
     except HTTPException:
         raise
@@ -109,6 +127,8 @@ async def crear_certificado(
         existe = db.query(Certificado).filter(Certificado.codigo == codigo).first()
         if existe:
             raise HTTPException(status_code=400, detail="El codigo ya existe")
+        # ✅ SEGURIDAD: el emisor es SIEMPRE el usuario autenticado (admin puede indicar otro).
+        docente_id_final = data.docente_id if current_user.rol == "admin" and data.docente_id else str(current_user.id)
         certificado = Certificado(
             id=str(uuid.uuid4()),
             codigo=codigo,
@@ -116,7 +136,7 @@ async def crear_certificado(
             estudiante_nombre=data.estudiante_nombre,
             curso_id=data.curso_id,
             curso_titulo=data.curso_titulo,
-            docente_id=data.docente_id,
+            docente_id=docente_id_final,
             docente_nombre=data.docente_nombre,
             url=data.url,
             estado="emitido"
@@ -144,6 +164,7 @@ async def actualizar_certificado(
         certificado = db.query(Certificado).filter(Certificado.id == id).first()
         if not certificado:
             raise HTTPException(status_code=404, detail="Certificado no encontrado")
+        _verificar_ownership_certificado(certificado, current_user)
         update_data = data.model_dump(exclude_unset=True)
         for field, value in update_data.items():
             setattr(certificado, field, value)
@@ -168,6 +189,7 @@ async def eliminar_certificado(
         certificado = db.query(Certificado).filter(Certificado.id == id).first()
         if not certificado:
             raise HTTPException(status_code=404, detail="Certificado no encontrado")
+        _verificar_ownership_certificado(certificado, current_user)
         certificado.estado = "cancelado"
         db.commit()
         return {"mensaje": "Certificado cancelado correctamente", "ok": True}

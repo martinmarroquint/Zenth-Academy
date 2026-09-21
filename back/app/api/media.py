@@ -17,8 +17,12 @@ import time
 from typing import Optional
 
 import httpx
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import FileResponse, Response
+
+from app.core.dependencies import require_admin
+from app.core.errors import error_interno
+from app.models.usuario import Usuario
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -55,23 +59,22 @@ def _content_type_desde_bytes(data: bytes) -> str:
 
 
 @router.get("/drive/estado")
-async def estado_cache():
-    """Devuelve cuántas imágenes hay en caché y su tamaño total."""
+async def estado_cache(current_user: Usuario = Depends(require_admin)):
+    """Devuelve cuántas imágenes hay en caché y su tamaño total (solo admin)."""
     try:
         archivos = [f for f in os.listdir(CACHE_DIR) if f.endswith(".img")]
         total = sum(os.path.getsize(os.path.join(CACHE_DIR, f)) for f in archivos)
         return {
             "imagenes_en_cache": len(archivos),
             "tamano_total_kb": round(total / 1024, 1),
-            "carpeta": CACHE_DIR,
         }
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail=error_interno(e, "Error consultando caché"))
 
 
 @router.delete("/drive/cache")
-async def limpiar_cache():
-    """Elimina la caché local de imágenes de Drive (útil para depurar)."""
+async def limpiar_cache(current_user: Usuario = Depends(require_admin)):
+    """Elimina la caché local de imágenes de Drive (solo admin)."""
     eliminados = 0
     try:
         for nombre in os.listdir(CACHE_DIR):
@@ -82,7 +85,7 @@ async def limpiar_cache():
                 except OSError:
                     pass
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail=error_interno(e, "Error limpiando caché"))
     return {"mensaje": f"Caché limpiada ({eliminados} archivos)", "ok": True}
 
 

@@ -239,10 +239,14 @@ const ConfiguracionPage = () => {
     setNotificaciones((prev) => ({ ...prev, [key]: value }));
   };
 
+  // ✅ SEGURIDAD: nunca exportar credenciales de sesión (token/refresh_token).
+  const CLAVES_SENSIBLES = new Set(['token', 'refresh_token', 'user', 'userData']);
+
   const exportarDatos = () => {
     const almacenamiento = {};
     for (let i = 0; i < localStorage.length; i += 1) {
       const key = localStorage.key(i);
+      if (CLAVES_SENSIBLES.has(key) || /token/i.test(key)) continue;
       const raw = localStorage.getItem(key);
       try {
         almacenamiento[key] = JSON.parse(raw);

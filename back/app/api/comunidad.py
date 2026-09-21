@@ -41,6 +41,18 @@ def _post_to_dict(db: Session, post: Post) -> dict:
     }
 
 
+def _verificar_ownership_post(post: Post, current_user) -> None:
+    """✅ SEGURIDAD: admin puede todo; el autor solo su propia publicación."""
+    if current_user.rol == "admin":
+        return
+    if str(post.docente_id) != str(current_user.id):
+        logger.warning(
+            f"Acceso denegado: usuario {current_user.id} intentó gestionar "
+            f"publicación {post.id} de {post.docente_id}"
+        )
+        raise HTTPException(status_code=403, detail="No tienes permiso sobre esta publicación")
+
+
 @router.get("/", response_model=List[PostResponse])
 async def listar_posts(
     categoria: Optional[str] = Query(None),
@@ -119,7 +131,7 @@ async def crear_post(
             contenido=data.contenido,
             categoria=data.categoria or "general",
             curso_id=data.curso_id if data.curso_id else None,
-            docente_id=data.docente_id or str(current_user.id),
+            docente_id=str(current_user.id),
             docente_nombre=None,
             destacado=False,
             estado="publicado",
@@ -149,6 +161,7 @@ async def actualizar_post(
         post = db.query(Post).filter(Post.id == id).first()
         if not post:
             raise HTTPException(status_code=404, detail="Publicacion no encontrada")
+        _verificar_ownership_post(post, current_user)
         update_data = data.model_dump(exclude_unset=True)
         for field, value in update_data.items():
             setattr(post, field, value)
@@ -172,6 +185,7 @@ async def eliminar_post(
         post = db.query(Post).filter(Post.id == id).first()
         if not post:
             raise HTTPException(status_code=404, detail="Publicacion no encontrada")
+        _verificar_ownership_post(post, current_user)
         db.delete(post)
         db.commit()
         return {"mensaje": "Publicacion eliminada correctamente", "ok": True}
@@ -196,7 +210,7 @@ async def crear_comentario(
         comentario = Comentario(
             id=str(uuid.uuid4()),
             post_id=id,
-            docente_id=data.docente_id or str(current_user.id),
+            docente_id=str(current_user.id),
             docente_nombre=None,
             contenido=data.contenido,
             likes_count=0

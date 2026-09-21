@@ -54,8 +54,31 @@ const RecursosDisplay = ({ recursos, isBlocked = false }) => {
     return extensionMap[extension] || 'link';
   };
 
+  // ✅ SEGURIDAD: solo se permite previsualizar URLs de Google (evita embeber
+  // dominios arbitrarios en el iframe) y abrir solo http/https.
+  const esUrlGoogleSegura = (url) => {
+    try {
+      const u = new URL(url);
+      return (
+        u.protocol === 'https:' &&
+        ['docs.google.com', 'drive.google.com', 'drive.usercontent.google.com'].includes(u.hostname)
+      );
+    } catch {
+      return false;
+    }
+  };
+
+  const esUrlHttpSegura = (url) => {
+    try {
+      const u = new URL(url);
+      return u.protocol === 'http:' || u.protocol === 'https:';
+    } catch {
+      return false;
+    }
+  };
+
   const getDrivePreviewUrl = (url) => {
-    if (!url) return null;
+    if (!url || !esUrlGoogleSegura(url)) return null;
     
     if (url.includes('docs.google.com/document')) {
       return url.replace('/edit', '/preview').replace('/edit?', '/preview?');
@@ -163,7 +186,7 @@ const RecursosDisplay = ({ recursos, isBlocked = false }) => {
       setPreviewUrl(preview);
       setPreviewTitle(recurso.nombre || 'Documento');
       setPreviewType(detectFileType(recurso.url, recurso.nombre));
-    } else {
+    } else if (esUrlHttpSegura(recurso.url)) {
       window.open(recurso.url, '_blank', 'noopener,noreferrer');
     }
   };

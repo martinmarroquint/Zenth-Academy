@@ -88,7 +88,7 @@ const ExamenPublicoPage = () => {
   if (!examen) return null;
 
   const config = examen.configuracion || {};
-  const requierePassword = config.password_examen && !accesoConcedido;
+  const requierePassword = (examen.requiere_password || config.password_examen) && !accesoConcedido;
 
   // Pantalla de password
   if (requierePassword && !accesoConcedido) {

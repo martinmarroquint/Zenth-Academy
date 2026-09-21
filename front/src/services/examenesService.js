@@ -3,6 +3,14 @@
 
 import apiClient from './api';
 
+// ✅ SEGURIDAD: neutraliza inyección de fórmulas al abrir el CSV en Excel/Sheets.
+// Un nombre como `=HYPERLINK(...)` o `=cmd|...` se ejecutaría. Se antepone `'`.
+const _csvCell = (cell) => {
+  let s = String(cell ?? '').replace(/[\r\n\t]/g, ' ');
+  if (/^[=+\-@]/.test(s)) s = `'${s}`;
+  return `"${s.replace(/"/g, '""')}"`;
+};
+
 class ExamenesService {
   constructor() {
     // Usamos apiClient para todas las peticiones
@@ -507,7 +515,7 @@ class ExamenesService {
     
     const csvContent = [
       headers.join(','),
-      ...rows.map(row => row.map(cell => `"${String(cell).replace(/"/g, '""')}"`).join(','))
+      ...rows.map(row => row.map(_csvCell).join(','))
     ].join('\n');
     
     // ✅ CORREGIDO: Agregar BOM UTF-8 para que Excel muestre caracteres español correctamente

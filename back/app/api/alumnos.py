@@ -66,9 +66,13 @@ async def listar_alumnos(
     limit: int = Query(100, ge=1, le=500),
     offset: int = Query(0, ge=0),
     db: Session = Depends(get_db),
-    current_user: Usuario = Depends(get_current_active_user)
+    current_user: Usuario = Depends(require_docente)
 ):
-    """Lista todos los alumnos con filtros (autenticado)"""
+    """Lista todos los alumnos con filtros (solo docente/admin).
+
+    ✅ SEGURIDAD: antes bastaba estar autenticado, por lo que un estudiante
+    podía enumerar el directorio y leer DNI/email/teléfono de otros (IDOR/PII).
+    """
     try:
         logger.info(f"🔍 Listando alumnos - usuario: {current_user.id}")
         
@@ -112,9 +116,9 @@ async def buscar_alumnos(
     q: str = Query(..., min_length=2),
     limit: int = Query(20, ge=1, le=50),
     db: Session = Depends(get_db),
-    current_user: Usuario = Depends(get_current_active_user)
+    current_user: Usuario = Depends(require_docente)
 ):
-    """Busca alumnos por nombre, apellido o DNI (autenticado)"""
+    """Busca alumnos por nombre, apellido o DNI (solo docente/admin)."""
     try:
         logger.info(f"🔍 Buscando alumnos: {q}")
         query = db.query(Alumno).filter(
@@ -138,9 +142,9 @@ async def buscar_alumnos(
 async def obtener_alumno(
     id: str,
     db: Session = Depends(get_db),
-    current_user: Usuario = Depends(get_current_active_user)
+    current_user: Usuario = Depends(require_docente)
 ):
-    """Obtiene un alumno por ID (autenticado)"""
+    """Obtiene un alumno por ID (solo docente/admin)."""
     try:
         alumno = db.query(Alumno).filter(Alumno.id == id).first()
         if not alumno:
@@ -348,10 +352,10 @@ async def eliminar_alumnos_masivo(
 # =============================================
 
 @router.get("/grupo/{grupo_id}", response_model=List[AlumnoResponse])
-async def obtener_alumnos_por_grupo(
+async def alumnos_por_grupo(
     grupo_id: str,
     db: Session = Depends(get_db),
-    current_user: Usuario = Depends(get_current_active_user)
+    current_user: Usuario = Depends(require_docente)
 ):
     """Obtiene todos los alumnos de un grupo específico (autenticado)"""
     try:
@@ -368,10 +372,10 @@ async def obtener_alumnos_por_grupo(
 # =============================================
 
 @router.get("/curso/{curso_id}")
-async def obtener_alumnos_por_curso(
+async def alumnos_por_curso(
     curso_id: str,
     db: Session = Depends(get_db),
-    current_user: Usuario = Depends(get_current_active_user)
+    current_user: Usuario = Depends(require_docente)
 ):
     """Devuelve los estudiantes inscritos al curso en formato alumno"""
     try:

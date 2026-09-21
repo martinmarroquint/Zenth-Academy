@@ -19,7 +19,7 @@ from app.schemas.auth import (
     LoginRequest, TokenResponse, RegisterRequest, RegisterResponse,
     UserResponse, UserUpdateRequest, ChangePasswordRequest,
     UserCreateRequest, UserListResponse, MensajeResponse,
-    RefreshRequest, TokenRefreshResponse, GoogleLoginRequest
+    RefreshRequest, TokenRefreshResponse, GoogleLoginRequest, SelfUpdateRequest
 )
 from app.core.security import (
     create_access_token, create_refresh_token, decode_token, hash_token,
@@ -486,13 +486,20 @@ async def get_current_user_info(
 
 @router.put("/me", response_model=UserResponse)
 async def update_current_user(
-    data: UserUpdateRequest,
+    data: SelfUpdateRequest,
     current_user: Usuario = Depends(get_current_active_user),
     db: Session = Depends(get_db)
 ):
+    # ✅ SEGURIDAD: whitelist explícita. El usuario NO puede cambiar su rol,
+    # estado `activo` ni `empresa_id` (eso lo hace un admin desde /auth/usuarios).
+    CAMPOS_PERMITIDOS = {
+        "nombres", "apellidos", "telefono", "foto_url",
+        "especialidad", "biografia", "institucion",
+    }
     update_data = data.model_dump(exclude_unset=True)
     for field, value in update_data.items():
-        setattr(current_user, field, value)
+        if field in CAMPOS_PERMITIDOS:
+            setattr(current_user, field, value)
     
     db.commit()
     db.refresh(current_user)

@@ -132,8 +132,8 @@ def test_estudiante_no_puede_crear_certificado(client, estudiante_headers):
 
 @pytest.mark.integration
 def test_listar_certificados(client, db, docente_user, docente_headers):
-    _crear_certificado(db, estudiante_id="est-1", curso_titulo="Curso A")
-    _crear_certificado(db, estudiante_id="est-2", curso_titulo="Curso B")
+    _crear_certificado(db, estudiante_id="est-1", curso_titulo="Curso A", docente_id=docente_user.id)
+    _crear_certificado(db, estudiante_id="est-2", curso_titulo="Curso B", docente_id=docente_user.id)
 
     resp = client.get("/api/v1/certificados/", headers=docente_headers)
 
@@ -145,7 +145,7 @@ def test_listar_certificados(client, db, docente_user, docente_headers):
 
 @pytest.mark.integration
 def test_obtener_certificado_por_id(client, db, docente_user, docente_headers):
-    cert = _crear_certificado(db, estudiante_id="est-1", curso_titulo="Curso A")
+    cert = _crear_certificado(db, estudiante_id="est-1", curso_titulo="Curso A", docente_id=docente_user.id)
 
     resp = client.get(f"/api/v1/certificados/{cert.id}", headers=docente_headers)
 
@@ -161,7 +161,7 @@ def test_obtener_certificado_inexistente_404(client, docente_headers):
 
 @pytest.mark.integration
 def test_actualizar_certificado(client, db, docente_user, docente_headers):
-    cert = _crear_certificado(db, estudiante_id="est-1", curso_titulo="Curso A")
+    cert = _crear_certificado(db, estudiante_id="est-1", curso_titulo="Curso A", docente_id=docente_user.id)
 
     resp = client.put(
         f"/api/v1/certificados/{cert.id}",
@@ -177,7 +177,7 @@ def test_actualizar_certificado(client, db, docente_user, docente_headers):
 
 @pytest.mark.integration
 def test_eliminar_certificado_soft_delete(client, db, docente_user, docente_headers):
-    cert = _crear_certificado(db, estudiante_id="est-1")
+    cert = _crear_certificado(db, estudiante_id="est-1", docente_id=docente_user.id)
 
     resp = client.delete(f"/api/v1/certificados/{cert.id}", headers=docente_headers)
 

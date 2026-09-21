@@ -2,7 +2,6 @@
 // SERVICIO DE AUTENTICACIÓN - CON REGISTRO Y GESTIÓN DE USUARIOS
 
 import api from './api';
-import { API_CONFIG } from '../config/api.config';
 
 const TOKEN_KEY = 'token';
 const USER_KEY = 'user';
@@ -86,54 +85,6 @@ class AuthService {
         success: false, 
         error: error.message || 'Error al iniciar sesión' 
       };
-    }
-  }
-
-  // =============================================
-  // LOGIN SOCIAL (OAuth 2.0): Google / Microsoft
-  // =============================================
-
-  /** Devuelve qué proveedores están configurados en el backend. */
-  async obtenerProveedoresOAuth() {
-    try {
-      const r = await api.get('/auth/oauth/providers');
-      return { google: !!r?.google, microsoft: !!r?.microsoft };
-    } catch {
-      return { google: false, microsoft: false };
-    }
-  }
-
-  /** Redirige al usuario al proveedor (flujo completo en el backend). */
-  iniciarOAuth(provider, redirect = '') {
-    const base = API_CONFIG.BASE_URL;
-    const q = redirect ? `?redirect=${encodeURIComponent(redirect)}` : '';
-    window.location.href = `${base}/auth/oauth/${provider}/login${q}`;
-  }
-
-  /**
-   * Procesa el retorno del proveedor: guarda los tokens y carga el perfil.
-   * Se llama desde la página /auth/callback.
-   */
-  async procesarCallbackOAuth(searchParams) {
-    const accessToken = searchParams.get('access_token');
-    const refreshToken = searchParams.get('refresh_token');
-    const destino = searchParams.get('redirect') || '';
-
-    if (!accessToken) {
-      return { success: false, error: 'No se recibió el token de acceso' };
-    }
-
-    // Guardar tokens primero para que /auth/me use el Authorization correcto
-    this.setAuthData(accessToken, null, refreshToken);
-
-    try {
-      const user = await api.get('/auth/me');
-      this.setAuthData(accessToken, user, refreshToken);
-      return { success: true, user, redirect: destino };
-    } catch (error) {
-      console.error('Error obteniendo el perfil tras OAuth:', error);
-      this.logout?.();
-      return { success: false, error: 'No se pudo obtener el perfil' };
     }
   }
 

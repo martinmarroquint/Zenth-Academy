@@ -28,7 +28,6 @@ const UiDemo = lazy(() => import('./pages/UiDemo'));
 const ExamenPublicoPage = lazy(() => import('./pages/ExamenPublicoPage'));
 const SolicitarDocente = lazy(() => import('./pages/SolicitarDocente'));
 const AdminSolicitudesDocente = lazy(() => import('./pages/AdminSolicitudesDocente'));
-const AuthCallback = lazy(() => import('./pages/AuthCallback'));
 
 // =============================================
 // DASHBOARDS (lazy)
@@ -114,9 +113,6 @@ function App() {
               </ProtectedRoute>
             }
           />
-
-          {/* Retorno del login social (Google / Microsoft) */}
-          <Route path="/auth/callback" element={<AuthCallback />} />
 
           {/* =============================================
               COMPARTIR EN CLASE — PANTALLA DEL AULA (PÚBLICO, sin login)

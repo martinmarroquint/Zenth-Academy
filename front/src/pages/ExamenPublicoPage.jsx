@@ -2,7 +2,7 @@
 // PAGINA PUBLICA PARA RENDIR EXAMENES SIN LOGIN
 import React, { useState, useEffect } from 'react';
 import { useParams } from 'react-router-dom';
-import { Clock, Shield, AlertTriangle, Send, Eye, EyeOff } from 'lucide-react';
+import { Clock, Shield, AlertTriangle, Send, Eye, EyeOff, RotateCcw, Award } from 'lucide-react';
 import examenesService from '../services/examenesService';
 import ExamenActivo from '../components/examenes/ExamenActivo';
 
@@ -23,6 +23,8 @@ const ExamenPublicoPage = () => {
   });
   const [datosListos, setDatosListos] = useState(false);
   const [resultado, setResultado] = useState(null);
+  const [intentosUsados, setIntentosUsados] = useState(0);
+  const [mejorNota, setMejorNota] = useState(0);
 
   useEffect(() => {
     const cargarExamen = async () => {
@@ -58,8 +60,24 @@ const ExamenPublicoPage = () => {
   };
 
   const handleFinalizar = (resultadoFinal) => {
-    // El propio ExamenActivo (modo público) ya persistió el resultado.
+    setIntentosUsados(prev => prev + 1);
+    const nota = Number(resultadoFinal.calificacion) || 0;
+    setMejorNota(prev => Math.max(prev, nota));
     setResultado(resultadoFinal);
+  };
+
+  const handleReintentar = async () => {
+    setResultado(null);
+    setExamen(null);
+    setCargando(true);
+    try {
+      const data = await examenesService.obtenerExamenPublico(codigo);
+      setExamen(data);
+    } catch (err) {
+      setError(err.message || 'Error al recargar examen');
+    } finally {
+      setCargando(false);
+    }
   };
 
   if (cargando) {
@@ -176,6 +194,8 @@ const ExamenPublicoPage = () => {
       config.mostrar_resultados !== false &&
       resultado.calificacion !== null &&
       resultado.calificacion !== undefined;
+    const intentosPermitidos = examen?.intentos_permitidos || 0;
+    const puedeReintentar = intentosPermitidos > 0 && intentosUsados < intentosPermitidos;
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4">
         <div className="bg-white rounded-2xl shadow-lg border border-gray-200 p-8 max-w-md w-full text-center">
@@ -184,8 +204,9 @@ const ExamenPublicoPage = () => {
           </div>
           <h2 className="text-lg font-semibold text-gray-900 mb-1">Examen entregado</h2>
           <p className="text-sm text-gray-500 mb-4">{examen?.titulo}</p>
+
           {mostrarNota ? (
-            <div className="space-y-1">
+            <div className="space-y-1 mb-4">
               <p className="text-4xl font-bold text-[#0f766e]">
                 {Number(resultado.calificacion).toFixed(1)}%
               </p>
@@ -194,7 +215,31 @@ const ExamenPublicoPage = () => {
               </p>
             </div>
           ) : (
-            <p className="text-sm text-gray-500">Tu respuesta fue registrada correctamente.</p>
+            <p className="text-sm text-gray-500 mb-4">Tu respuesta fue registrada correctamente.</p>
+          )}
+
+          {intentosPermitidos > 0 && (
+            <div className="space-y-2 mb-4">
+              <p className="text-xs font-medium text-gray-500">
+                Intento {intentosUsados} de {intentosPermitidos}
+              </p>
+              {mejorNota > 0 && (
+                <div className="flex items-center justify-center gap-1.5 text-xs text-[#0f766e]">
+                  <Award className="w-3.5 h-3.5" />
+                  <span className="font-medium">Tu mejor nota: {mejorNota.toFixed(1)}%</span>
+                </div>
+              )}
+            </div>
+          )}
+
+          {puedeReintentar && (
+            <button
+              onClick={handleReintentar}
+              className="w-full py-3 bg-[#0f766e] text-white text-sm font-medium rounded-xl hover:bg-[#0d5e57] transition-colors flex items-center justify-center gap-2"
+            >
+              <RotateCcw className="w-4 h-4" />
+              Reintentar examen
+            </button>
           )}
         </div>
       </div>

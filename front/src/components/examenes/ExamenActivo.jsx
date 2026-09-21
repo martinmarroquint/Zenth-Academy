@@ -77,8 +77,12 @@ const ExamenActivo = ({
         ...p, 
         _indiceOriginal: idx,
         _ordenOriginal: p.orden ?? idx,
-        _columnaBOriginal: [...(p.columna_b || [])],
-        _elementosOriginales: [...(p.elementos || [])]
+        // ✅ SEGURIDAD: el backend ya envía columna_b/elementos shuffled.
+        // Usamos el mapping del backend para des-shuffle al enviar.
+        _columnaBOriginal: p._orden_columna_b ? [...(p.columna_b || [])] : [...(p.columna_b || [])],
+        _elementosOriginales: p._orden_elementos ? [...(p.elementos || [])] : [...(p.elementos || [])],
+        _ordenColumnaB: p._orden_columna_b || null,
+        _ordenElementos: p._orden_elementos || null,
       }));
       
       if (configExamen.aleatorizar_preguntas) { 
@@ -116,12 +120,8 @@ const ExamenActivo = ({
             };
           }
         }
-        if (p.tipo === 'ordenamiento') {
-          return { ...p, elementos: shuffleArray([...(p.elementos || [])]) };
-        }
-        if (p.tipo === 'relacionar') {
-          return { ...p, columna_b: shuffleArray([...(p.columna_b || [])]) };
-        }
+        // ✅ SEGURIDAD: relacionar y ordenamiento ya vienen shuffled del backend.
+        // NO se vuelven a shufflear en el frontend para evitar doble aleatorización.
         return p;
       });
       
@@ -373,7 +373,16 @@ const ExamenActivo = ({
       estado: esTrampa ? 'TRAMPA' : 'COMPLETADO',
       calificacion: 0, correctas: 0, total_preguntas: 0,
       puntos_obtenidos: 0, total_puntos: 0,
-      intento_id: intentoId
+      intento_id: intentoId,
+      // ✅ SEGURIDAD: mappings de shuffle para que el backend des-shuffle antes de calificar.
+      mappings_shuffle: preguntasExamen.reduce((acc, p, idx) => {
+        const key = String(p._indiceOriginal ?? idx);
+        const mapping = {};
+        if (p._ordenColumnaB) mapping._orden_columna_b = p._ordenColumnaB;
+        if (p._ordenElementos) mapping._orden_elementos = p._ordenElementos;
+        if (Object.keys(mapping).length > 0) acc[key] = mapping;
+        return acc;
+      }, {})
     };
 
     let resultadoBackend = null;
@@ -391,7 +400,8 @@ const ExamenActivo = ({
           alumno_dni: alumno?.dni || '',
           tiempo_usado: temporizador.getTiempoUsado(),
           violaciones: violacionesCount,
-          intento_id: intentoId
+          intento_id: intentoId,
+          mappings_shuffle: datosEnvio.mappings_shuffle
         });
       } else {
         resultadoBackend = await examenesService.guardarResultado(datosEnvio);

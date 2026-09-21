@@ -7,6 +7,7 @@ from sqlalchemy.orm import Session, selectinload
 from typing import List, Optional
 import uuid
 import secrets
+import random
 import traceback
 import logging
 from datetime import datetime, timezone, timedelta
@@ -87,9 +88,10 @@ def _serializar_pregunta(pregunta: Pregunta, incluir_respuestas: bool) -> dict:
     """Serializa una pregunta. Si `incluir_respuestas` es False (estudiantes /
     acceso público), se oculta la clave de respuestas para evitar trampas.
 
-    NOTA: en `relacionar` y `ordenamiento` el orden canónico de `columna_b` /
-    `elementos` codifica la respuesta; ocultarlo requeriría selección y
-    calificación server-side por intento (fuera del alcance actual).
+    Para `relacionar` y `ordenamiento`, se aplica shuffle server-side para
+    que el orden canónico (que codifica la respuesta) no se envíe al cliente.
+    Se incluye un mapping `_orden_*` para que el frontend pueda des-shuffle
+    al enviar las respuestas.
     """
     data = {
         "id": str(pregunta.id),
@@ -128,9 +130,29 @@ def _serializar_pregunta(pregunta: Pregunta, incluir_respuestas: bool) -> dict:
         })
         return data
 
-    # Sanitizado: se conserva el texto pero se borra la clave.
+    # --- Sanitizado para estudiantes/acceso público ---
     afirmaciones = pregunta.afirmaciones or []
     frases = pregunta.frases or []
+
+    # ✅ SEGURIDAD: para relacionar y ordenamiento, shuffle del orden canónico.
+    # El frontend usa _orden_* para des-shuffle al enviar respuestas.
+    columna_b_shuffled = pregunta.columna_b
+    orden_columna_b = None
+    elementos_shuffled = pregunta.elementos
+    orden_elementos = None
+
+    if pregunta.tipo == 'relacionar' and pregunta.columna_b:
+        indices = list(range(len(pregunta.columna_b)))
+        random.shuffle(indices)
+        columna_b_shuffled = [pregunta.columna_b[i] for i in indices]
+        orden_columna_b = indices  # indices[i] = posición original del elemento i-ésimo mostrado
+
+    if pregunta.tipo == 'ordenamiento' and pregunta.elementos:
+        indices = list(range(len(pregunta.elementos)))
+        random.shuffle(indices)
+        elementos_shuffled = [pregunta.elementos[i] for i in indices]
+        orden_elementos = indices
+
     data.update({
         "respuesta_correcta": None,
         "afirmaciones": [
@@ -151,6 +173,11 @@ def _serializar_pregunta(pregunta: Pregunta, incluir_respuestas: bool) -> dict:
             }
             for f in frases
         ] if frases else None,
+        # ✅ Datos de shuffle para que el frontend des-shuffle al enviar
+        "columna_b": columna_b_shuffled,
+        "elementos": elementos_shuffled,
+        "_orden_columna_b": orden_columna_b,
+        "_orden_elementos": orden_elementos,
     })
     return data
 
@@ -207,20 +234,41 @@ def _aware_utc(dt):
     return dt
 
 
+def _enriquecer_resultados(resultados, examen, db):
+    """Agrega campos calculados a una lista de ResultadoExamen para el frontend."""
+    if not examen or not resultados:
+        return
+    puntaje_aprobacion = examen.puntaje_aprobacion or 60.0
+    intentos_permitidos = examen.intentos_permitidos or 0
+    # Contar intentos por alumno
+    conteo_por_alumno = {}
+    for r in resultados:
+        key = str(r.alumno_id)
+        conteo_por_alumno[key] = conteo_por_alumno.get(key, 0) + 1
+    for r in resultados:
+        r.aprobado = (r.calificacion or 0) >= puntaje_aprobacion
+        r.puntaje_aprobacion = puntaje_aprobacion
+        r.intentos_permitidos = intentos_permitidos
+        r.intentos_usados = conteo_por_alumno.get(str(r.alumno_id), 0)
+
+
 def _intento_a_dict(intento: IntentoExamen, examen: Examen, intentos_usados: int) -> dict:
     ahora = datetime.now(timezone.utc)
     expira = _aware_utc(intento.expira_en)
     restantes = 0
     if expira:
         restantes = max(0, int((expira - ahora).total_seconds()))
+    intentos_permitidos = examen.intentos_permitidos or 0
     return {
         "intento_id": str(intento.id),
         "examen_id": str(examen.id),
         "expira_en": intento.expira_en,
         "segundos_restantes": restantes,
         "tiempo_limite": examen.tiempo_limite or 60,
-        "intentos_permitidos": examen.intentos_permitidos or 0,
+        "intentos_permitidos": intentos_permitidos,
         "intentos_usados": intentos_usados,
+        "puntaje_aprobacion": examen.puntaje_aprobacion or 60.0,
+        "intentos_restantes": max(0, intentos_permitidos - intentos_usados) if intentos_permitidos > 0 else 0,
     }
 
 
@@ -296,15 +344,22 @@ def _resolver_tiempo_desde_intento(db: Session, examen: Examen, intento_id, *,
     return tiempo_usado, entregado_tarde, intento
 
 
-def calcular_resultado(examen, respuestas_alumno):
+def calcular_resultado(examen, respuestas_alumno, preguntas_con_mapping=None):
     """
     Calcula el resultado de un examen con auto-calificación para 8 tipos de pregunta.
     
     Tipos auto-calificados: opcion_multiple, verdadero_falso, relacionar, completar,
                             ordenamiento, respuesta_corta, likert, estrellas, escala_numerica
     Tipo manual: ensayo (siempre 0 puntos, requiere calificación manual del docente)
+    
+    Args:
+        examen: objeto Examen con .preguntas
+        respuestas_alumno: dict con respuestas del estudiante (key=índice de pregunta)
+        preguntas_con_mapping: opcional, dict {índice: {_orden_columna_b, _orden_elementos}}
+                               para des-shuffle en relacionar/ordenamiento
     """
     preguntas = examen.preguntas if hasattr(examen, 'preguntas') else []
+    mappings = preguntas_con_mapping or {}
     
     total_puntos = 0
     puntos_obtenidos = 0
@@ -351,8 +406,19 @@ def calcular_resultado(examen, respuestas_alumno):
                     col_a = [a for a in pregunta.columna_a if a and a.strip()]
                     total_pares = len(col_a)
                     if total_pares > 0:
-                        correctas = sum(1 for j in range(total_pares) 
-                            if str(j) in respuesta and respuesta[str(j)] == j)
+                        # ✅ SEGURIDAD: si hay mapping de shuffle, des-shuffle la respuesta.
+                        mapping = mappings.get(i, {})
+                        orden_b = mapping.get('_orden_columna_b')
+                        respuesta_des = respuesta
+                        if orden_b and isinstance(orden_b, list):
+                            respuesta_des = {}
+                            for k, v in respuesta.items():
+                                if isinstance(v, int) and 0 <= v < len(orden_b):
+                                    respuesta_des[k] = orden_b[v]
+                                else:
+                                    respuesta_des[k] = v
+                        correctas = sum(1 for j in range(total_pares)
+                            if str(j) in respuesta_des and respuesta_des[str(j)] == j)
                         proporcion = correctas / total_pares
                         puntos_pregunta = round(proporcion * pts, 2)
                         pregunta_correcta = (correctas == total_pares)
@@ -378,8 +444,17 @@ def calcular_resultado(examen, respuestas_alumno):
                     elementos = [e for e in pregunta.elementos if e and str(e).strip()]
                     total_elem = len(elementos)
                     if total_elem > 0:
-                        correctas = sum(1 for j in range(total_elem) 
-                            if j < len(respuesta) and respuesta[j] == j + 1)
+                        # ✅ SEGURIDAD: si hay mapping de shuffle, des-shuffle la respuesta.
+                        mapping = mappings.get(i, {})
+                        orden_el = mapping.get('_orden_elementos')
+                        respuesta_des = respuesta
+                        if orden_el and isinstance(orden_el, list) and len(respuesta) == len(orden_el):
+                            respuesta_des = [0] * len(orden_el)
+                            for pos_shuffled, valor in enumerate(respuesta):
+                                if pos_shuffled < len(orden_el):
+                                    respuesta_des[orden_el[pos_shuffled]] = valor
+                        correctas = sum(1 for j in range(total_elem)
+                            if j < len(respuesta_des) and respuesta_des[j] == j + 1)
                         proporcion = correctas / total_elem
                         puntos_pregunta = round(proporcion * pts, 2)
                         pregunta_correcta = (correctas == total_elem)
@@ -1113,7 +1188,9 @@ def _actualizar_progreso_por_examen(db, examen_id, alumno_id, calificacion):
                     if not inscripcion:
                         return
 
-                    aprobado = (calificacion or 0) >= 60
+                    # ✅ FIX: usar el puntaje de aprobación real del examen (no hardcodeado).
+                    puntaje_aprobacion = examen.puntaje_aprobacion or 60
+                    aprobado = (calificacion or 0) >= puntaje_aprobacion
 
                     # ✅ Actualizar ProgresoLeccion (fuente de verdad del progreso)
                     progreso_lec = db.query(ProgresoLeccion).filter(
@@ -1257,7 +1334,7 @@ def guardar_resultado(
         db, examen, data.intento_id, usuario_id=alumno_id_final
     )
 
-    resultado_calculado = calcular_resultado(examen, data.respuestas or {})
+    resultado_calculado = calcular_resultado(examen, data.respuestas or {}, data.mappings_shuffle)
     estado_final = data.estado or 'COMPLETADO'
     calificacion = resultado_calculado["calificacion"]
     puntos_obtenidos = resultado_calculado["puntos_obtenidos"]
@@ -1304,6 +1381,18 @@ def guardar_resultado(
     db.commit()
     db.refresh(resultado)
     
+    # ✅ Enriquecer la respuesta con campos calculados para el frontend.
+    puntaje_aprobacion = examen.puntaje_aprobacion or 60.0
+    intentos_permitidos = examen.intentos_permitidos or 0
+    intentos_usados = db.query(ResultadoExamen).filter(
+        ResultadoExamen.examen_id == data.examen_id,
+        ResultadoExamen.alumno_id == alumno_id_final
+    ).count()
+    resultado.aprobado = (calificacion or 0) >= puntaje_aprobacion
+    resultado.puntaje_aprobacion = puntaje_aprobacion
+    resultado.intentos_permitidos = intentos_permitidos
+    resultado.intentos_usados = intentos_usados
+    
     # ACTUALIZAR PROGRESO DEL CURSO: Si el examen esta asociado a una leccion de curso,
     # marcar la leccion como completada y actualizar progreso
     try:
@@ -1326,9 +1415,13 @@ def listar_resultados(
     examen = db.query(Examen).filter(Examen.id == examen_id).first()
     if examen:
         _verificar_ownership_examen(examen, current_user)
-    return db.query(ResultadoExamen).filter(
+    resultados = db.query(ResultadoExamen).filter(
         ResultadoExamen.examen_id == examen_id
     ).order_by(ResultadoExamen.entregado_en.desc()).all()
+    # ✅ Enriquecer con campos calculados
+    if examen:
+        _enriquecer_resultados(resultados, examen, db)
+    return resultados
 
 
 @router.get("/resultados/alumno/{alumno_id}", response_model=List[ResultadoResponse])
@@ -1347,9 +1440,17 @@ def listar_resultados_alumno(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="No tienes permiso para ver los resultados de otro estudiante"
         )
-    return db.query(ResultadoExamen).filter(
+    resultados = db.query(ResultadoExamen).filter(
         ResultadoExamen.alumno_id == alumno_id
     ).order_by(ResultadoExamen.entregado_en.desc()).all()
+    # ✅ Enriquecer con campos calculados (agrupar por examen)
+    examenes_ids = set(str(r.examen_id) for r in resultados)
+    for eid in examenes_ids:
+        examen = db.query(Examen).filter(Examen.id == eid).first()
+        if examen:
+            sub = [r for r in resultados if str(r.examen_id) == eid]
+            _enriquecer_resultados(sub, examen, db)
+    return resultados
 
 
 @router.get("/resultados/{examen_id}/mejor/{alumno_id}")
@@ -1366,10 +1467,9 @@ def obtener_mejor_resultado(
             detail="No tienes permiso para consultar resultados de otro estudiante"
         )
     # ✅ SEGURIDAD: los docentes solo consultan resultados de sus exámenes.
-    if current_user.rol in ('admin', 'docente'):
-        examen_mejor = db.query(Examen).filter(Examen.id == examen_id).first()
-        if examen_mejor:
-            _verificar_ownership_examen(examen_mejor, current_user)
+    examen = db.query(Examen).filter(Examen.id == examen_id).first()
+    if current_user.rol in ('admin', 'docente') and examen:
+        _verificar_ownership_examen(examen, current_user)
     resultados = db.query(ResultadoExamen).filter(
         ResultadoExamen.examen_id == examen_id,
         ResultadoExamen.alumno_id == alumno_id
@@ -1378,8 +1478,14 @@ def obtener_mejor_resultado(
         raise HTTPException(status_code=404, detail="No se encontraron resultados")
     validos = [r for r in resultados if r.estado != 'TRAMPA']
     if not validos:
-        return resultados[0]
-    return max(validos, key=lambda r: r.calificacion or 0)
+        r = resultados[0]
+        if examen:
+            _enriquecer_resultados([r], examen, db)
+        return r
+    mejor = max(validos, key=lambda r: r.calificacion or 0)
+    if examen:
+        _enriquecer_resultados([mejor], examen, db)
+    return mejor
 
 
 @router.delete("/resultados/{examen_id}", response_model=MensajeResponse)
@@ -1454,6 +1560,14 @@ def obtener_revision(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail="No tienes permiso para revisar este resultado"
             )
+    
+    # ✅ SEGURIDAD: respetar configuracion.mostrar_resultados para estudiantes.
+    examen_rev = db.query(Examen).filter(Examen.id == examen_id).first()
+    config_rev = dict(examen_rev.configuracion or {}) if examen_rev else {}
+    mostrar_resultados = config_rev.get('mostrar_resultados', True)
+    mostrar_respuestas = config_rev.get('mostrar_respuestas', False)
+    # Los docentes/admins siempre ven todo; los estudiantes respetan la config.
+    es_staff = current_user.rol in ('admin', 'docente')
     
     preguntas = db.query(Pregunta).filter(Pregunta.examen_id == examen_id).order_by(Pregunta.orden).all()
     detalle = []
@@ -1565,6 +1679,32 @@ def obtener_revision(
             item["puntos_obtenidos"] = 0
             item["detalle"]["nota"] = "Pregunta de encuesta (no calificada)"
         detalle.append(item)
+    
+    # ✅ SEGURIDAD: si mostrar_resultados=False, ocultar respuestas correctas para estudiantes.
+    if not es_staff and not mostrar_resultados:
+        for item in detalle:
+            # Ocultar respuestas correctas en todos los tipos
+            item.pop("respuesta_correcta", None)
+            if "afirmaciones" in item:
+                for af in item["afirmaciones"]:
+                    af.pop("respuesta_correcta", None)
+                    af.pop("correcta", None)
+            if "pares" in item:
+                for p in item["pares"]:
+                    p.pop("respuesta_correcta", None)
+                    p.pop("correcta", None)
+            if "espacios" in item:
+                for e in item["espacios"]:
+                    e.pop("respuesta_correcta", None)
+                    e.pop("correcta", None)
+            if "posiciones" in item:
+                for p in item["posiciones"]:
+                    p.pop("posicion_correcta", None)
+                    p.pop("correcta", None)
+            item.pop("respuestas_aceptadas", None)
+            item["correcta"] = None
+            item["puntos_obtenidos"] = 0
+    
     return {
         "resultado_id": resultado.id,
         "alumno_nombre": resultado.alumno_nombre,
@@ -2009,7 +2149,7 @@ def guardar_resultado_publico(
     )
 
     respuestas_alumno = data.respuestas
-    resultado_calculado = calcular_resultado(examen, respuestas_alumno)
+    resultado_calculado = calcular_resultado(examen, respuestas_alumno, data.mappings_shuffle)
 
     es_anonimo = config.get('anonimo', False)
     alumno_nombre = "Anonimo" if es_anonimo else data.alumno_nombre

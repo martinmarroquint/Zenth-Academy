@@ -7,7 +7,7 @@ import {
   ArrowLeft, Play, Users, BookOpen,
   Award, CheckCircle, Loader2,
   FileText, Video, ChevronDown,
-  Lock, DollarSign,
+  Lock, DollarSign, Clock,
   CreditCard, Send, AlertCircle, Check,
   Settings, GraduationCap, MessageSquare,
   BarChart3, Eye, Download, ThumbsUp,
@@ -80,6 +80,7 @@ const DetalleCurso = ({
   const [examenActivo, setExamenActivo] = useState(null);
   const [cargandoExamen, setCargandoExamen] = useState(false);
   const [errorExamen, setErrorExamen] = useState('');
+  const [resultadoExamen, setResultadoExamen] = useState(null);
 
   const [certificado, setCertificado] = useState(null);
   const [cursoCompletado, setCursoCompletado] = useState(false);
@@ -267,14 +268,36 @@ const DetalleCurso = ({
     setLeccionActual(leccion);
     setMostrandoLeccion(true);
     setVideoCompletado(false);
+    // ✅ Resetear estado de examen al cambiar de lección
+    setExamenActivo(null);
+    setResultadoExamen(null);
+    setErrorExamen('');
     tiempoEnLeccionRef.current = 0;
     window.scrollTo({ top: 0, behavior: 'smooth' });
   }, [curso, tieneAcceso, esDocente, esEstudiante, toast]);
+
+  // ✅ PRE-CARGAR datos del examen cuando se selecciona una lección tipo examen
+  useEffect(() => {
+    if (!leccionActual || leccionActual.tipo !== 'examen') return;
+    const contenido = leccionActual.contenido || {};
+    if (!contenido.examen_id) return;
+    let cancelado = false;
+    setCargandoExamen(true);
+    examenesService.obtenerExamen(contenido.examen_id)
+      .then(datos => { if (!cancelado) setExamenActivo(datos); })
+      .catch(() => { if (!cancelado) setErrorExamen('No se pudo cargar el examen.'); })
+      .finally(() => { if (!cancelado) setCargandoExamen(false); });
+    return () => { cancelado = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [leccionActual?.contenido?.examen_id]);
 
   const handleCerrarLeccion = () => {
     setMostrandoLeccion(false);
     setLeccionActual(null);
     setModuloActual(null);
+    setExamenActivo(null);
+    setResultadoExamen(null);
+    setErrorExamen('');
   };
 
   const handleVideoComplete = useCallback(() => {
@@ -408,10 +431,27 @@ const DetalleCurso = ({
               }}
               onFinalizar={(resultado) => {
                 setExamenActivo(null);
-                // ✅ CORREGIDO: Enviar nota del examen al progreso del curso
+                const calificacion = resultado?.calificacion || 0;
+                const puntajeAprobacion = examenActivo?.puntaje_aprobacion || 60;
+                const aprobado = calificacion >= puntajeAprobacion;
+                const intentosPermitidos = examenActivo?.intentos_permitidos || 0;
+                const intentosUsados = resultado?.intentos_usados || 0;
+                const intentosRestantes = intentosPermitidos > 0 ? Math.max(0, intentosPermitidos - intentosUsados) : 0;
+
+                // ✅ Guardar resultado para mostrar pantalla de resultado
+                setResultadoExamen({
+                  ...resultado,
+                  calificacion,
+                  aprobado,
+                  puntaje_aprobacion: puntajeAprobacion,
+                  intentos_permitidos: intentosPermitidos,
+                  intentos_usados: intentosUsados,
+                  intentos_restantes: intentosRestantes,
+                  titulo: examenActivo?.titulo,
+                });
+
+                // ✅ Enviar nota al progreso (el backend decide si marca completado)
                 if (curso?.id && leccionActual?.id && usuarioId) {
-                  const calificacion = resultado?.calificacion || 0;
-                  const aprobado = calificacion >= (examenActivo?.puntaje_aprobacion || 60);
                   cursosService.completarLeccion(
                     curso.id, leccionActual.id, usuarioId, 0,
                     calificacion, aprobado
@@ -422,6 +462,76 @@ const DetalleCurso = ({
                 setExamenActivo(null);
               }}
             />
+          </div>
+        );
+      }
+
+      // ✅ Pantalla de resultado del examen
+      if (tipoLeccion === 'examen' && resultadoExamen && !examenActivo) {
+        const aprobado = resultadoExamen.aprobado;
+        return (
+          <div className="bg-white rounded-xl border border-gray-200 p-8 text-center">
+            <div className={`w-20 h-20 rounded-full mx-auto mb-4 flex items-center justify-center ${aprobado ? 'bg-green-100' : 'bg-red-100'}`}>
+              {aprobado ? (
+                <Award className="w-10 h-10 text-green-600" />
+              ) : (
+                <AlertCircle className="w-10 h-10 text-red-500" />
+              )}
+            </div>
+            <h3 className={`text-2xl font-bold mb-2 ${aprobado ? 'text-green-700' : 'text-red-700'}`}>
+              {aprobado ? '¡Aprobado!' : 'No aprobado'}
+            </h3>
+            <p className="text-gray-600 mb-4">
+              Tu calificación: <span className="font-bold text-lg">{resultadoExamen.calificacion?.toFixed(1)}%</span>
+            </p>
+            <p className="text-sm text-gray-500 mb-2">
+              Nota mínima requerida: {resultadoExamen.puntaje_aprobacion}%
+            </p>
+            {!aprobado && resultadoExamen.intentos_restantes > 0 && (
+              <p className="text-sm text-amber-600 mb-4">
+                Te quedan {resultadoExamen.intentos_restantes} intento(s) para mejorar tu nota.
+              </p>
+            )}
+            {!aprobado && resultadoExamen.intentos_restantes === 0 && (
+              <p className="text-sm text-red-600 mb-4">
+                No te quedan intentos. Contacta a tu docente para reiniciar.
+              </p>
+            )}
+            <div className="flex gap-3 justify-center mt-6">
+              {!aprobado && resultadoExamen.intentos_restantes > 0 && (
+                <button
+                  onClick={() => {
+                    setResultadoExamen(null);
+                    // Re-cargar el examen para un nuevo intento
+                    const contenidoLeccion = leccionActual?.contenido || {};
+                    if (contenidoLeccion.examen_id) {
+                      setCargandoExamen(true);
+                      examenesService.obtenerExamen(contenidoLeccion.examen_id)
+                        .then(datos => setExamenActivo(datos))
+                        .catch(() => setErrorExamen('No se pudo cargar el examen'))
+                        .finally(() => setCargandoExamen(false));
+                    }
+                  }}
+                  className="px-6 py-3 bg-[#0f766e] text-white rounded-lg hover:bg-[#0d5e57] transition-colors font-medium"
+                >
+                  Reintentar examen
+                </button>
+              )}
+              {aprobado && (
+                <button
+                  onClick={() => setResultadoExamen(null)}
+                  className="px-6 py-3 bg-[#0f766e] text-white rounded-lg hover:bg-[#0d5e57] transition-colors font-medium"
+                >
+                  Continuar
+                </button>
+              )}
+              <button
+                onClick={() => setResultadoExamen(null)}
+                className="px-6 py-3 text-gray-600 hover:text-gray-800 transition-colors"
+              >
+                Volver al curso
+              </button>
+            </div>
           </div>
         );
       }
@@ -450,13 +560,43 @@ const DetalleCurso = ({
         );
       }
 
-      // Lecciones tipo examen sin cargar — mostrar botón para iniciar
+      // Lecciones tipo examen sin cargar — mostrar info y botón para iniciar
       if (tipoLeccion === 'examen') {
         const contenidoLeccion = leccionActual.contenido || {};
+        // Si ya tenemos datos del examen (cargado previamente), mostrar info
+        const info = examenActivo;
         return (
           <div className="bg-white rounded-xl border border-gray-200 p-8 text-center">
             <Award className="w-16 h-16 text-amber-500 mx-auto mb-4" />
-            <h3 className="text-xl font-semibold text-gray-900 mb-2">Examen</h3>
+            <h3 className="text-xl font-semibold text-gray-900 mb-2">
+              {info?.titulo || 'Examen'}
+            </h3>
+            {info?.descripcion && (
+              <p className="text-sm text-gray-500 mb-4 max-w-md mx-auto">{info.descripcion}</p>
+            )}
+            {/* Info del examen */}
+            <div className="flex flex-wrap justify-center gap-3 mb-6">
+              {info?.tiempo_limite && (
+                <div className="flex items-center gap-2 px-3 py-1.5 bg-gray-50 rounded-lg text-sm text-gray-600">
+                  <Clock className="w-4 h-4" /> {info.tiempo_limite} min
+                </div>
+              )}
+              {info?.total_preguntas > 0 && (
+                <div className="flex items-center gap-2 px-3 py-1.5 bg-gray-50 rounded-lg text-sm text-gray-600">
+                  <FileText className="w-4 h-4" /> {info.total_preguntas} preguntas
+                </div>
+              )}
+              {info?.puntaje_aprobacion && (
+                <div className="flex items-center gap-2 px-3 py-1.5 bg-gray-50 rounded-lg text-sm text-gray-600">
+                  <Target className="w-4 h-4" /> Mínimo {info.puntaje_aprobacion}%
+                </div>
+              )}
+              {info?.intentos_permitidos > 0 && (
+                <div className="flex items-center gap-2 px-3 py-1.5 bg-gray-50 rounded-lg text-sm text-gray-600">
+                  <BarChart3 className="w-4 h-4" /> {info.intentos_permitidos} intento(s)
+                </div>
+              )}
+            </div>
             <p className="text-sm text-gray-500 mb-6 max-w-md mx-auto">
               Responde todas las preguntas dentro del tiempo límite. Tu calificación se calculará automáticamente.
             </p>
@@ -464,6 +604,8 @@ const DetalleCurso = ({
               <button
                 onClick={async () => {
                   if (!contenidoLeccion.examen_id) return;
+                  // Si ya tenemos los datos, ir directo al examen
+                  if (examenActivo) return;
                   setCargandoExamen(true);
                   setErrorExamen('');
                   try {
@@ -475,10 +617,10 @@ const DetalleCurso = ({
                     setCargandoExamen(false);
                   }
                 }}
-                disabled={estaBloqueado}
+                disabled={estaBloqueado || cargandoExamen}
                 className="px-8 py-3 bg-[#0f766e] text-white rounded-lg hover:bg-[#0d5e57] transition-colors font-medium disabled:opacity-50 disabled:cursor-not-allowed"
               >
-                {estaBloqueado ? 'Examen bloqueado' : 'Comenzar examen'}
+                {cargandoExamen ? 'Cargando...' : estaBloqueado ? 'Examen bloqueado' : 'Comenzar examen'}
               </button>
             ) : (
               <p className="text-sm text-gray-400">Sin examen asignado</p>

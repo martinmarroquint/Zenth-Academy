@@ -50,6 +50,7 @@ const MaterialesPage = lazy(() => import('./pages/modulos/MaterialesPage'));
 const EstudianteCursos = lazy(() => import('./pages/EstudianteCursos'));
 const EstudianteCursoDetalle = lazy(() => import('./pages/EstudianteCursoDetalle'));
 const EstudianteCertificados = lazy(() => import('./pages/EstudianteCertificados'));
+const HistorialEstudiante = lazy(() => import('./components/examenes/HistorialEstudiante'));
 const CompartirSala = lazy(() => import('./pages/CompartirSala'));
 const PanelSolicitudes = lazy(() => import('./components/docente/PanelSolicitudes'));
 
@@ -173,6 +174,11 @@ function App() {
             <Route index element={<EstudianteCursos />} />
             <Route path="cursos" element={<EstudianteCursos />} />
             <Route path="cursos/:id" element={<EstudianteCursoDetalle />} />
+            <Route path="historial" element={
+              <React.Suspense fallback={<CargandoPagina />}>
+                <HistorialEstudiante />
+              </React.Suspense>
+            } />
             <Route path="foro" element={<ForoPage />} />
             <Route path="certificados" element={<EstudianteCertificados />} />
             <Route path="configuracion" element={<ConfiguracionPage />} />

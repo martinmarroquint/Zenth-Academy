@@ -245,6 +245,8 @@ class ResultadoCreate(BaseModel):
     estado: str = 'COMPLETADO'
     # ✅ Autoridad de tiempo: id del intento iniciado en el servidor.
     intento_id: Optional[str] = None
+    # ✅ SEGURIDAD: mappings de shuffle para des-shuffle en calificación server-side.
+    mappings_shuffle: Optional[Dict[str, Any]] = None
 
 class ResultadoResponse(BaseModel):
     id: str
@@ -265,6 +267,11 @@ class ResultadoResponse(BaseModel):
     estado: str
     entregado_por_tiempo: bool = False
     entregado_en: Optional[datetime] = None
+    # ✅ Campo calculado: indica si el estudiante aprobó según puntaje_aprobacion del examen.
+    aprobado: Optional[bool] = None
+    puntaje_aprobacion: Optional[float] = None
+    intentos_permitidos: Optional[int] = None
+    intentos_usados: Optional[int] = None
 
     class Config:
         from_attributes = True
@@ -287,6 +294,7 @@ class ResultadoPublicoRequest(BaseModel):
     tiempo_usado: int = 0
     violaciones: int = 0
     intento_id: Optional[str] = None
+    mappings_shuffle: Optional[Dict[str, Any]] = None
 
 
 class IntentoExamenResponse(BaseModel):
@@ -298,6 +306,9 @@ class IntentoExamenResponse(BaseModel):
     tiempo_limite: int
     intentos_permitidos: int
     intentos_usados: int
+    # ✅ Info extra para que el frontend muestre al estudiante
+    puntaje_aprobacion: float = 60.0
+    intentos_restantes: int = 0
 
 
 # ========== HISTORIAL DE COMPARTICIONES ==========

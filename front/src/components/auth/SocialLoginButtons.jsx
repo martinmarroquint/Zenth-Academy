@@ -55,6 +55,17 @@ const SocialLoginButtons = ({ onError, texto = 'o continúa con' }) => {
     return () => { activo = false; };
   }, []);
 
+  // ✅ Pre-carga el panel de destino (tras cargar lo crítico) para que el
+  // ingreso sea instantáneo: el chunk ya está descargado cuando navegamos.
+  useEffect(() => {
+    const t = setTimeout(() => {
+      import('../../pages/EstudianteCursos').catch(() => {});
+      import('../../pages/DashboardDocente').catch(() => {});
+      import('../../pages/DashboardAdmin').catch(() => {});
+    }, 1200);
+    return () => clearTimeout(t);
+  }, []);
+
   const handleGoogleCredential = useCallback(async (credential) => {
     setCargando(true);
     const res = await authService.loginConGoogle(credential);

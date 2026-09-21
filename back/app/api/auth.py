@@ -260,10 +260,10 @@ async def login_google(
             fecha_registro=datetime.now(timezone.utc),
         )
         db.add(user)
-        db.commit()
-        db.refresh(user)
         logger.info(f"Nuevo usuario registrado vía Google: {email}")
     else:
+        if not user.activo:
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Usuario inactivo")
         # ✅ Vinculación: no duplicar usuarios; solo asociar el proveedor
         if not user.google_id and google_sub:
             ya_usado = db.query(Usuario).filter(
@@ -277,15 +277,12 @@ async def login_google(
             user.email_verificado = True
         if not user.foto_url and info.get("picture"):
             user.foto_url = info.get("picture")
-        db.commit()
-        db.refresh(user)
-
-    if not user.activo:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Usuario inactivo")
 
     user.ultimo_acceso = datetime.now(timezone.utc)
-    db.commit()
 
+    # ✅ RENDIMIENTO: un solo commit. `_crear_tokens` persiste el usuario
+    # (nuevo o actualizado) y el refresh token en la MISMA transacción,
+    # evitando 2-3 round-trips extra a la BD (Supabase ~200-300ms c/u).
     tokens = _crear_tokens(db, user)
     return {
         "access_token": tokens["access_token"],

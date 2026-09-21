@@ -301,6 +301,27 @@ async def startup_event():
     logger.info(f"CORS origenes: {len(ALLOWED_ORIGINS)}")
 
     # =============================================
+    # ✅ PRE-CALENTAR CLAVES PÚBLICAS DE GOOGLE (JWKS)
+    # Evita pagar la descarga (~200-400ms) en el primer login con Google.
+    # En un hilo aparte para no retrasar el arranque.
+    # =============================================
+    if settings.GOOGLE_CLIENT_ID:
+        try:
+            import threading
+            from app.core.google_auth import _obtener_claves
+
+            def _precalentar_jwks():
+                try:
+                    _obtener_claves(forzar=True)
+                    logger.info("✅ JWKS de Google pre-calentado")
+                except Exception as e:
+                    logger.debug(f"No se pudo pre-calentar JWKS de Google: {e}")
+
+            threading.Thread(target=_precalentar_jwks, daemon=True).start()
+        except Exception as e:
+            logger.debug(f"Error programando pre-calentamiento de JWKS: {e}")
+
+    # =============================================
     # ✅ MODO SQLITE (DESARROLLO LOCAL): crear todas las tablas
     # =============================================
     if settings.SUPABASE_DATABASE_URL.lower().startswith("sqlite"):

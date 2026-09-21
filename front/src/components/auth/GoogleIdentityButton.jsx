@@ -52,6 +52,9 @@ const GoogleIdentityButton = ({ clientId, onCredential, onError }) => {
             onError?.('Google no devolvió credencial');
           }
         },
+        // ✅ Ingreso con un clic (o automático) si ya autorizó antes en este navegador
+        auto_select: true,
+        cancel_on_tap_outside: true,
       });
 
       if (contenedorRef.current) {
@@ -65,6 +68,10 @@ const GoogleIdentityButton = ({ clientId, onCredential, onError }) => {
           width: anchoDisponible(),
         });
       }
+
+      // One Tap: permite entrar con un solo clic si ya inició sesión antes
+      try { window.google.accounts.id.prompt(); } catch { /* no soportado */ }
+
       setCargando(false);
     };
 

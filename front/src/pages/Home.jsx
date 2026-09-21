@@ -2,7 +2,7 @@
 // PAGINA PRINCIPAL - QR arriba, Login abajo
 
 import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { useNavigate, Link } from 'react-router-dom';
+import { useNavigate, Link, Navigate } from 'react-router-dom';
 import { QRCodeSVG } from 'qrcode.react';
 import {
   GraduationCap, Lock, Mail, Eye, EyeOff, Loader2, AlertCircle,
@@ -166,6 +166,13 @@ const Home = () => {
   };
 
   const urlSala = sala?.codigo ? `${window.location.origin}/compartir/${sala.codigo}` : '';
+
+  // ✅ Si ya hay sesión activa, entrar DIRECTO al panel (no mostrar el login).
+  if (authService.isAuthenticated()) {
+    const rolActual = authService.getRol();
+    const destino = rolActual === 'admin' ? '/admin' : rolActual === 'docente' ? '/docente' : '/estudiante';
+    return <Navigate to={destino} replace />;
+  }
 
   return (
     <div className="min-h-screen bg-gradient-to-b from-[var(--color-bg)] via-[var(--color-bg-subtle)] to-gray-50 flex flex-col items-center justify-center p-4">

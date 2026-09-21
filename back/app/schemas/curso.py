@@ -209,6 +209,7 @@ class CursoResponse(BaseModel):
     certificado_nota_minima: Optional[Decimal] = None
     tiene_acceso: Optional[bool] = False
     tiene_solicitud_pendiente: Optional[bool] = False
+    esta_inscrito: Optional[bool] = False
     created_at: Optional[datetime]
     updated_at: Optional[datetime]
 

@@ -49,7 +49,14 @@ router = APIRouter()
 # FUNCIONES AUXILIARES
 # =============================================
 
-def _curso_to_dict(curso: Curso, tiene_acceso: bool = False, tiene_solicitud_pendiente: bool = False) -> dict:
+def _curso_to_dict(curso: Curso, tiene_acceso: bool = False, tiene_solicitud_pendiente: bool = False, esta_inscrito: bool = False) -> dict:
+    # ✅ SEGURIDAD: si el usuario NO esta inscrito, strip el contenido real de las lecciones.
+    # Solo el docente o usuarios con acceso ven el contenido completo.
+    es_docente_del_curso = False  # se setea en el endpoint que llama
+    modulos = curso.modulos or []
+    if not esta_inscrito and not tiene_acceso:
+        modulos = _sanear_modulos_para_preview(modulos)
+    
     return {
         "id": str(curso.id),
         "titulo": curso.titulo,
@@ -67,7 +74,7 @@ def _curso_to_dict(curso: Curso, tiene_acceso: bool = False, tiene_solicitud_pen
         "instrucciones_pago": curso.instrucciones_pago,
         "imagen_url": curso.imagen_url,
         "estado": (curso.estado or "BORRADOR").upper(),
-        "modulos": curso.modulos or [],
+        "modulos": modulos,
         "estudiantes_count": curso.estudiantes_count or 0,
         "rating": curso.rating or 0,
         "rating_count": curso.rating_count or 0,
@@ -81,6 +88,7 @@ def _curso_to_dict(curso: Curso, tiene_acceso: bool = False, tiene_solicitud_pen
         "certificado_nota_minima": float(curso.certificado_nota_minima) if curso.certificado_nota_minima is not None else None,
         "tiene_acceso": tiene_acceso,
         "tiene_solicitud_pendiente": tiene_solicitud_pendiente,
+        "esta_inscrito": esta_inscrito,
         "created_at": curso.created_at.isoformat() if curso.created_at else None,
         "updated_at": curso.updated_at.isoformat() if curso.updated_at else None,
     }
@@ -111,6 +119,42 @@ def _tiene_solicitud_pendiente(db: Session, curso_id: str, usuario_id: str) -> b
         SolicitudAccesoCurso.estado == "pendiente"
     ).first()
     return solicitud is not None
+
+
+def _esta_inscrito(db: Session, curso_id: str, usuario_id: str) -> bool:
+    """Verifica si el usuario esta inscrito en el curso (tiene InscripcionCurso)."""
+    inscripcion = db.query(InscripcionCurso).filter(
+        cast(InscripcionCurso.curso_id, String) == curso_id,
+        cast(InscripcionCurso.estudiante_id, String) == usuario_id
+    ).first()
+    return inscripcion is not None
+
+
+def _sanear_modulos_para_preview(modulos: list) -> list:
+    """
+    Devuelve una version segura de modulos para usuarios no inscritos.
+    Mantiene titulos, tipos y duraciones de lecciones pero elimina
+    todo el contenido real (bloques: videos, textos, recursos).
+    """
+    modulos_limpios = []
+    for modulo in (modulos or []):
+        lecciones_limpias = []
+        for leccion in (modulo.get("lecciones") or []):
+            leccion_limpia = {
+                "id": leccion.get("id"),
+                "titulo": leccion.get("titulo", "Sin titulo"),
+                "tipo": leccion.get("tipo", "contenido"),
+                "duracion_minutos": leccion.get("duracion_minutos"),
+                "orden": leccion.get("orden"),
+                # NO incluir: bloques, examen_id, contenido real
+            }
+            lecciones_limpias.append(leccion_limpia)
+        modulos_limpios.append({
+            **{k: v for k, v in modulo.items() if k != "lecciones"},
+            "lecciones": lecciones_limpias,
+            "total_lecciones": len(lecciones_limpias),
+        })
+    return modulos_limpios
 
 
 def _actualizar_progreso_curso(db: Session, curso_id: str, estudiante_id: str):
@@ -966,7 +1010,7 @@ async def publicar_curso(
             tiene_solicitud_pendiente = False
         
         invalidar_cursos()
-        return _curso_to_dict(curso, tiene_acceso, tiene_solicitud_pendiente)
+        return _curso_to_dict(curso, True, False, True)
     except HTTPException:
         raise
     except Exception as e:
@@ -1940,17 +1984,27 @@ async def listar_cursos(
         ).all() if curso_ids else []
         cursos_con_solicitud = {str(s.curso_id) for s in solicitudes_pendientes}
 
+        # ✅ SEGURIDAD: precargar inscripciones para saber a qué cursos tiene acceso el contenido
+        inscripciones_usuario = db.query(InscripcionCurso).filter(
+            InscripcionCurso.curso_id.in_(curso_ids),
+            cast(InscripcionCurso.estudiante_id, String) == usuario_id
+        ).all() if curso_ids else []
+        cursos_inscritos = {str(i.curso_id) for i in inscripciones_usuario}
+
         result = []
         for curso in cursos:
             cid = str(curso.id)
             tiene_acceso = cid in cursos_con_acceso
             tiene_solicitud_pendiente = cid in cursos_con_solicitud
+            esta_inscrito = cid in cursos_inscritos
             
-            if str(curso.docente_id) == usuario_id:
+            es_docente_del_curso = str(curso.docente_id) == usuario_id
+            if es_docente_del_curso:
                 tiene_acceso = True
                 tiene_solicitud_pendiente = False
+                esta_inscrito = True
             
-            result.append(_curso_to_dict(curso, tiene_acceso, tiene_solicitud_pendiente))
+            result.append(_curso_to_dict(curso, tiene_acceso, tiene_solicitud_pendiente, esta_inscrito))
         
         cache.set(clave_cache, result, ttl=60)
         return result
@@ -1973,12 +2027,15 @@ async def obtener_curso(
         usuario_id = str(current_user.id)
         tiene_acceso = _verificar_acceso(db, id, usuario_id)
         tiene_solicitud_pendiente = _tiene_solicitud_pendiente(db, id, usuario_id)
+        esta_inscrito = _esta_inscrito(db, id, usuario_id)
         
-        if str(curso.docente_id) == usuario_id:
+        es_docente_del_curso = str(curso.docente_id) == usuario_id
+        if es_docente_del_curso:
             tiene_acceso = True
             tiene_solicitud_pendiente = False
+            esta_inscrito = True
         
-        return _curso_to_dict(curso, tiene_acceso, tiene_solicitud_pendiente)
+        return _curso_to_dict(curso, tiene_acceso, tiene_solicitud_pendiente, esta_inscrito)
     except HTTPException:
         raise
     except Exception as e:
@@ -2028,7 +2085,7 @@ async def crear_curso(
         db.refresh(curso)
         logger.info(f"Curso creado: {curso.id} - {curso.titulo[:50]}")
         invalidar_cursos()
-        return _curso_to_dict(curso, True, False)
+        return _curso_to_dict(curso, True, False, True)
     except HTTPException:
         raise
     except Exception as e:
@@ -2070,7 +2127,7 @@ async def actualizar_curso(
             tiene_solicitud_pendiente = False
         
         invalidar_cursos()
-        return _curso_to_dict(curso, tiene_acceso, tiene_solicitud_pendiente)
+        return _curso_to_dict(curso, True, False, True)
     except HTTPException:
         raise
     except Exception as e:

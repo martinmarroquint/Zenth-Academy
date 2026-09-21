@@ -63,6 +63,7 @@ const DetalleCurso = ({
   const [moduloAbierto, setModuloAbierto] = useState([]);
   const [tieneAcceso, setTieneAcceso] = useState(false);
   const [tieneSolicitudPendiente, setTieneSolicitudPendiente] = useState(false);
+  const [estaInscrito, setEstaInscrito] = useState(false);
   const [solicitando, setSolicitando] = useState(false);
   const [mensajeSolicitud, setMensajeSolicitud] = useState('');
   const [mostrarFormularioSolicitud, setMostrarFormularioSolicitud] = useState(false);
@@ -147,6 +148,7 @@ const DetalleCurso = ({
         setModuloAbierto(data?.modulos?.[0]?.id ? [data.modulos[0].id] : []);
         setTieneAcceso(data?.tiene_acceso || false);
         setTieneSolicitudPendiente(data?.tiene_solicitud_pendiente || false);
+        setEstaInscrito(data?.esta_inscrito || false);
 
         if (usuarioId && !esDocente) {
           if (data.tiene_acceso || data.precio_tipo !== 'pago') {
@@ -239,9 +241,9 @@ const DetalleCurso = ({
 
   // Handlers
   const handleAbrirLeccion = useCallback(async (modulo, leccion) => {
-    // Verificar bloqueo de pago
-    if (curso?.precio_tipo === 'pago' && !tieneAcceso && !esDocente) {
-      toast.warning('Este curso requiere acceso. Solicita acceso al docente.');
+    // ✅ SEGURIDAD: verificar inscripcion o acceso antes de abrir cualquier leccion
+    if (!esDocente && !estaInscrito && !tieneAcceso) {
+      toast.warning('Debes inscribirte en el curso para acceder al contenido.');
       return;
     }
     
@@ -274,7 +276,7 @@ const DetalleCurso = ({
     setErrorExamen('');
     tiempoEnLeccionRef.current = 0;
     window.scrollTo({ top: 0, behavior: 'smooth' });
-  }, [curso, tieneAcceso, esDocente, esEstudiante, toast]);
+  }, [curso, tieneAcceso, estaInscrito, esDocente, esEstudiante, toast]);
 
   // ✅ PRE-CARGAR datos del examen cuando se selecciona una lección tipo examen
   useEffect(() => {
@@ -380,6 +382,29 @@ const DetalleCurso = ({
     }
   };
 
+  // ✅ INSCRIPCION DIRECTA para cursos gratuitos
+  const handleInscribirse = async () => {
+    setSolicitando(true);
+    try {
+      await cursosService.inscribirse(cursoId);
+      setEstaInscrito(true);
+      setTieneAcceso(true);
+      toast.success('Inscrito exitosamente. Ya puedes acceder al contenido del curso.');
+      // Recargar progreso
+      if (usuarioId) {
+        try {
+          const prog = await cursosService.obtenerProgreso(cursoId, usuarioId);
+          setProgreso(prog?.progreso || 0);
+          setLeccionesCompletadas(prog?.lecciones_completadas || []);
+        } catch { /* ok */ }
+      }
+    } catch (e) {
+      toast.error(e.message || 'No se pudo inscribir');
+    } finally {
+      setSolicitando(false);
+    }
+  };
+
   const handleCertificado = (idCurso) => {
     if (onGenerarCertificado) {
       onGenerarCertificado(idCurso);
@@ -411,7 +436,7 @@ const DetalleCurso = ({
     
     const bloques = getBloquesDeLeccion(leccionActual);
     const tipoLeccion = getTipoLeccion(leccionActual);
-    const estaBloqueado = curso?.precio_tipo === 'pago' && !tieneAcceso && !esDocente;
+    const estaBloqueado = !esDocente && !estaInscrito && !tieneAcceso;
 
     // ✅ CORREGIDO: Lecciones tipo examen o quiz no tienen bloques — manejar directamente
     if (bloques.length === 0) {
@@ -790,7 +815,7 @@ const DetalleCurso = ({
   const renderTodosLosBloques = () => {
     if (!leccionActual) return null;
     const bloques = getBloquesDeLeccion(leccionActual);
-    const estaBloqueado = curso?.precio_tipo === 'pago' && !tieneAcceso && !esDocente;
+    const estaBloqueado = !esDocente && !estaInscrito && !tieneAcceso;
 
     if (bloques.length === 0) {
       return (
@@ -875,7 +900,9 @@ const DetalleCurso = ({
     );
   }
 
-  const estaBloqueado = curso?.precio_tipo === 'pago' && !tieneAcceso && !esDocente;
+  // ✅ SEGURIDAD: el contenido solo es visible si el usuario esta inscrito,
+  // tiene acceso (cursos de pago), o es el docente del curso.
+  const estaBloqueado = !esDocente && !estaInscrito && !tieneAcceso;
 
   // ============================================================
   // RENDER: LECCIÓN EMBEBIDA (CON SOPORTE PARA BLOQUEADO)
@@ -885,7 +912,7 @@ const DetalleCurso = ({
     const leccionesDelModulo = getLeccionesDeModulo(moduloActual || {});
     const indexActual = leccionesDelModulo.findIndex(l => l.id === leccionActual.id);
     const bloques = getBloquesDeLeccion(leccionActual);
-    const esBloqueadaPorPago = curso?.precio_tipo === 'pago' && !tieneAcceso && !esDocente;
+    const esBloqueadaPorPago = !esDocente && !estaInscrito && !tieneAcceso;
     const esBloqueadaSecuencial = leccionBloqueadaInfo?.bloqueada || false;
     const esBloqueada = esBloqueadaPorPago || esBloqueadaSecuencial;
     const razonBloqueo = leccionBloqueadaInfo?.razon || '';
@@ -1113,32 +1140,53 @@ const DetalleCurso = ({
           {esEstudiante && (
             <div className="pt-2 border-t border-gray-100">
               {estaBloqueado ? (
-                <div className="flex items-center gap-3 text-sm bg-gray-50/50 px-4 py-2.5 rounded-xl border border-gray-100/50">
-                  <div className="w-8 h-8 rounded-full bg-gray-100 flex items-center justify-center flex-shrink-0">
-                    <Lock className="w-4 h-4 text-gray-400" />
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm text-gray-600">
-                      {tieneSolicitudPendiente 
-                        ? 'Solicitud de acceso pendiente de aprobación' 
-                        : 'Este curso requiere acceso para ver el contenido completo'}
-                    </p>
-                  </div>
-                  {!tieneSolicitudPendiente && (
-                    <button
-                      onClick={() => setMostrarFormularioSolicitud(true)}
-                      className="px-4 py-1.5 text-xs font-medium text-white rounded-lg transition-colors flex-shrink-0"
-                      style={{ backgroundColor: '#0f766e' }}
-                      onMouseEnter={(e) => e.target.style.backgroundColor = '#0d5e57'}
-                      onMouseLeave={(e) => e.target.style.backgroundColor = '#0f766e'}
-                    >
-                      Solicitar
-                    </button>
-                  )}
-                  {tieneSolicitudPendiente && (
-                    <span className="text-xs text-amber-600 bg-amber-50 px-3 py-1 rounded-full flex-shrink-0">
-                      Pendiente
-                    </span>
+                <div className="space-y-3">
+                  {curso?.precio_tipo === 'gratis' ? (
+                    <div className="flex items-center gap-3 text-sm bg-emerald-50/50 px-4 py-3 rounded-xl border border-emerald-100/50">
+                      <div className="w-8 h-8 rounded-full bg-emerald-100 flex items-center justify-center flex-shrink-0">
+                        <BookOpen className="w-4 h-4 text-emerald-600" />
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm text-gray-700 font-medium">Curso gratuito</p>
+                        <p className="text-xs text-gray-500">Inscribete para acceder a todo el contenido</p>
+                      </div>
+                      <button
+                        onClick={handleInscribirse}
+                        disabled={solicitando}
+                        className="px-4 py-2 text-sm font-medium text-white rounded-lg transition-colors flex items-center gap-2 disabled:opacity-50"
+                        style={{ backgroundColor: '#0f766e' }}
+                      >
+                        {solicitando ? <Loader2 className="w-4 h-4 animate-spin" /> : <BookOpen className="w-4 h-4" />}
+                        Inscribirme
+                      </button>
+                    </div>
+                  ) : (
+                    <div className="flex items-center gap-3 text-sm bg-gray-50/50 px-4 py-2.5 rounded-xl border border-gray-100/50">
+                      <div className="w-8 h-8 rounded-full bg-gray-100 flex items-center justify-center flex-shrink-0">
+                        <Lock className="w-4 h-4 text-gray-400" />
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm text-gray-600">
+                          {tieneSolicitudPendiente 
+                            ? 'Solicitud de acceso pendiente de aprobacion' 
+                            : 'Este curso requiere acceso para ver el contenido completo'}
+                        </p>
+                      </div>
+                      {!tieneSolicitudPendiente && (
+                        <button
+                          onClick={() => setMostrarFormularioSolicitud(true)}
+                          className="px-4 py-1.5 text-xs font-medium text-white rounded-lg transition-colors flex-shrink-0"
+                          style={{ backgroundColor: '#0f766e' }}
+                        >
+                          Solicitar
+                        </button>
+                      )}
+                      {tieneSolicitudPendiente && (
+                        <span className="text-xs text-amber-600 bg-amber-50 px-3 py-1 rounded-full flex-shrink-0">
+                          Pendiente
+                        </span>
+                      )}
+                    </div>
                   )}
                 </div>
               ) : (
@@ -1151,7 +1199,7 @@ const DetalleCurso = ({
           )}
 
           {/* Progreso */}
-          {(esEstudiante && (tieneAcceso || curso.precio_tipo !== 'pago')) && (
+          {(esEstudiante && estaInscrito) && (
             <div className="pt-2">
               <div className="flex items-center justify-between text-sm">
                 <span className="text-gray-500">Progreso del curso</span>

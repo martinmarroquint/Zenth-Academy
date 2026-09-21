@@ -386,7 +386,7 @@ const DetalleCurso = ({
   const handleInscribirse = async () => {
     setSolicitando(true);
     try {
-      await cursosService.inscribirse(cursoId);
+      await cursosService.inscribirme(cursoId);
       setEstaInscrito(true);
       setTieneAcceso(true);
       toast.success('Inscrito exitosamente. Ya puedes acceder al contenido del curso.');

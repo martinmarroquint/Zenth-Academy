@@ -99,7 +99,8 @@ const ExamenActivo = ({
             { letra: 'A', original: 0, texto: p.opcion_a },
             { letra: 'B', original: 1, texto: p.opcion_b },
             { letra: 'C', original: 2, texto: p.opcion_c },
-            { letra: 'D', original: 3, texto: p.opcion_d }
+            { letra: 'D', original: 3, texto: p.opcion_d },
+            { letra: 'E', original: 4, texto: p.opcion_e }
           ].filter(o => o.texto && o.texto.trim());
           
           if (opciones.length > 0) {
@@ -116,7 +117,8 @@ const ExamenActivo = ({
               opcion_a: aleatorias[0]?.texto || '', 
               opcion_b: aleatorias[1]?.texto || '', 
               opcion_c: aleatorias[2]?.texto || '', 
-              opcion_d: aleatorias[3]?.texto || '' 
+              opcion_d: aleatorias[3]?.texto || '',
+              opcion_e: aleatorias[4]?.texto || ''
             };
           }
         }
@@ -134,7 +136,9 @@ const ExamenActivo = ({
           if (p.tipo === 'escala_numerica') {
             const clave = String(p._indiceOriginal ?? p.orden ?? idx);
             if (siguiente[clave] === undefined) {
-              siguiente[clave] = Math.round(((p.escala_min || 1) + (p.escala_max || 10)) / 2);
+              const minVal = p.escala_min ?? 1;
+              const maxVal = p.escala_max ?? 10;
+              siguiente[clave] = Math.round((minVal + maxVal) / 2);
             }
           }
         });
@@ -656,7 +660,6 @@ const ExamenActivo = ({
                           <div className="text-sm text-gray-800 leading-relaxed flex flex-wrap items-center gap-1">
                             {(frase.segmentos||[]).map((seg,si)=>{
                               const idx = espacioIdx + (frase.segmentos||[]).slice(0, si).filter(x => x.tipo === 'espacio').length;
-                              if (seg.tipo === 'espacio') espacioIdx++;
                               return (
                                 <span key={seg.id||si}>
                                   {seg.tipo === 'texto' ? <span>{seg.texto}</span> : (
@@ -686,7 +689,7 @@ const ExamenActivo = ({
                   <div>
                     <textarea value={respuestas[claveReal]||''} onChange={(e)=>guardarRespuesta(e.target.value)} disabled={entregado}
                       rows="6" placeholder="Escriba su respuesta..." className="w-full px-4 py-2.5 text-sm border rounded-xl resize-none" />
-                    <p className="text-xs text-gray-400 mt-1">Minimo {preguntaActualData.longitud_minima||100} palabras</p>
+                    <p className="text-xs text-gray-400 mt-1">Minimo {preguntaActualData.longitud_minima ?? 100} caracteres</p>
                   </div>
                 )}
 
@@ -745,24 +748,31 @@ const ExamenActivo = ({
                 )}
 
                 {/* ESCALA NUMERICA (ENCUESTA) */}
-                {preguntaActualData.tipo === 'escala_numerica' && (
+                {preguntaActualData.tipo === 'escala_numerica' && (() => {
+                  const minVal = preguntaActualData.escala_min ?? 1;
+                  const maxVal = preguntaActualData.escala_max ?? 10;
+                  const step = preguntaActualData.escala_paso ?? 1;
+                  const defaultVal = Math.round((minVal + maxVal) / 2);
+                  const currentVal = respuestas[claveReal] ?? defaultVal;
+                  return (
                   <div className="space-y-3">
                     <p className="text-xs text-purple-600 font-medium flex items-center gap-1">
                       <BarChart3 className="w-3.5 h-3.5"/> Encuesta - seleccione un valor
                     </p>
                     <div className="py-2">
-                      <input type="range" min={preguntaActualData.escala_min || 1} max={preguntaActualData.escala_max || 10} step={preguntaActualData.escala_paso || 1}
-                        value={respuestas[claveReal] || Math.round(((preguntaActualData.escala_min || 1) + (preguntaActualData.escala_max || 10)) / 2)}
+                      <input type="range" min={minVal} max={maxVal} step={step}
+                        value={currentVal}
                         onChange={(e) => guardarRespuesta(parseInt(e.target.value))} disabled={entregado}
                         className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-purple-500"/>
                       <div className="flex justify-between mt-2">
                         <span className="text-xs text-gray-400">{preguntaActualData.escala_min_label || 'Nada'}</span>
-                        <span className="text-lg font-bold text-purple-600">{respuestas[claveReal] || Math.round(((preguntaActualData.escala_min || 1) + (preguntaActualData.escala_max || 10)) / 2)}</span>
+                        <span className="text-lg font-bold text-purple-600">{currentVal}</span>
                         <span className="text-xs text-gray-400">{preguntaActualData.escala_max_label || 'Mucho'}</span>
                       </div>
                     </div>
                   </div>
-                )}
+                  );
+                })()}
               </div>
 
               <div className="flex items-center justify-between mt-6 pt-4 border-t border-gray-100">

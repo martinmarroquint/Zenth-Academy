@@ -185,6 +185,15 @@ const PreguntaItem = ({
                 <button onClick={agregarPar} className="flex items-center gap-1 px-2.5 py-1 text-[10px] font-medium text-white rounded-lg hover:shadow-sm transition-all" style={{ backgroundColor: COLOR_PRIMARIO, WebkitTapHighlightColor: 'transparent' }}><Plus className="w-3 h-3"/> Agregar</button>
               </div>
               <p className="text-[10px] text-gray-400 mb-2">La Columna B se muestra aleatoria al alumno.</p>
+              {(() => {
+                const colB = (pregunta.columna_b || []).filter(x => x?.trim());
+                const duplicados = colB.filter((item, idx) => colB.indexOf(item) !== idx);
+                return duplicados.length > 0 ? (
+                  <p className="text-[10px] text-amber-500 mb-2 flex items-center gap-1">
+                    <span className="font-medium">Columna B tiene textos duplicados:</span> {duplicados.join(', ')} — los alumnos no podrán distinguirlos.
+                  </p>
+                ) : null;
+              })()}
               <div className="space-y-2">
                 {(pregunta.columna_a || []).map((itemA, i) => {
                   const itemB = (pregunta.columna_b || [])[i] || '';

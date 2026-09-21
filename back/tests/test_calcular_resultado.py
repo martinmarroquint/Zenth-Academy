@@ -423,3 +423,132 @@ def test_regresion_encuesta_respuesta_cadena_vacia_no_da_puntaje():
     ex = examen(pregunta("likert", 5))
     r = calcular_resultado(ex, {"0": ""})
     assert r["puntos_obtenidos"] == 0
+
+
+# =====================================================
+# 11. SHUFFLE / DESHUFFLE (seguridad anti-copia)
+#
+# El backend baraja columna_b / elementos al enviar al
+# estudiante y envía _orden_columna_b / _orden_elementos
+# como mapping. El estudiante responde con índices
+# del orden barajado y el backend des-baraja antes de
+# evaluar contra la respuesta identidad (j == j).
+# =====================================================
+
+def test_relacionar_shuffle_todas_correctas():
+    """
+    Simula: columna_b original = ["Perú", "Chile", "Argentina"]
+    Shuffle: [2, 0, 1] → columna_b_shuffled = ["Argentina", "Perú", "Chile"]
+    Estudiante ve: A→Argentina(0), B→Perú(1), C→Chile(2)
+    Estudiante responde correctamente: A→Perú(1), B→Chile(2), C→Argentina(0)
+    → respuesta = {"0": 1, "1": 2, "2": 0}
+    """
+    ex = examen(pregunta("relacionar", 9, columna_a=["A", "B", "C"]))
+    mapping = {0: {"_orden_columna_b": [2, 0, 1]}}
+    # Respuesta del estudiante en índices del orden barajado
+    r = calcular_resultado(ex, {"0": {"0": 1, "1": 2, "2": 0}}, mapping)
+    assert r["puntos_obtenidos"] == 9
+    assert r["correctas"] == 1
+    assert r["detalle_preguntas"][0]["correcta"] is True
+
+
+def test_relacionar_shuffle_todas_incorrectas():
+    """Misma situación pero el estudiante responde todo al revés."""
+    ex = examen(pregunta("relacionar", 9, columna_a=["A", "B", "C"]))
+    mapping = {0: {"_orden_columna_b": [2, 0, 1]}}
+    r = calcular_resultado(ex, {"0": {"0": 0, "1": 1, "2": 2}}, mapping)
+    assert r["puntos_obtenidos"] == 0
+    assert r["correctas"] == 0
+    assert r["detalle_preguntas"][0]["correcta"] is False
+
+
+def test_relacionar_shuffle_parcial():
+    """3 pares, 2 correctos tras des-shuffle → 2/3 de 9 = 6."""
+    ex = examen(pregunta("relacionar", 9, columna_a=["A", "B", "C"]))
+    mapping = {0: {"_orden_columna_b": [2, 0, 1]}}
+    # A→correcto, B→incorrecto, C→correcto
+    # En índices barajados: A[1]=Perú→0, B[2]=Chile→1, C[0]=Argentina→2
+    # Respuesta: A→0 (Perú), B→1 (Perú → equivocado), C→2 (Chile → equivocado)
+    # Esperamos A correcta, B y C no → 1/3
+    r = calcular_resultado(ex, {"0": {"0": 1, "1": 0, "2": 2}}, mapping)
+    assert r["puntos_obtenidos"] == pytest.approx(3.0)
+    assert r["correctas"] == 0  # No todos correctos
+
+
+def test_relacionar_sin_mapping_aun_funciona():
+    """Sin mapping (examen sin shuffle), la evaluación original sigue funcionando."""
+    ex = examen(pregunta("relacionar", 10, columna_a=["A", "B", "C"]))
+    r = calcular_resultado(ex, {"0": {"0": 0, "1": 1, "2": 2}})
+    assert r["puntos_obtenidos"] == 10
+    assert r["correctas"] == 1
+
+
+def test_relacionar_mapping_invalido_no_crashea():
+    """Si el mapping tiene índices fuera de rango, no debe lanzar excepción."""
+    ex = examen(pregunta("relacionar", 10, columna_a=["A", "B"]))
+    mapping = {0: {"_orden_columna_b": [5, 99]}}  # Índices fuera de rango
+    r = calcular_resultado(ex, {"0": {"0": 0, "1": 1}}, mapping)
+    # Los índices 5,99 están fuera de rango → se usa el valor original
+    assert "puntos_obtenidos" in r
+
+
+def test_ordenamiento_shuffle_todas_correctas():
+    """
+    Simula: elementos original = ["Primero", "Segundo", "Tercero"]
+    Shuffle: [1, 2, 0] → elementos_shuffled = ["Segundo", "Tercero", "Primero"]
+    Estudiante ve: 1=Segundo, 2=Tercero, 3=Primero
+    Estudiante responde correctamente:
+      "Segundo" → position 2, "Tercero" → position 3, "Primero" → position 1
+    → respuesta = [2, 3, 1]
+    """
+    ex = examen(pregunta("ordenamiento", 10, elementos=["Primero", "Segundo", "Tercero"]))
+    mapping = {0: {"_orden_elementos": [1, 2, 0]}}
+    r = calcular_resultado(ex, {"0": [2, 3, 1]}, mapping)
+    assert r["puntos_obtenidos"] == 10
+    assert r["correctas"] == 1
+    assert r["detalle_preguntas"][0]["correcta"] is True
+
+
+def test_ordenamiento_shuffle_todas_incorrectas():
+    """El estudiante responde todo al revés."""
+    ex = examen(pregunta("ordenamiento", 10, elementos=["Primero", "Segundo", "Tercero"]))
+    mapping = {0: {"_orden_elementos": [1, 2, 0]}}
+    # En vez de [2, 3, 1] (correcto), responde [3, 1, 2]
+    r = calcular_resultado(ex, {"0": [3, 1, 2]}, mapping)
+    assert r["puntos_obtenidos"] == 0
+    assert r["correctas"] == 0
+    assert r["detalle_preguntas"][0]["correcta"] is False
+
+
+def test_ordenamiento_shuffle_parcial():
+    """4 elementos, shuffle, 2 en posición correcta → 50% de 10 = 5."""
+    ex = examen(pregunta("ordenamiento", 10, elementos=["A", "B", "C", "D"]))
+    # Shuffle: [2, 0, 3, 1] → shuffled = ["C", "A", "D", "B"]
+    mapping = {0: {"_orden_elementos": [2, 0, 3, 1]}}
+    # Respuesta correcta en orden barajado: C→3, A→1, D→4, B→2 → [3, 1, 4, 2]
+    # Respuesta parcial: 2 correctas
+    r = calcular_resultado(ex, {"0": [3, 1, 2, 4]}, mapping)
+    # Después de des-shuffle:
+    # respuesta_des[orden_el[0]=2] = 3, [orden_el[1]=0] = 1,
+    # respuesta_des[orden_el[2]=3] = 2, [orden_el[3]=1] = 4
+    # respuesta_des = [1, 4, 3, 2]
+    # Comparar: 0→1 ✅, 1→4 ❌, 2→3 ✅, 3→2 ❌ → 2/4 = 5
+    assert r["puntos_obtenidos"] == pytest.approx(5.0)
+    assert r["correctas"] == 0  # No todos correctos
+
+
+def test_ordenamiento_sin_mapping_aun_funciona():
+    """Sin mapping, la evaluación original (identidad) sigue funcionando."""
+    ex = examen(pregunta("ordenamiento", 10, elementos=["a", "b", "c"]))
+    r = calcular_resultado(ex, {"0": [1, 2, 3]})
+    assert r["puntos_obtenidos"] == 10
+    assert r["correctas"] == 1
+
+
+def test_ordenamiento_mapping_longitud_diferente_no_crashea():
+    """Si el mapping tiene longitud diferente a la respuesta, no des-shufflea."""
+    ex = examen(pregunta("ordenamiento", 10, elementos=["a", "b", "c"]))
+    mapping = {0: {"_orden_elementos": [1, 2]}}  # Longitud 2, pero 3 elementos
+    r = calcular_resultado(ex, {"0": [1, 2, 3]}, mapping)
+    # No des-shufflea (longitud mismatch), evalúa como [1, 2, 3] → identidad → correcto
+    assert r["puntos_obtenidos"] == 10

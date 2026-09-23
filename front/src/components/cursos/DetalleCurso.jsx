@@ -78,6 +78,16 @@ const DetalleCurso = ({
   const tiempoEnLeccionRef = useRef(0);
   // Ref para auto-completar cuando el video termina (el handler se define más abajo)
   const handleMarcarCompletadaRef = useRef(null);
+  // Evita re-disparar auto-completado en bucle (id de lección ya intentada)
+  const autoCompletadoLeccionIdRef = useRef(null);
+
+  // ✅ IDs de lecciones: el backend los serializa como string y el curso
+  // puede traer números. Comparar con String evita bucles de "ya completada".
+  const esLeccionCompletada = useCallback((id) => {
+    if (id === null || id === undefined) return false;
+    const clave = String(id);
+    return leccionesCompletadas.some(x => String(x) === clave);
+  }, [leccionesCompletadas]);
 
   // ✅ ESTADOS PARA EXAMEN
   const [examenActivo, setExamenActivo] = useState(null);
@@ -157,7 +167,7 @@ const DetalleCurso = ({
             try {
               const prog = await cursosService.obtenerProgreso(cursoId, usuarioId);
               setProgreso(prog?.progreso || 0);
-              setLeccionesCompletadas(prog?.lecciones_completadas || []);
+              setLeccionesCompletadas((prog?.lecciones_completadas || []).map(String));
               setCursoCompletado(prog?.completado || false);
             } catch (e) {
               console.warn('No se pudo obtener progreso:', e);
@@ -222,7 +232,7 @@ const DetalleCurso = ({
   const isModuloCompleto = useCallback((modulo) => {
     const lecciones = getLeccionesDeModulo(modulo);
     if (lecciones.length === 0) return false;
-    return lecciones.every(l => leccionesCompletadas.includes(l.id));
+    return lecciones.every(l => leccionesCompletadas.some(x => String(x) === String(l.id)));
   }, [getLeccionesDeModulo, leccionesCompletadas]);
 
   const isModuloBloqueado = useCallback((modulo) => {
@@ -264,7 +274,7 @@ const DetalleCurso = ({
     const idx = planLecciones.findIndex(x => x.leccion.id === leccionId);
     if (idx <= 0) return false;
     for (let i = 0; i < idx; i++) {
-      if (!leccionesCompletadas.includes(planLecciones[i].leccion.id)) return true;
+      if (!leccionesCompletadas.some(x => String(x) === String(planLecciones[i].leccion.id))) return true;
     }
     return false;
   }, [esDocente, curso, tieneAcceso, planLecciones, leccionesCompletadas]);
@@ -358,7 +368,7 @@ const DetalleCurso = ({
     // ✅ Persistir tiempo invertido antes de salir (no se pierde el avance de la sesión)
     const tiempoMs = tiempoEnLeccionRef.current || 0;
     const yaCompletada = leccionActual?.id
-      ? leccionesCompletadas.includes(leccionActual.id)
+      ? esLeccionCompletada(leccionActual.id)
       : true;
     if (curso?.id && leccionActual?.id && usuarioId && !yaCompletada && tiempoMs >= 1000) {
       try {
@@ -385,23 +395,24 @@ const DetalleCurso = ({
   }, []);
 
   // ✅ Cuando el video termina, marcar la lección en el backend automáticamente.
-  // Antes `estaCompletada` incluía `videoCompletado` → el UI mostraba "Completada"
-  // y deshabilitaba el botón SIN llamar a completarLeccion → el % se quedaba en 0.
-  const autoCompletandoRef = useRef(false);
+  // Se dispara UNA sola vez por lección (autoCompletadoLeccionIdRef) para evitar
+  // el bucle de toasts "Lección completada" si el id del curso no matchea el del progreso.
   useEffect(() => {
     if (!videoCompletado) {
-      autoCompletandoRef.current = false;
+      autoCompletadoLeccionIdRef.current = null;
       return;
     }
     if (!leccionActual?.id || !curso?.id || !usuarioId) return;
-    if (leccionesCompletadas.includes(leccionActual.id)) return;
-    if (marcando || autoCompletandoRef.current) return;
+    if (esLeccionCompletada(leccionActual.id)) return;
+    if (marcando) return;
+    const claveLeccion = String(leccionActual.id);
+    if (autoCompletadoLeccionIdRef.current === claveLeccion) return;
     // Solo lecciones con video (las de texto/examen usan su propio flujo)
     const tieneVideo = getBloquesDeLeccion(leccionActual).some(b => b.tipo === 'video');
     if (!tieneVideo) return;
-    autoCompletandoRef.current = true;
-    handleMarcarCompletadaRef.current?.();
-  }, [videoCompletado, leccionActual, curso?.id, usuarioId, leccionesCompletadas, marcando]);
+    autoCompletadoLeccionIdRef.current = claveLeccion;
+    handleMarcarCompletadaRef.current?.({ silencioso: true });
+  }, [videoCompletado, leccionActual, curso?.id, usuarioId, esLeccionCompletada, marcando]);
 
   // ✅ Refrescar % y lista de lecciones completadas desde el backend
   const refrescarProgreso = useCallback(async () => {
@@ -409,7 +420,8 @@ const DetalleCurso = ({
     try {
       const prog = await cursosService.obtenerProgreso(cursoId, usuarioId);
       setProgreso(prog?.progreso || 0);
-      setLeccionesCompletadas(prog?.lecciones_completadas || []);
+      // Normalizar a string: el backend guarda str(id)
+      setLeccionesCompletadas((prog?.lecciones_completadas || []).map(String));
       setCursoCompletado(prog?.completado || false);
       return prog;
     } catch (e) {
@@ -433,10 +445,11 @@ const DetalleCurso = ({
     await refrescarProgreso();
   }, [curso?.id, leccionActual?.id, usuarioId, refrescarProgreso]);
 
-  const handleMarcarCompletada = async () => {
+  const handleMarcarCompletada = async (opts = {}) => {
+    const silencioso = !!opts.silencioso;
     if (!usuarioId || !curso?.id || !leccionActual?.id) return;
     if (marcando) return;
-    if (leccionesCompletadas.includes(leccionActual.id)) return;
+    if (esLeccionCompletada(leccionActual.id)) return;
 
     // Verificar que el contenido fue consumido realmente
     const bloquesLeccion = getBloquesDeLeccion(leccionActual);
@@ -445,7 +458,7 @@ const DetalleCurso = ({
     
     // Si tiene video, exigir que este marcado como completado
     if (tieneVideo && !videoCompletado) {
-      toast.warning('Debes ver el video completo antes de marcar la leccion como completada.');
+      if (!silencioso) toast.warning('Debes ver el video completo antes de marcar la leccion como completada.');
       return;
     }
     
@@ -454,8 +467,10 @@ const DetalleCurso = ({
       // Para texto, dar 3 segundos minimo de lectura
       const tiempoMinimo = 3000;
       if (tiempoEnLeccionRef.current < tiempoMinimo) {
-        const segundos = Math.ceil((tiempoMinimo - tiempoEnLeccionRef.current) / 1000);
-        toast.warning(`Debes al menos ${segundos} segundo(s) mas leyendo el contenido antes de marcar como completada.`);
+        if (!silencioso) {
+          const segundos = Math.ceil((tiempoMinimo - tiempoEnLeccionRef.current) / 1000);
+          toast.warning(`Debes al menos ${segundos} segundo(s) mas leyendo el contenido antes de marcar como completada.`);
+        }
         return;
       }
     }
@@ -470,8 +485,10 @@ const DetalleCurso = ({
       );
       const prog = await refrescarProgreso();
       setVideoCompletado(true);
-      autoCompletandoRef.current = false;
-      toast.success('Lección completada. Ya puedes continuar con la siguiente.');
+      // Solo toast en clic manual: el auto-disparo del video no debe spamear
+      if (!silencioso) {
+        toast.success('Lección completada. Ya puedes continuar con la siguiente.');
+      }
       
       // Si el curso se completo, cargar el certificado
       if (prog?.completado) {
@@ -487,9 +504,13 @@ const DetalleCurso = ({
       }
     } catch (error) {
       const mensaje = error?.response?.data?.detail || error?.message || 'Error al completar la leccion';
-      toast.error(mensaje);
+      // En auto-completado silencioso, solo avisar si no es ya "completada"
+      if (!silencioso || !String(mensaje).toLowerCase().includes('completad')) {
+        toast.error(mensaje);
+      }
       console.error('Error completando leccion:', error);
-      autoCompletandoRef.current = false;
+      // Permitir reintento en el próximo cambio de deps si falló
+      autoCompletadoLeccionIdRef.current = null;
     } finally {
       setMarcando(false);
     }
@@ -545,7 +566,7 @@ const DetalleCurso = ({
         try {
           const prog = await cursosService.obtenerProgreso(cursoId, usuarioId);
           setProgreso(prog?.progreso || 0);
-          setLeccionesCompletadas(prog?.lecciones_completadas || []);
+          setLeccionesCompletadas((prog?.lecciones_completadas || []).map(String));
         } catch { /* ok */ }
       }
     } catch (e) {
@@ -1061,7 +1082,7 @@ const DetalleCurso = ({
   if (mostrandoLeccion && leccionActual) {
     // ✅ Solo cuenta lo confirmado por el backend. Antes `|| videoCompletado`
     // marcaba "Completada" sin llamar a completarLeccion → el % se quedaba en 0.
-    const estaCompletada = leccionesCompletadas.includes(leccionActual.id);
+    const estaCompletada = esLeccionCompletada(leccionActual.id);
     const bloques = getBloquesDeLeccion(leccionActual);
     const esBloqueadaPorPago = !esDocente && !estaInscrito && !tieneAcceso;
     const esBloqueadaSecuencial = leccionBloqueadaInfo?.bloqueada || false;
@@ -1511,7 +1532,9 @@ const DetalleCurso = ({
           <div className="space-y-4">
             {(curso.modulos || []).map((modulo) => {
               const leccionesModulo = getLeccionesDeModulo(modulo);
-              const completadasModulo = leccionesModulo.filter(l => leccionesCompletadas.includes(l.id)).length;
+                const completadasModulo = leccionesModulo.filter(l =>
+                  leccionesCompletadas.some(x => String(x) === String(l.id))
+                ).length;
               const totalModulo = leccionesModulo.length;
               const moduloBloqueado = isModuloBloqueado(modulo);
 
@@ -1545,7 +1568,7 @@ const DetalleCurso = ({
                   {moduloAbierto.includes(modulo.id) && (
                     <div className="px-5 pb-4 space-y-1.5 border-t border-gray-100 pt-3">
                       {leccionesModulo.map((leccion, index) => {
-                        const isCompletada = leccionesCompletadas.includes(leccion.id);
+                        const isCompletada = leccionesCompletadas.some(x => String(x) === String(leccion.id));
                         // Módulo bloqueado O lección anterior del curso incompleta (secuencial)
                         const esBloqueada = moduloBloqueado || isLeccionBloqueadaSecuencial(leccion.id);
 

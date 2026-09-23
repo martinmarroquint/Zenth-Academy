@@ -158,26 +158,38 @@ def _sanear_modulos_para_preview(modulos: list) -> list:
     return modulos_limpios
 
 
+def _ids_lecciones_curso(curso: Curso) -> set:
+    """IDs de lecciones que existen HOY en la estructura del curso."""
+    ids = set()
+    for modulo in curso.modulos or []:
+        for leccion in modulo.get("lecciones") or []:
+            lid = leccion.get("id")
+            if lid is not None:
+                ids.add(str(lid))
+    return ids
+
+
 def _actualizar_progreso_curso(db: Session, curso_id: str, estudiante_id: str):
     try:
         curso = db.query(Curso).filter(Curso.id == curso_id).first()
         if not curso:
             return
-        
-        total = 0
-        for modulo in curso.modulos or []:
-            total += len(modulo.get("lecciones", []))
-        
+
+        ids_validos = _ids_lecciones_curso(curso)
+        total = len(ids_validos)
         if total == 0:
             return
-        
+
+        # Solo contar lecciones que siguen en el curso (evita % inflado por
+        # ProgresoLeccion huérfanos de lecciones borradas/renombradas).
         completadas_rows = db.query(ProgresoLeccion.leccion_id).filter(
             ProgresoLeccion.curso_id == curso_id,
             ProgresoLeccion.estudiante_id == estudiante_id,
             ProgresoLeccion.completado == True
         ).all()
-        completadas = len(completadas_rows)
-        progreso_pct = int((completadas / total) * 100)
+        completadas_ids = [str(r[0]) for r in completadas_rows if str(r[0]) in ids_validos]
+        completadas = len(completadas_ids)
+        progreso_pct = min(100, int((completadas / total) * 100))
 
         inscripcion = db.query(InscripcionCurso).filter(
             cast(InscripcionCurso.curso_id, String) == curso_id,
@@ -188,13 +200,14 @@ def _actualizar_progreso_curso(db: Session, curso_id: str, estudiante_id: str):
             # ✅ Sincronizar la fuente que lee el frontend (checks ✅ y desbloqueo
             # de módulos). Sin esto, liberar_leccion / asignar_nota_manual /
             # actualizar_progreso_leccion subían el % pero no marcaban lecciones.
-            ids_completadas = [str(r[0]) for r in completadas_rows]
-            if list(inscripcion.lecciones_completadas or []) != ids_completadas:
-                inscripcion.lecciones_completadas = ids_completadas
+            if list(inscripcion.lecciones_completadas or []) != completadas_ids:
+                inscripcion.lecciones_completadas = completadas_ids
             inscripcion.progreso = progreso_pct
             if completadas >= total and not inscripcion.completado:
                 inscripcion.completado = True
                 inscripcion.fecha_completado = datetime.now(timezone.utc)
+            # Emisión automática: al 100% (idempotente: no duplica si ya existe)
+            if completadas >= total:
                 _emitir_certificado_automatico(db, curso, estudiante_id, inscripcion)
             db.commit()
     except Exception as e:
@@ -1418,6 +1431,13 @@ async def obtener_progreso(
                 "completado": False,
                 "mensaje": "No inscrito"
             }
+
+        # ✅ Recalcular antes de responder: el % guardado podía quedar desfasado
+        # (lecciones borradas, emisión de certificado pendiente, etc.).
+        # También reintenta la emisión automática si ya está al 100%.
+        _actualizar_progreso_curso(db, curso_id, usuario_id)
+        db.refresh(inscripcion)
+
         return {
             "curso_id": curso_id,
             "usuario_id": usuario_id,

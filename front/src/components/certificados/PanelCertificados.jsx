@@ -37,12 +37,20 @@ const PanelCertificados = ({ onGenerarCertificado, onVerCertificado }) => {
     cargarCertificados();
   }, [cargarCertificados]);
 
-  const handleDownload = async (id) => {
+  const handleDownload = async (cert) => {
     try {
-      await certificadosService.obtener(id);
-      toast.info('El certificado se descargará en breve (integración de descarga próximamente)');
+      // Descarga real del PDF (mismo motor que VerCertificado / Generar)
+      const { loadTemplateConfig } = await import('./certificateConfig');
+      const { generarPDF } = await import('./CertificatePDF');
+      const config = loadTemplateConfig();
+      const fechaEmision = new Date(
+        cert.fecha_emision || cert.fecha || Date.now()
+      ).toLocaleDateString('es-ES');
+      await generarPDF({ certificado: cert, config, fechaEmision });
+      toast.success('PDF descargado');
     } catch (e) {
-      console.error('Error obteniendo certificado:', e);
+      console.error('Error descargando certificado:', e);
+      toast.error('No se pudo generar el PDF del certificado');
     }
   };
 
@@ -187,7 +195,7 @@ const PanelCertificados = ({ onGenerarCertificado, onVerCertificado }) => {
                   <Eye className="w-4 h-4" />
                 </button>
                 <button
-                  onClick={() => handleDownload(cert.id)}
+                  onClick={() => handleDownload(cert)}
                   title="Descargar certificado"
                   className="p-2 hover:bg-gray-100 rounded-lg text-gray-400 hover:text-gray-600 transition-colors"
                 >

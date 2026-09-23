@@ -282,6 +282,92 @@ def test_emision_automatica_al_completar_todas_las_lecciones(
 
 
 @pytest.mark.integration
+def test_progreso_ignora_lecciones_huerfanas(db, docente_user, estudiante_user):
+    """ProgresoLeccion de lecciones que ya no existen no debe inflar el %."""
+    from app.api.cursos import _actualizar_progreso_curso
+
+    curso = _crear_curso_certificable(db, docente_user, certificado_habilitado=True)
+    db.add(InscripcionCurso(
+        id=str(uuid.uuid4()),
+        curso_id=str(curso.id),
+        estudiante_id=str(estudiante_user.id),
+        estudiante_nombre=estudiante_user.nombre_completo,
+        progreso=0,
+        completado=False,
+        lecciones_completadas=[],
+    ))
+    # l1 válida + lBorrada (ya no está en MODULOS_2_LECCIONES)
+    for leccion_id in ("l1", "lBorrada"):
+        db.add(ProgresoLeccion(
+            id=str(uuid.uuid4()),
+            curso_id=str(curso.id),
+            estudiante_id=str(estudiante_user.id),
+            leccion_id=leccion_id,
+            modulo_id="m1",
+            completado=True,
+            fecha_completado=datetime.now(timezone.utc),
+        ))
+    db.commit()
+
+    _actualizar_progreso_curso(db, str(curso.id), str(estudiante_user.id))
+    db.expire_all()
+
+    insc = db.query(InscripcionCurso).filter(
+        InscripcionCurso.curso_id == str(curso.id),
+        InscripcionCurso.estudiante_id == str(estudiante_user.id),
+    ).first()
+    # 1 de 2 lecciones válidas = 50%, no 100% por la huérfana
+    assert insc.progreso == 50
+    assert "lBorrada" not in (insc.lecciones_completadas or [])
+    assert "l1" in (insc.lecciones_completadas or [])
+    assert insc.completado is False
+
+
+@pytest.mark.integration
+def test_get_progreso_recalcula_y_reintenta_emision(
+    client, db, docente_user, estudiante_user, estudiante_headers
+):
+    """GET /progreso debe recalcular el % guardado y poder emitir el certificado."""
+    curso = _crear_curso_certificable(db, docente_user, certificado_habilitado=True)
+    db.add(InscripcionCurso(
+        id=str(uuid.uuid4()),
+        curso_id=str(curso.id),
+        estudiante_id=str(estudiante_user.id),
+        estudiante_nombre=estudiante_user.nombre_completo,
+        progreso=10,  # valor desfasado a propósito
+        completado=False,
+        lecciones_completadas=[],
+    ))
+    for leccion_id in ("l1", "l2"):
+        db.add(ProgresoLeccion(
+            id=str(uuid.uuid4()),
+            curso_id=str(curso.id),
+            estudiante_id=str(estudiante_user.id),
+            leccion_id=leccion_id,
+            modulo_id="m1",
+            completado=True,
+            fecha_completado=datetime.now(timezone.utc),
+        ))
+    db.commit()
+
+    resp = client.get(
+        f"/api/v1/cursos/{curso.id}/progreso/{estudiante_user.id}",
+        headers=estudiante_headers,
+    )
+    assert resp.status_code == 200, resp.text
+    data = resp.json()
+    assert data["progreso"] == 100
+    assert data["completado"] is True
+
+    db.expire_all()
+    cert = db.query(Certificado).filter(
+        Certificado.curso_id == str(curso.id),
+        Certificado.estudiante_id == str(estudiante_user.id),
+    ).first()
+    assert cert is not None, "GET /progreso al 100% debió emitir el certificado"
+
+
+@pytest.mark.integration
 def test_no_emite_certificado_si_esta_deshabilitado(
     client, db, docente_user, estudiante_user
 ):

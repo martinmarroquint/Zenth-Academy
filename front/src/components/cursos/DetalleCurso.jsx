@@ -1414,7 +1414,10 @@ const DetalleCurso = ({
                 </div>
               </div>
               {certificado && (
-                <button onClick={() => handleCertificado(curso.id)} className="px-4 py-1.5 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 transition-colors text-sm">
+                <button
+                  onClick={() => setVerCertificadoId(certificado.id)}
+                  className="px-4 py-1.5 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 transition-colors text-sm"
+                >
                   Ver certificado
                 </button>
               )}

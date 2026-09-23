@@ -242,12 +242,16 @@ const MainLayout = () => {
     setSidebarAbierto(!sidebarAbierto);
   };
 
-  const handleLogout = () => {
+  // ✅ Debe ser async + await: antes se disparaba logout() sin esperar y se
+  // redirigía al instante → el token seguía en localStorage y "no salía".
+  const handleLogout = async () => {
     try {
-      authService.logout();
-      window.location.href = '/';
+      await authService.logout();
     } catch (error) {
       console.error('Error al cerrar sesión:', error);
+      // Aun si falla la revocación en servidor, forzar limpieza + salida
+      authService.clearAuthData();
+      window.location.href = '/';
     }
   };
 

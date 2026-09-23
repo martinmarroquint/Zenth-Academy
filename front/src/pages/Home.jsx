@@ -82,11 +82,25 @@ const Home = () => {
     iniciarPolling(intervalo);
   }, [iniciarPolling]);
 
+  // Solo docentes/admin consultan /compartir/salas/activa (requiere rol docente;
+  // estudiantes recibían 403 ruidoso al montar Home con sesión activa).
+  const puedeVerSala = useCallback(() => {
+    const rol = authService.getRol();
+    return rol === 'docente' || rol === 'admin';
+  }, []);
+
   const cargarSalaActiva = useCallback(async () => {
     const token = localStorage.getItem('token');
     const tokenValido = token && token !== 'undefined' && token !== 'null';
-    
+
     if (!tokenValido) {
+      setSala(null);
+      setCargandoQR(false);
+      detenerPolling();
+      return;
+    }
+
+    if (!puedeVerSala()) {
       setSala(null);
       setCargandoQR(false);
       detenerPolling();
@@ -106,7 +120,7 @@ const Home = () => {
         reconfigurarPolling(null);
       }
     } catch (e) {
-      if (e?.response?.status === 401) {
+      if (e?.response?.status === 401 || e?.status === 401 || e?.response?.status === 403 || e?.status === 403) {
         setSala(null);
         detenerPolling();
       } else {
@@ -115,7 +129,7 @@ const Home = () => {
     } finally {
       setCargandoQR(false);
     }
-  }, [detenerPolling, reconfigurarPolling]);
+  }, [detenerPolling, reconfigurarPolling, puedeVerSala]);
 
   useEffect(() => {
     cargarSalaActivaRef.current = cargarSalaActiva;
@@ -124,16 +138,17 @@ const Home = () => {
   useEffect(() => {
     const token = localStorage.getItem('token');
     const tokenValido = token && token !== 'undefined' && token !== 'null';
-    
-    if (tokenValido) {
+
+    // Solo cargar sala si hay sesión Y el rol puede consultarla (docente/admin)
+    if (tokenValido && puedeVerSala()) {
       setCargandoQR(true);
       cargarSalaActiva();
     }
-    
+
     return () => {
       detenerPolling();
     };
-  }, [cargarSalaActiva, detenerPolling]);
+  }, [cargarSalaActiva, detenerPolling, puedeVerSala]);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -145,9 +160,12 @@ const Home = () => {
       if (result.success) {
         setTieneToken(true);
         const rol = authService.getRol();
-        setCargandoQR(true);
-        cargarSalaActiva();
-        
+        // Solo docentes/admin cargan la sala activa del QR
+        if (rol === 'docente' || rol === 'admin') {
+          setCargandoQR(true);
+          cargarSalaActiva();
+        }
+
         if (rol === 'admin') {
           navigate('/admin');
         } else if (rol === 'docente') {

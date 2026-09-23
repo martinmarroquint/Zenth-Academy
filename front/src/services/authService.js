@@ -159,7 +159,10 @@ class AuthService {
   }
 
   async logout() {
+    // ✅ Limpiar SIEMPRE la sesión local primero (si no, un redirect
+    // inmediato o un fallo de red dejan el token y "no se puede salir").
     const refreshToken = this.getRefreshToken();
+    this.clearAuthData();
     if (refreshToken) {
       try {
         await api.request('/auth/logout', {
@@ -167,10 +170,9 @@ class AuthService {
           body: JSON.stringify({ refresh_token: refreshToken }),
         });
       } catch {
-        // Best-effort: revocar en servidor; limpiar local siempre
+        // Best-effort: revocar en servidor; la sesión local ya quedó limpia
       }
     }
-    this.clearAuthData();
     window.location.href = '/';
   }
 

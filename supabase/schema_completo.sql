@@ -408,6 +408,7 @@ CREATE TABLE IF NOT EXISTS certificados (
   fecha_emision TIMESTAMPTZ DEFAULT now(),
   url VARCHAR(500),
   estado VARCHAR(20) DEFAULT 'emitido',
+  firma VARCHAR(128),
   metadata JSONB DEFAULT '{}'::jsonb,
   created_at TIMESTAMPTZ DEFAULT now(),
   updated_at TIMESTAMPTZ DEFAULT now()
@@ -415,6 +416,7 @@ CREATE TABLE IF NOT EXISTS certificados (
 CREATE UNIQUE INDEX IF NOT EXISTS ix_certificados_codigo ON certificados(codigo);
 CREATE INDEX IF NOT EXISTS ix_certificados_curso_id ON certificados(curso_id);
 CREATE INDEX IF NOT EXISTS ix_certificados_estudiante_id ON certificados(estudiante_id);
+CREATE INDEX IF NOT EXISTS ix_certificados_firma ON certificados(firma);
 
 -- ============================================================
 -- 5) COMUNIDAD / FORO (con foro por curso, FASE 1.7)
@@ -733,6 +735,10 @@ ALTER TABLE posts ADD COLUMN IF NOT EXISTS curso_id TEXT;
 CREATE INDEX IF NOT EXISTS ix_posts_curso_id ON posts(curso_id);
 ALTER TABLE cursos ADD COLUMN IF NOT EXISTS certificado_habilitado BOOLEAN DEFAULT TRUE;
 ALTER TABLE cursos ADD COLUMN IF NOT EXISTS certificado_nota_minima NUMERIC(5, 2);
+
+-- CERTIFICADOS: firma HMAC-SHA256 de integridad (commit ebc5e11)
+ALTER TABLE certificados ADD COLUMN IF NOT EXISTS firma VARCHAR(128);
+CREATE INDEX IF NOT EXISTS ix_certificados_firma ON certificados(firma);
 
 -- INTEGRACIÓN RECURSOS UNIFICADOS (módulo exámenes integrado):
 -- un material puede pertenecer a un grupo de examen o a un curso

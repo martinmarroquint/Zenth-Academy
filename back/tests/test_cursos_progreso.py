@@ -556,6 +556,35 @@ def test_docente_libera_leccion(
     assert prog.fecha_liberacion is not None
 
 
+@pytest.mark.integration
+def test_liberar_leccion_sincroniza_lecciones_completadas_del_frontend(
+    client, db, docente_user, estudiante_user, docente_headers, estudiante_headers
+):
+    """Regresión: liberar una lección marcaba ProgresoLeccion pero NO la lista
+    JSON `lecciones_completadas` que el frontend usa para checks y desbloqueo."""
+    curso = _crear_curso(
+        db, docente_user, modulos=MODULOS_2_LECCIONES, tipo_bloqueo="secuencial"
+    )
+    _inscribir(client, curso.id, estudiante_headers)
+
+    resp = client.post(
+        f"/api/v1/cursos/{curso.id}/lecciones/l1/liberar",
+        json={"estudiante_id": str(estudiante_user.id)},
+        headers=docente_headers,
+    )
+    assert resp.status_code == 200, resp.text
+
+    prog_resp = client.get(
+        f"/api/v1/cursos/{curso.id}/progreso/{estudiante_user.id}",
+        headers=estudiante_headers,
+    )
+    assert prog_resp.status_code == 200, prog_resp.text
+    data = prog_resp.json()
+    assert "l1" in data["lecciones_completadas"]
+    # 1 de 2 lecciones → 50%
+    assert data["progreso"] == 50
+
+
 @pytest.mark.security
 @pytest.mark.integration
 def test_estudiante_no_puede_liberar_leccion(

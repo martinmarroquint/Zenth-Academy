@@ -493,6 +493,10 @@ async def startup_event():
                 "google_id": "VARCHAR(100)",
                 "microsoft_id": "VARCHAR(100)",
             },
+            # ✅ CERTIFICADOS: firma HMAC-SHA256 (integridad + no repudio)
+            "certificados": {
+                "firma": "VARCHAR(128)",
+            },
         }
         insp2 = _insp2(_eng2)
         tablas_actuales = set(insp2.get_table_names())
@@ -511,6 +515,17 @@ async def startup_event():
                     ))
                 _conn2.commit()
             logger.info(f"✅ Columnas agregadas a '{tabla}': {', '.join(faltan.keys())}")
+
+        # 2b) ✅ Índice de firma de certificados (HMAC)
+        if "certificados" in tablas_actuales:
+            try:
+                with _eng2.connect() as _conn_idx:
+                    _conn_idx.execute(_text2(
+                        "CREATE INDEX IF NOT EXISTS ix_certificados_firma ON certificados(firma);"
+                    ))
+                    _conn_idx.commit()
+            except Exception as _e_idx:
+                logger.warning(f"⚠️ No se pudo crear índice certificados.firma: {_e_idx}")
 
         # 3) ✅ OAUTH: permitir usuarios sin contraseña + índices únicos
         if "usuarios" in tablas_actuales:

@@ -206,6 +206,17 @@ const DetalleCurso = ({
     return modulo.lecciones.filter(l => l && l.id);
   }, []);
 
+  // ✅ Plan de lecciones en orden del curso (base del bloqueo secuencial y la navegación)
+  const planLecciones = useMemo(() => {
+    const plan = [];
+    (curso?.modulos || []).forEach((modulo) => {
+      getLeccionesDeModulo(modulo).forEach((leccion) => {
+        plan.push({ modulo, leccion });
+      });
+    });
+    return plan;
+  }, [curso?.modulos, getLeccionesDeModulo]);
+
   const isModuloCompleto = useCallback((modulo) => {
     const lecciones = getLeccionesDeModulo(modulo);
     if (lecciones.length === 0) return false;
@@ -239,6 +250,23 @@ const DetalleCurso = ({
     return false;
   }, [esDocente, curso, tieneAcceso, isModuloCompleto]);
 
+  // ✅ Bloqueo SECUENCIAL por lección (no solo por módulo): una lección queda
+  // bloqueada si cualquier lección anterior del curso (en orden plano) está
+  // incompleta. Refleja la misma regla del backend `_verificar_bloqueo_leccion_internal`.
+  const isLeccionBloqueadaSecuencial = useCallback((leccionId) => {
+    if (esDocente) return false;
+    if (curso?.precio_tipo === 'pago' && !tieneAcceso) return true;
+    const tipo = curso?.tipo_bloqueo || 'ninguno';
+    if (tipo !== 'secuencial' && tipo !== 'mixto') return false;
+    if (!planLecciones.length) return false;
+    const idx = planLecciones.findIndex(x => x.leccion.id === leccionId);
+    if (idx <= 0) return false;
+    for (let i = 0; i < idx; i++) {
+      if (!leccionesCompletadas.includes(planLecciones[i].leccion.id)) return true;
+    }
+    return false;
+  }, [esDocente, curso, tieneAcceso, planLecciones, leccionesCompletadas]);
+
   // Handlers
   const handleAbrirLeccion = useCallback(async (modulo, leccion) => {
     // ✅ SEGURIDAD: verificar inscripcion o acceso antes de abrir cualquier leccion
@@ -258,8 +286,14 @@ const DetalleCurso = ({
         }
         setLeccionBloqueadaInfo(null);
       } catch (e) {
-        // Si el endpoint falla, permitir acceso pero registrar el error
+        // ✅ FAIL-CLOSED en secuencial/mixto: si no se pudo verificar, NO abrimos
+        // (evita saltarse la secuencia). En 'fecha'/'desempeno' fail-open.
         console.warn('Error verificando bloqueo:', e);
+        const estricto = curso?.tipo_bloqueo === 'secuencial' || curso?.tipo_bloqueo === 'mixto';
+        if (estricto) {
+          toast.warning('No se pudo verificar el desbloqueo de esta lección. Reintenta.');
+          return;
+        }
         setLeccionBloqueadaInfo(null);
       }
     } else {
@@ -278,6 +312,31 @@ const DetalleCurso = ({
     window.scrollTo({ top: 0, behavior: 'smooth' });
   }, [curso, tieneAcceso, estaInscrito, esDocente, esEstudiante, toast]);
 
+  const indiceLeccionActual = useMemo(() => {
+    if (!leccionActual?.id) return -1;
+    return planLecciones.findIndex((x) => x.leccion.id === leccionActual.id);
+  }, [planLecciones, leccionActual?.id]);
+
+  // ✅ Navegar a la lección del curso en la posición dada (con chequeo de bloqueo)
+  const navegarALeccion = useCallback(async (nuevoIndice) => {
+    if (nuevoIndice < 0 || nuevoIndice >= planLecciones.length) return;
+    const destino = planLecciones[nuevoIndice];
+    await handleAbrirLeccion(destino.modulo, destino.leccion);
+  }, [planLecciones, handleAbrirLeccion]);
+
+  // Siguiente lección del curso (cruza módulos); null si es la última
+  const siguienteLeccionInfo = useMemo(() => {
+    if (indiceLeccionActual < 0) return null;
+    if (indiceLeccionActual >= planLecciones.length - 1) return null;
+    return planLecciones[indiceLeccionActual + 1];
+  }, [planLecciones, indiceLeccionActual]);
+
+  // Anterior lección del curso (cruza módulos); null si es la primera
+  const anteriorLeccionInfo = useMemo(() => {
+    if (indiceLeccionActual <= 0) return null;
+    return planLecciones[indiceLeccionActual - 1];
+  }, [planLecciones, indiceLeccionActual]);
+
   // ✅ PRE-CARGAR datos del examen cuando se selecciona una lección tipo examen
   useEffect(() => {
     if (!leccionActual || leccionActual.tipo !== 'examen') return;
@@ -293,18 +352,65 @@ const DetalleCurso = ({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [leccionActual?.contenido?.examen_id]);
 
-  const handleCerrarLeccion = () => {
+  const handleCerrarLeccion = async () => {
+    // ✅ Persistir tiempo invertido antes de salir (no se pierde el avance de la sesión)
+    const tiempoMs = tiempoEnLeccionRef.current || 0;
+    const yaCompletada = leccionActual?.id
+      ? leccionesCompletadas.includes(leccionActual.id)
+      : true;
+    if (curso?.id && leccionActual?.id && usuarioId && !yaCompletada && tiempoMs >= 1000) {
+      try {
+        await cursosService.actualizarProgresoLeccion(curso.id, leccionActual.id, {
+          tiempo_invertido: Math.round(tiempoMs / 1000),
+        });
+      } catch (e) {
+        console.warn('No se pudo guardar el tiempo de la lección:', e);
+      }
+      // Refrescar progreso en la vista del curso
+      await refrescarProgreso();
+    }
     setMostrandoLeccion(false);
     setLeccionActual(null);
     setModuloActual(null);
     setExamenActivo(null);
     setResultadoExamen(null);
     setErrorExamen('');
+    tiempoEnLeccionRef.current = 0;
   };
 
   const handleVideoComplete = useCallback(() => {
     setVideoCompletado(true);
   }, []);
+
+  // ✅ Refrescar % y lista de lecciones completadas desde el backend
+  const refrescarProgreso = useCallback(async () => {
+    if (!usuarioId || !cursoId) return null;
+    try {
+      const prog = await cursosService.obtenerProgreso(cursoId, usuarioId);
+      setProgreso(prog?.progreso || 0);
+      setLeccionesCompletadas(prog?.lecciones_completadas || []);
+      setCursoCompletado(prog?.completado || false);
+      return prog;
+    } catch (e) {
+      console.warn('No se pudo refrescar el progreso:', e);
+      return null;
+    }
+  }, [usuarioId, cursoId]);
+
+  // ✅ Completar lección desde examen (nota) y refrescar el progreso en la UI
+  const completarDesdeExamen = useCallback(async (calificacion, aprobado) => {
+    if (!curso?.id || !leccionActual?.id || !usuarioId) return;
+    try {
+      await cursosService.completarLeccion(
+        curso.id, leccionActual.id, usuarioId,
+        Math.round((tiempoEnLeccionRef.current || 0) / 1000),
+        calificacion, aprobado
+      );
+    } catch (e) {
+      console.warn('Error guardando resultado de examen:', e);
+    }
+    await refrescarProgreso();
+  }, [curso?.id, leccionActual?.id, usuarioId, refrescarProgreso]);
 
   const handleMarcarCompletada = async () => {
     if (!usuarioId || !curso?.id || !leccionActual?.id) return;
@@ -333,12 +439,15 @@ const DetalleCurso = ({
 
     setMarcando(true);
     try {
-      await cursosService.completarLeccion(curso.id, leccionActual.id, usuarioId);
-      const prog = await cursosService.obtenerProgreso(cursoId, usuarioId);
-      setProgreso(prog?.progreso || 0);
-      setLeccionesCompletadas(prog?.lecciones_completadas || []);
-      setCursoCompletado(prog?.completado || false);
+      await cursosService.completarLeccion(
+        curso.id,
+        leccionActual.id,
+        usuarioId,
+        Math.round((tiempoEnLeccionRef.current || 0) / 1000)
+      );
+      const prog = await refrescarProgreso();
       setVideoCompletado(true);
+      toast.success('Lección completada. Ya puedes continuar con la siguiente.');
       
       // Si el curso se completo, cargar el certificado
       if (prog?.completado) {
@@ -390,6 +499,21 @@ const DetalleCurso = ({
       setEstaInscrito(true);
       setTieneAcceso(true);
       toast.success('Inscrito exitosamente. Ya puedes acceder al contenido del curso.');
+      // ✅ RECARGAR el curso: al entrar sin inscripción el backend sanea los
+      // módulos (quita bloques). Sin este refetch el contenido seguía vacío
+      // aunque el toast dijera "accediste correctamente".
+      try {
+        const data = await cursosService.obtener(cursoId);
+        setCurso(data);
+        setTieneAcceso(data?.tiene_acceso || true);
+        setEstaInscrito(data?.esta_inscrito || true);
+        // Abrir el primer módulo para que se vea el contenido de inmediato
+        if (data?.modulos?.[0]?.id) {
+          setModuloAbierto([data.modulos[0].id]);
+        }
+      } catch (e) {
+        console.warn('No se pudo recargar el curso tras inscribirse:', e);
+      }
       // Recargar progreso
       if (usuarioId) {
         try {
@@ -475,12 +599,10 @@ const DetalleCurso = ({
                   titulo: examenActivo?.titulo,
                 });
 
-                // ✅ Enviar nota al progreso (el backend decide si marca completado)
+                // ✅ Enviar nota al progreso y refrescar el estado en la UI
+                // (antes era fire-and-forget: el % no se actualizaba en pantalla)
                 if (curso?.id && leccionActual?.id && usuarioId) {
-                  cursosService.completarLeccion(
-                    curso.id, leccionActual.id, usuarioId, 0,
-                    calificacion, aprobado
-                  ).catch(() => {});
+                  completarDesdeExamen(calificacion, aprobado);
                 }
               }}
               onAbandonar={() => {
@@ -544,17 +666,23 @@ const DetalleCurso = ({
               )}
               {aprobado && (
                 <button
-                  onClick={() => setResultadoExamen(null)}
+                  onClick={async () => {
+                    setResultadoExamen(null);
+                    // Tras aprobar: si hay siguiente lección, continuar directo
+                    if (siguienteLeccionInfo) {
+                      await navegarALeccion(indiceLeccionActual + 1);
+                    }
+                  }}
                   className="px-6 py-3 bg-[#0f766e] text-white rounded-lg hover:bg-[#0d5e57] transition-colors font-medium"
                 >
-                  Continuar
+                  {siguienteLeccionInfo ? 'Continuar a la siguiente' : 'Continuar'}
                 </button>
               )}
               <button
                 onClick={() => setResultadoExamen(null)}
                 className="px-6 py-3 text-gray-600 hover:text-gray-800 transition-colors"
               >
-                Volver al curso
+                Volver a la lección
               </button>
             </div>
           </div>
@@ -723,14 +851,11 @@ const DetalleCurso = ({
                 }}
                 onFinalizar={(resultado) => {
                   setExamenActivo(null);
-                  // ✅ CORREGIDO: Enviar nota del examen al progreso del curso
+                  // ✅ Enviar nota y refrescar progreso en la UI
                   if (curso?.id && leccionActual?.id && usuarioId) {
                     const calificacion = resultado?.calificacion || 0;
                     const aprobado = calificacion >= (examenActivo?.puntaje_aprobacion || 60);
-                    cursosService.completarLeccion(
-                      curso.id, leccionActual.id, usuarioId, 0,
-                      calificacion, aprobado
-                    ).catch(() => {});
+                    completarDesdeExamen(calificacion, aprobado);
                   }
                 }}
                 onAbandonar={() => setExamenActivo(null)}
@@ -909,8 +1034,6 @@ const DetalleCurso = ({
   // ============================================================
   if (mostrandoLeccion && leccionActual) {
     const estaCompletada = leccionesCompletadas.includes(leccionActual.id) || videoCompletado;
-    const leccionesDelModulo = getLeccionesDeModulo(moduloActual || {});
-    const indexActual = leccionesDelModulo.findIndex(l => l.id === leccionActual.id);
     const bloques = getBloquesDeLeccion(leccionActual);
     const esBloqueadaPorPago = !esDocente && !estaInscrito && !tieneAcceso;
     const esBloqueadaSecuencial = leccionBloqueadaInfo?.bloqueada || false;
@@ -1003,39 +1126,71 @@ const DetalleCurso = ({
             usuario={usuario}
           />
 
-          {/* Navegación entre lecciones */}
-          {leccionesDelModulo.length > 1 && !esBloqueada && (
+          {/* Navegación entre lecciones (cruza módulos, respeta bloqueo secuencial) */}
+          {planLecciones.length > 1 && !esBloqueada && (
             <div className="flex items-center justify-between pt-6 border-t border-gray-200">
               <button
-                onClick={() => {
-                  if (indexActual > 0) {
-                    setLeccionActual(leccionesDelModulo[indexActual - 1]);
-                    setVideoCompletado(false);
-                  }
-                }}
-                disabled={indexActual === 0}
+                onClick={() => navegarALeccion(indiceLeccionActual - 1)}
+                disabled={!anteriorLeccionInfo}
                 className={`flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-lg transition-colors ${
-                  indexActual > 0 ? 'text-gray-600 hover:bg-gray-100' : 'text-gray-300 cursor-not-allowed'
+                  anteriorLeccionInfo ? 'text-gray-600 hover:bg-gray-100' : 'text-gray-300 cursor-not-allowed'
                 }`}
               >
                 <ChevronLeft className="w-4 h-4" /> Anterior
               </button>
               <span className="text-xs text-gray-400">
-                {indexActual + 1} / {leccionesDelModulo.length}
+                {indiceLeccionActual + 1} / {planLecciones.length}
+                {anteriorLeccionInfo?.modulo?.titulo !== moduloActual?.titulo && anteriorLeccionInfo && (
+                  <span className="block text-[10px] text-gray-400 mt-0.5">
+                    ← {anteriorLeccionInfo.modulo.titulo}
+                  </span>
+                )}
               </span>
               <button
-                onClick={() => {
-                  if (indexActual < leccionesDelModulo.length - 1) {
-                    setLeccionActual(leccionesDelModulo[indexActual + 1]);
-                    setVideoCompletado(false);
-                  }
-                }}
-                disabled={indexActual === leccionesDelModulo.length - 1}
+                onClick={() => navegarALeccion(indiceLeccionActual + 1)}
+                disabled={!siguienteLeccionInfo}
                 className={`flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-lg transition-colors ${
-                  indexActual < leccionesDelModulo.length - 1 ? 'text-gray-600 hover:bg-gray-100' : 'text-gray-300 cursor-not-allowed'
+                  siguienteLeccionInfo
+                    ? 'text-white bg-[#0f766e] hover:bg-[#0d5e57]'
+                    : 'text-gray-300 cursor-not-allowed'
                 }`}
               >
                 Siguiente <ChevronRight className="w-4 h-4" />
+              </button>
+            </div>
+          )}
+
+          {/* ✅ Acción destacada tras completar: pasar a la siguiente lección */}
+          {estaCompletada && !esBloqueada && siguienteLeccionInfo && (
+            <div className="bg-emerald-50/60 border border-emerald-100 rounded-xl p-4 flex flex-col sm:flex-row items-center justify-between gap-3">
+              <div className="text-center sm:text-left">
+                <p className="text-sm font-medium text-emerald-800">
+                  Lección completada
+                </p>
+                <p className="text-xs text-emerald-600 mt-0.5">
+                  Siguiente: {siguienteLeccionInfo.leccion.titulo}
+                  {siguienteLeccionInfo.modulo.id !== moduloActual?.id &&
+                    ` · ${siguienteLeccionInfo.modulo.titulo}`}
+                </p>
+              </div>
+              <button
+                onClick={() => navegarALeccion(indiceLeccionActual + 1)}
+                className="px-5 py-2 text-sm font-medium text-white rounded-lg transition-colors bg-[#0f766e] hover:bg-[#0d5e57] flex items-center gap-2 shrink-0"
+              >
+                Continuar <ChevronRight className="w-4 h-4" />
+              </button>
+            </div>
+          )}
+          {estaCompletada && !esBloqueada && !siguienteLeccionInfo && (
+            <div className="bg-emerald-50/60 border border-emerald-100 rounded-xl p-4 text-center">
+              <p className="text-sm font-medium text-emerald-800">
+                ¡Has completado la última lección del curso!
+              </p>
+              <button
+                onClick={handleCerrarLeccion}
+                className="mt-3 px-5 py-2 text-sm font-medium text-white rounded-lg transition-colors bg-[#0f766e] hover:bg-[#0d5e57]"
+              >
+                Volver al curso
               </button>
             </div>
           )}
@@ -1333,7 +1488,8 @@ const DetalleCurso = ({
                     <div className="px-5 pb-4 space-y-1.5 border-t border-gray-100 pt-3">
                       {leccionesModulo.map((leccion, index) => {
                         const isCompletada = leccionesCompletadas.includes(leccion.id);
-                        const esBloqueada = moduloBloqueado;
+                        // Módulo bloqueado O lección anterior del curso incompleta (secuencial)
+                        const esBloqueada = moduloBloqueado || isLeccionBloqueadaSecuencial(leccion.id);
 
                         return (
                           <LeccionItem

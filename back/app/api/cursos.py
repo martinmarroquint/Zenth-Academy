@@ -171,20 +171,26 @@ def _actualizar_progreso_curso(db: Session, curso_id: str, estudiante_id: str):
         if total == 0:
             return
         
-        completadas = db.query(ProgresoLeccion).filter(
+        completadas_rows = db.query(ProgresoLeccion.leccion_id).filter(
             ProgresoLeccion.curso_id == curso_id,
             ProgresoLeccion.estudiante_id == estudiante_id,
             ProgresoLeccion.completado == True
-        ).count()
-        
+        ).all()
+        completadas = len(completadas_rows)
         progreso_pct = int((completadas / total) * 100)
-        
+
         inscripcion = db.query(InscripcionCurso).filter(
             cast(InscripcionCurso.curso_id, String) == curso_id,
             cast(InscripcionCurso.estudiante_id, String) == estudiante_id
         ).first()
-        
+
         if inscripcion:
+            # ✅ Sincronizar la fuente que lee el frontend (checks ✅ y desbloqueo
+            # de módulos). Sin esto, liberar_leccion / asignar_nota_manual /
+            # actualizar_progreso_leccion subían el % pero no marcaban lecciones.
+            ids_completadas = [str(r[0]) for r in completadas_rows]
+            if list(inscripcion.lecciones_completadas or []) != ids_completadas:
+                inscripcion.lecciones_completadas = ids_completadas
             inscripcion.progreso = progreso_pct
             if completadas >= total and not inscripcion.completado:
                 inscripcion.completado = True
@@ -1730,9 +1736,9 @@ async def actualizar_progreso_leccion(
         db.commit()
         db.refresh(progreso)
         
-        # Si se marcó completado, actualizar inscripción y recálculo
-        if data.completado:
-            _actualizar_progreso_curso(db, curso_id, estudiante_id)
+        # ✅ Siempre recalcular: sincroniza lecciones_completadas del frontend
+        # aunque solo haya cambiado tiempo o nota (no solo cuando completado=True).
+        _actualizar_progreso_curso(db, curso_id, estudiante_id)
         
         return progreso
         

@@ -76,6 +76,8 @@ const DetalleCurso = ({
   // ✅ RENDIMIENTO: tiempo en lección en un ref (no dispara re-render cada segundo).
   // Solo se lee al intentar completar la lección.
   const tiempoEnLeccionRef = useRef(0);
+  // Ref para auto-completar cuando el video termina (el handler se define más abajo)
+  const handleMarcarCompletadaRef = useRef(null);
 
   // ✅ ESTADOS PARA EXAMEN
   const [examenActivo, setExamenActivo] = useState(null);
@@ -382,6 +384,25 @@ const DetalleCurso = ({
     setVideoCompletado(true);
   }, []);
 
+  // ✅ Cuando el video termina, marcar la lección en el backend automáticamente.
+  // Antes `estaCompletada` incluía `videoCompletado` → el UI mostraba "Completada"
+  // y deshabilitaba el botón SIN llamar a completarLeccion → el % se quedaba en 0.
+  const autoCompletandoRef = useRef(false);
+  useEffect(() => {
+    if (!videoCompletado) {
+      autoCompletandoRef.current = false;
+      return;
+    }
+    if (!leccionActual?.id || !curso?.id || !usuarioId) return;
+    if (leccionesCompletadas.includes(leccionActual.id)) return;
+    if (marcando || autoCompletandoRef.current) return;
+    // Solo lecciones con video (las de texto/examen usan su propio flujo)
+    const tieneVideo = getBloquesDeLeccion(leccionActual).some(b => b.tipo === 'video');
+    if (!tieneVideo) return;
+    autoCompletandoRef.current = true;
+    handleMarcarCompletadaRef.current?.();
+  }, [videoCompletado, leccionActual, curso?.id, usuarioId, leccionesCompletadas, marcando]);
+
   // ✅ Refrescar % y lista de lecciones completadas desde el backend
   const refrescarProgreso = useCallback(async () => {
     if (!usuarioId || !cursoId) return null;
@@ -414,11 +435,13 @@ const DetalleCurso = ({
 
   const handleMarcarCompletada = async () => {
     if (!usuarioId || !curso?.id || !leccionActual?.id) return;
+    if (marcando) return;
     if (leccionesCompletadas.includes(leccionActual.id)) return;
 
     // Verificar que el contenido fue consumido realmente
-    const tieneVideo = leccionActual?.bloques?.some(b => b.tipo === 'video');
-    const tieneTexto = leccionActual?.bloques?.some(b => b.tipo === 'texto');
+    const bloquesLeccion = getBloquesDeLeccion(leccionActual);
+    const tieneVideo = bloquesLeccion.some(b => b.tipo === 'video');
+    const tieneTexto = bloquesLeccion.some(b => b.tipo === 'texto');
     
     // Si tiene video, exigir que este marcado como completado
     if (tieneVideo && !videoCompletado) {
@@ -447,6 +470,7 @@ const DetalleCurso = ({
       );
       const prog = await refrescarProgreso();
       setVideoCompletado(true);
+      autoCompletandoRef.current = false;
       toast.success('Lección completada. Ya puedes continuar con la siguiente.');
       
       // Si el curso se completo, cargar el certificado
@@ -465,10 +489,12 @@ const DetalleCurso = ({
       const mensaje = error?.response?.data?.detail || error?.message || 'Error al completar la leccion';
       toast.error(mensaje);
       console.error('Error completando leccion:', error);
+      autoCompletandoRef.current = false;
     } finally {
       setMarcando(false);
     }
   };
+  handleMarcarCompletadaRef.current = handleMarcarCompletada;
 
   const handleSolicitarAcceso = async () => {
     if (!mensajeSolicitud.trim()) {
@@ -1025,20 +1051,30 @@ const DetalleCurso = ({
     );
   }
 
-  // ✅ SEGURIDAD: el contenido solo es visible si el usuario esta inscrito,
-  // tiene acceso (cursos de pago), o es el docente del curso.
-  const estaBloqueado = !esDocente && !estaInscrito && !tieneAcceso;
+    // ✅ SEGURIDAD: el contenido solo es visible si el usuario esta inscrito,
+    // tiene acceso (cursos de pago), o es el docente del curso.
+    const estaBloqueado = !esDocente && !estaInscrito && !tieneAcceso;
 
   // ============================================================
   // RENDER: LECCIÓN EMBEBIDA (CON SOPORTE PARA BLOQUEADO)
   // ============================================================
   if (mostrandoLeccion && leccionActual) {
-    const estaCompletada = leccionesCompletadas.includes(leccionActual.id) || videoCompletado;
+    // ✅ Solo cuenta lo confirmado por el backend. Antes `|| videoCompletado`
+    // marcaba "Completada" sin llamar a completarLeccion → el % se quedaba en 0.
+    const estaCompletada = leccionesCompletadas.includes(leccionActual.id);
     const bloques = getBloquesDeLeccion(leccionActual);
     const esBloqueadaPorPago = !esDocente && !estaInscrito && !tieneAcceso;
     const esBloqueadaSecuencial = leccionBloqueadaInfo?.bloqueada || false;
     const esBloqueada = esBloqueadaPorPago || esBloqueadaSecuencial;
     const razonBloqueo = leccionBloqueadaInfo?.razon || '';
+
+    // ✅ Avance controlado: la lección actual debe estar completada en el
+    // backend; y si el siguiente salta de módulo, el módulo actual al 100%.
+    const moduloActualCompleto = moduloActual ? isModuloCompleto(moduloActual) : false;
+    const puedeAvanzar =
+      !!siguienteLeccionInfo &&
+      estaCompletada &&
+      (siguienteLeccionInfo.modulo?.id === moduloActual?.id || moduloActualCompleto);
 
     return (
       <div className="bg-[#f8f9fa] min-h-screen">
@@ -1148,9 +1184,16 @@ const DetalleCurso = ({
               </span>
               <button
                 onClick={() => navegarALeccion(indiceLeccionActual + 1)}
-                disabled={!siguienteLeccionInfo}
+                disabled={!puedeAvanzar}
+                title={
+                  !estaCompletada
+                    ? 'Completa esta lección para continuar'
+                    : !moduloActualCompleto && siguienteLeccionInfo?.modulo?.id !== moduloActual?.id
+                      ? 'Termina todo el módulo actual para pasar al siguiente'
+                      : undefined
+                }
                 className={`flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-lg transition-colors ${
-                  siguienteLeccionInfo
+                  puedeAvanzar
                     ? 'text-white bg-[#0f766e] hover:bg-[#0d5e57]'
                     : 'text-gray-300 cursor-not-allowed'
                 }`}
@@ -1168,17 +1211,29 @@ const DetalleCurso = ({
                   Lección completada
                 </p>
                 <p className="text-xs text-emerald-600 mt-0.5">
-                  Siguiente: {siguienteLeccionInfo.leccion.titulo}
-                  {siguienteLeccionInfo.modulo.id !== moduloActual?.id &&
-                    ` · ${siguienteLeccionInfo.modulo.titulo}`}
+                  {puedeAvanzar ? (
+                    <>
+                      Siguiente: {siguienteLeccionInfo.leccion.titulo}
+                      {siguienteLeccionInfo.modulo.id !== moduloActual?.id &&
+                        ` · ${siguienteLeccionInfo.modulo.titulo}`}
+                    </>
+                  ) : (
+                    'Completa el resto del módulo actual para pasar al siguiente.'
+                  )}
                 </p>
               </div>
-              <button
-                onClick={() => navegarALeccion(indiceLeccionActual + 1)}
-                className="px-5 py-2 text-sm font-medium text-white rounded-lg transition-colors bg-[#0f766e] hover:bg-[#0d5e57] flex items-center gap-2 shrink-0"
-              >
-                Continuar <ChevronRight className="w-4 h-4" />
-              </button>
+              {puedeAvanzar ? (
+                <button
+                  onClick={() => navegarALeccion(indiceLeccionActual + 1)}
+                  className="px-5 py-2 text-sm font-medium text-white rounded-lg transition-colors bg-[#0f766e] hover:bg-[#0d5e57] flex items-center gap-2 shrink-0"
+                >
+                  Continuar <ChevronRight className="w-4 h-4" />
+                </button>
+              ) : (
+                <span className="text-xs font-medium text-amber-700 bg-amber-50 border border-amber-200 px-3 py-1.5 rounded-lg shrink-0">
+                  Módulo incompleto
+                </span>
+              )}
             </div>
           )}
           {estaCompletada && !esBloqueada && !siguienteLeccionInfo && (

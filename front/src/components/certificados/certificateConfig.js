@@ -41,5 +41,18 @@ export const saveTemplateConfig = (cfg) => {
   }
 };
 
+/**
+ * Diseño propio de UN certificado (snapshot en metadata_extra.diseno).
+ * Si el certificado no tiene diseño guardado, cae a DEFAULT (no al draft global)
+ * para que un cambio de borrador no reescribe certs antiguos.
+ */
+export const getDisenoCertificado = (certificado) => {
+  const guardado = certificado?.metadata_extra?.diseno;
+  if (guardado && typeof guardado === 'object' && !Array.isArray(guardado)) {
+    return { ...TEMPLATE_DEFAULT, ...guardado };
+  }
+  return { ...TEMPLATE_DEFAULT };
+};
+
 export const getValidacionUrl = (codigo) =>
   `${window.location.origin}/validar/${codigo}`;

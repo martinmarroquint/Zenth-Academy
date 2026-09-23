@@ -39,10 +39,10 @@ const PanelCertificados = ({ onGenerarCertificado, onVerCertificado }) => {
 
   const handleDownload = async (cert) => {
     try {
-      // Descarga real del PDF (mismo motor que VerCertificado / Generar)
-      const { loadTemplateConfig } = await import('./certificateConfig');
+      // Diseño propio de ESTE certificado (no el draft global)
+      const { getDisenoCertificado } = await import('./certificateConfig');
       const { generarPDF } = await import('./CertificatePDF');
-      const config = loadTemplateConfig();
+      const config = getDisenoCertificado(cert);
       const fechaEmision = new Date(
         cert.fecha_emision || cert.fecha || Date.now()
       ).toLocaleDateString('es-ES');

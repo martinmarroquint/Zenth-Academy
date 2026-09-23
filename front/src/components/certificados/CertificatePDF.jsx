@@ -125,6 +125,9 @@ const s = StyleSheet.create({
     marginRight: 8,
   },
   selloTexto: { fontSize: 7, fontWeight: 'bold', color: '#ffffff', letterSpacing: 1 },
+  // Decoración (adornos del HTML que faltaban en el PDF)
+  rombo: { fontSize: 14, lineHeight: 1 },
+  mancha: { position: 'absolute', borderRadius: 999 },
   // Moderno
   barra: { width: 12 },
   barraOro: { width: 44, height: 3, marginBottom: 6 },
@@ -207,8 +210,47 @@ const VistaClasico = ({ certificado, config, fechaEmision, qrDataUrl, incluirLog
     <View style={[s.bordeExterno, { borderColor: config.color_primario }]}>
       <View style={[s.bordeInterno, { borderColor: config.color_primario }]}>
         <View style={[s.bordeOro, { borderColor: config.color_acento }]}>
+          {/* Rombos de esquina (color acento) — igual que la vista HTML */}
+          <Text
+            style={[
+              s.rombo,
+              { position: 'absolute', top: 8, left: 10, color: config.color_acento },
+            ]}
+          >
+            ◆
+          </Text>
+          <Text
+            style={[
+              s.rombo,
+              { position: 'absolute', top: 8, right: 10, color: config.color_acento },
+            ]}
+          >
+            ◆
+          </Text>
+          <Text
+            style={[
+              s.rombo,
+              { position: 'absolute', bottom: 8, left: 10, color: config.color_acento },
+            ]}
+          >
+            ◆
+          </Text>
+          <Text
+            style={[
+              s.rombo,
+              { position: 'absolute', bottom: 8, right: 10, color: config.color_acento },
+            ]}
+          >
+            ◆
+          </Text>
           <View style={s.cuerpo}>
             <Marca incluirLogo={incluirLogo} config={config} />
+            <View
+              style={[
+                s.divisor,
+                { width: 96, backgroundColor: config.color_acento, marginTop: 8, marginBottom: 0 },
+              ]}
+            />
             <View style={{ flex: 1, justifyContent: 'center' }}>
               <ContenidoCentral config={config} certificado={certificado} />
             </View>
@@ -236,8 +278,41 @@ const VistaModerno = ({ certificado, config, fechaEmision, qrDataUrl, incluirLog
   <Page {...PAGE} style={s.page}>
     <View style={{ flex: 1, flexDirection: 'row' }}>
       <View style={[s.barra, { backgroundColor: config.color_primario }]} />
+      {/* Manchitas geométricas translúcidas (mismas que la vista HTML) */}
+      <View
+        style={[
+          s.mancha,
+          {
+            top: -48,
+            right: -48,
+            width: 160,
+            height: 160,
+            backgroundColor: config.color_primario,
+            opacity: 0.08,
+          },
+        ]}
+      />
+      <View
+        style={[
+          s.mancha,
+          {
+            bottom: 72,
+            right: -24,
+            width: 96,
+            height: 96,
+            backgroundColor: config.color_acento,
+            opacity: 0.1,
+          },
+        ]}
+      />
       <View style={{ flex: 1, paddingHorizontal: 36, paddingVertical: 22 }}>
         <MarcaRow incluirLogo={incluirLogo} config={config} />
+        <View
+          style={[
+            s.barraOro,
+            { backgroundColor: config.color_acento, alignSelf: 'flex-end', marginBottom: 0 },
+          ]}
+        />
         <View style={{ flex: 1, justifyContent: 'center' }}>
           <ContenidoCentral config={config} certificado={certificado} izquierda />
         </View>
@@ -256,18 +331,23 @@ const VistaAcademico = ({ certificado, config, fechaEmision, qrDataUrl, incluirL
   <Page {...PAGE} style={s.page}>
     <View style={[s.banda, { backgroundColor: config.color_primario }]}>
       <Marca incluirLogo={incluirLogo} config={config} claro />
-      <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-        <View
-          style={[
-            s.sello,
-            { borderColor: config.color_acento, backgroundColor: config.color_acento },
-          ]}
-        >
-          <Text style={s.selloTexto}>ZENTH</Text>
-          <Text style={[s.selloTexto, { marginTop: 1 }]}>★</Text>
-        </View>
-        <Text style={s.bandaTexto}>CERTIFICACIÓN OFICIAL</Text>
-      </View>
+      <Text style={s.bandaTexto}>CERTIFICACIÓN OFICIAL</Text>
+    </View>
+    {/* Sello flotante (misma posición que la vista HTML) */}
+    <View
+      style={[
+        s.sello,
+        {
+          position: 'absolute',
+          top: 56,
+          right: 32,
+          borderColor: config.color_acento,
+          backgroundColor: config.color_acento,
+        },
+      ]}
+    >
+      <Text style={s.selloTexto}>ZENTH</Text>
+      <Text style={[s.selloTexto, { marginTop: 1 }]}>★</Text>
     </View>
     <View style={{ flex: 1, paddingHorizontal: 40, paddingTop: 28, paddingBottom: 0 }}>
       <View style={{ flex: 1, justifyContent: 'center', paddingRight: 36 }}>

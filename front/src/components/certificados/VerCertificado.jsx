@@ -8,7 +8,7 @@ import certificadosService from '../../services/certificadosService';
 import { Button, Badge } from '../ui';
 import { useFeedback } from '../../hooks/useFeedback';
 import CertificateTemplates from './CertificateTemplates';
-import { loadTemplateConfig } from './certificateConfig';
+import { getDisenoCertificado } from './certificateConfig';
 
 const normalizarEstado = (estado) => String(estado || '').toLowerCase();
 
@@ -76,7 +76,7 @@ const VerCertificado = ({ certificadoId, onVolver }) => {
     );
   }
 
-  const config = loadTemplateConfig();
+  const config = getDisenoCertificado(certificado);
 
   const handleDescargar = async () => {
     setDescargando(true);

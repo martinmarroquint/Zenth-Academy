@@ -132,6 +132,9 @@ async def crear_certificado(
             raise HTTPException(status_code=400, detail="El codigo ya existe")
         # ✅ SEGURIDAD: el emisor es SIEMPRE el usuario autenticado (admin puede indicar otro).
         docente_id_final = data.docente_id if current_user.rol == "admin" and data.docente_id else str(current_user.id)
+        metadata_extra = {}
+        if data.diseno:
+            metadata_extra["diseno"] = data.diseno
         certificado = Certificado(
             id=str(uuid.uuid4()),
             codigo=codigo,
@@ -142,7 +145,8 @@ async def crear_certificado(
             docente_id=docente_id_final,
             docente_nombre=data.docente_nombre,
             url=data.url,
-            estado="emitido"
+            estado="emitido",
+            metadata_extra=metadata_extra or None,
         )
         db.add(certificado)
         db.flush()  # para obtener fecha_emision default
@@ -235,8 +239,14 @@ async def actualizar_certificado(
             raise HTTPException(status_code=404, detail="Certificado no encontrado")
         _verificar_ownership_certificado(certificado, current_user)
         update_data = data.model_dump(exclude_unset=True)
+        # diseno NO es columna: se guarda en metadata_extra (JSON) por certificado
+        diseno = update_data.pop("diseno", None)
         for field, value in update_data.items():
             setattr(certificado, field, value)
+        if diseno is not None:
+            meta = dict(certificado.metadata_extra or {})
+            meta["diseno"] = diseno
+            certificado.metadata_extra = meta
         db.commit()
         db.refresh(certificado)
         return _cert_to_dict(certificado)

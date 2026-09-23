@@ -15,6 +15,8 @@ class CertificadoCreate(BaseModel):
     docente_id: str
     docente_nombre: Optional[str] = None
     url: Optional[str] = None
+    # Snapshot de diseño propio de ESTE certificado (template, colores, firma…)
+    diseno: Optional[dict] = None
 
 
 class CertificadoUpdate(BaseModel):
@@ -23,6 +25,7 @@ class CertificadoUpdate(BaseModel):
     docente_nombre: Optional[str] = None
     url: Optional[str] = None
     estado: Optional[str] = None
+    diseno: Optional[dict] = None
 
 
 class CertificadoResponse(BaseModel):

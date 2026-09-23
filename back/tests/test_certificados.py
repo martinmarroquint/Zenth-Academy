@@ -115,6 +115,81 @@ def test_docente_crea_certificado_201(client, docente_user, docente_headers):
     assert data.get("firma"), "El certificado debe incluir firma HMAC"
 
 
+@pytest.mark.integration
+def test_crea_certificado_con_diseno_proprio(client, docente_user, docente_headers):
+    """El diseño (template/colores) se guarda en metadata_extra.diseno por cert."""
+    diseno = {
+        "template": "moderno",
+        "color_primario": "#123456",
+        "color_acento": "#abcdef",
+        "texto_titulo": "Diploma Especial",
+    }
+    payload = {
+        "estudiante_id": "est-1",
+        "estudiante_nombre": "Ana Pérez",
+        "curso_id": "curso-1",
+        "curso_titulo": "Curso de Python",
+        "docente_id": str(docente_user.id),
+        "docente_nombre": docente_user.nombre_completo,
+        "diseno": diseno,
+    }
+
+    resp = client.post("/api/v1/certificados/", json=payload, headers=docente_headers)
+
+    assert resp.status_code == 201, resp.text
+    data = resp.json()
+    assert data["metadata_extra"]["diseno"]["template"] == "moderno"
+    assert data["metadata_extra"]["diseno"]["color_primario"] == "#123456"
+
+
+@pytest.mark.integration
+def test_diseno_independiente_entre_certificados(client, docente_user, docente_headers):
+    """Cambiar el diseño de un cert NO debe tocar el diseño de otro."""
+    base = {
+        "estudiante_id": "est-1",
+        "estudiante_nombre": "Ana",
+        "curso_id": "curso-1",
+        "curso_titulo": "Curso A",
+        "docente_id": str(docente_user.id),
+        "docente_nombre": docente_user.nombre_completo,
+    }
+    r1 = client.post(
+        "/api/v1/certificados/",
+        json={**base, "diseno": {"template": "clasico", "color_primario": "#111111"}},
+        headers=docente_headers,
+    )
+    r2 = client.post(
+        "/api/v1/certificados/",
+        json={
+            **base,
+            "estudiante_id": "est-2",
+            "estudiante_nombre": "Beto",
+            "diseno": {"template": "academico", "color_primario": "#222222"},
+        },
+        headers=docente_headers,
+    )
+    assert r1.status_code == 201 and r2.status_code == 201
+
+    # Actualizar SOLO el diseño del segundo
+    id2 = r2.json()["id"]
+    put = client.put(
+        f"/api/v1/certificados/{id2}",
+        json={"diseno": {"template": "moderno", "color_primario": "#333333"}},
+        headers=docente_headers,
+    )
+    assert put.status_code == 200, put.text
+
+    # El primero conserva su diseño original
+    get1 = client.get(f"/api/v1/certificados/{r1.json()['id']}", headers=docente_headers)
+    get2 = client.get(f"/api/v1/certificados/{id2}", headers=docente_headers)
+    d1 = get1.json()["metadata_extra"]["diseno"]
+    d2 = get2.json()["metadata_extra"]["diseno"]
+    assert d1["template"] == "clasico"
+    assert d1["color_primario"] == "#111111"
+    assert d2["template"] == "moderno"
+    assert d2["color_primario"] == "#333333"
+
+
 @pytest.mark.security
 @pytest.mark.integration
 def test_estudiante_no_puede_crear_certificado(client, estudiante_headers):

@@ -11,7 +11,8 @@ import { Dropdown, Button, Switch } from '../ui';
 import { useFeedback } from '../../hooks/useFeedback';
 import CertificateTemplates from './CertificateTemplates';
 import {
-  TEMPLATE_DEFAULT, TEMPLATES, loadTemplateConfig, saveTemplateConfig
+  TEMPLATE_DEFAULT, TEMPLATES, loadTemplateConfig, saveTemplateConfig,
+  getDisenoCertificado,
 } from './certificateConfig';
 
 const inputCls =
@@ -143,9 +144,12 @@ const GenerarCertificado = ({ cursoId, onVolver, onGenerado }) => {
         curso_id: cursoSeleccionado,
         curso_titulo: cursoTitulo || 'Curso',
         docente_id: usuarioActual?.id || usuarioActual?.usuario_id || 'docente-generico',
-        docente_nombre: usuarioActual?.nombre || usuarioActual?.usuario || ''
+        docente_nombre: usuarioActual?.nombre || usuarioActual?.usuario || '',
+        // Diseño propio de este certificado (snapshot al emitir)
+        diseno: { ...config },
       };
       const creado = await certificadosService.crear(payload);
+      // El backend devuelve metadata_extra.diseno → usar el snapshot de ESTE cert
       setCertificadoGenerado(creado);
       setGenerado(true);
       if (onGenerado) onGenerado();
@@ -161,9 +165,14 @@ const GenerarCertificado = ({ cursoId, onVolver, onGenerado }) => {
     setDescargando(true);
     try {
       const { generarPDF } = await import('./CertificatePDF');
+      // Diseño del cert recién generado (snapshot propio), no el draft mutante
+      const { getDisenoCertificado } = await import('./certificateConfig');
+      const configDescarga = certificadoGenerado
+        ? getDisenoCertificado(certificadoGenerado)
+        : config;
       await generarPDF({
         certificado: certFinal,
-        config,
+        config: configDescarga,
         fechaEmision: fechaEmisionFinal,
       });
       toast.success('PDF descargado');
@@ -217,7 +226,11 @@ const GenerarCertificado = ({ cursoId, onVolver, onGenerado }) => {
         <div className="bg-white rounded-xl border border-gray-200 p-6 sm:p-8">
           <CertificateTemplates
             certificado={certFinal}
-            config={config}
+            config={
+              certificadoGenerado
+                ? getDisenoCertificado(certificadoGenerado)
+                : config
+            }
             fechaEmision={fechaEmisionFinal}
           />
 

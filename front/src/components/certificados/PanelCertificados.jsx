@@ -116,9 +116,9 @@ const PanelCertificados = ({ onGenerarCertificado, onVerCertificado }) => {
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 py-6 space-y-6">
       {/* Header */}
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
         <div>
-          <h2 className="text-2xl font-bold text-gray-900">Certificados</h2>
+          <h2 className="text-xl sm:text-2xl font-bold text-gray-900">Certificados</h2>
           <p className="text-sm text-gray-500">Gestiona los certificados de tus cursos</p>
         </div>
         <Button
@@ -126,6 +126,7 @@ const PanelCertificados = ({ onGenerarCertificado, onVerCertificado }) => {
           size="sm"
           icon={<Plus className="w-4 h-4" />}
           onClick={() => onGenerarCertificado?.(null)}
+          className="w-full sm:w-auto justify-center"
         >
           Nuevo Certificado
         </Button>
@@ -170,34 +171,34 @@ const PanelCertificados = ({ onGenerarCertificado, onVerCertificado }) => {
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           {certificadosFiltrados.map((cert) => (
             <div key={cert.id} className="bg-white rounded-xl border border-gray-200 p-4 hover:shadow-md transition-shadow">
-              <div className="flex items-start justify-between mb-3">
-                <div className="flex items-center gap-3">
-                  <Award className="w-8 h-8 text-amber-500" />
-                  <div>
-                    <h3 className="font-semibold text-gray-900">{cert.curso_titulo || cert.titulo || cert.nombre || 'Certificado'}</h3>
-                    <p className="text-sm text-gray-500">{cert.codigo ? `Código: ${cert.codigo}` : ''}</p>
+              <div className="flex items-start justify-between flex-wrap gap-2 mb-3">
+                <div className="flex items-center gap-3 min-w-0">
+                  <Award className="w-8 h-8 text-amber-500 shrink-0" />
+                  <div className="min-w-0">
+                    <h3 className="font-semibold text-gray-900 truncate">{cert.curso_titulo || cert.titulo || cert.nombre || 'Certificado'}</h3>
+                    <p className="text-sm text-gray-500 truncate">{cert.codigo ? `Código: ${cert.codigo}` : ''}</p>
                   </div>
                 </div>
-                <span className={`px-2 py-0.5 text-xs font-medium rounded-full ${getEstadoColor(cert.estado)}`}>
+                <span className={`px-2 py-0.5 text-xs font-medium rounded-full shrink-0 ${getEstadoColor(cert.estado)}`}>
                   {cert.estado}
                 </span>
               </div>
-              <div className="flex items-center gap-4 text-xs text-gray-400">
-                <span className="flex items-center gap-1"><Users className="w-3 h-3" />{cert.estudiante_nombre || cert.estudiante || ''}</span>
+              <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-gray-400">
+                <span className="flex items-center gap-1 min-w-0"><Users className="w-3 h-3 shrink-0" /><span className="truncate">{cert.estudiante_nombre || cert.estudiante || ''}</span></span>
                 <span className="flex items-center gap-1"><Clock className="w-3 h-3" />{new Date(cert.fecha_emision || cert.fecha || Date.now()).toLocaleDateString()}</span>
               </div>
               <div className="mt-3 pt-3 border-t border-gray-100 flex items-center gap-2">
                 <button
                   onClick={() => onVerCertificado?.(cert.id)}
                   title="Ver certificado"
-                  className="p-2 hover:bg-gray-100 rounded-lg text-gray-400 hover:text-gray-600 transition-colors"
+                  className="min-w-[44px] min-h-[44px] p-2 hover:bg-gray-100 rounded-lg text-gray-400 hover:text-gray-600 transition-colors flex items-center justify-center"
                 >
                   <Eye className="w-4 h-4" />
                 </button>
                 <button
                   onClick={() => handleDownload(cert)}
                   title="Descargar certificado"
-                  className="p-2 hover:bg-gray-100 rounded-lg text-gray-400 hover:text-gray-600 transition-colors"
+                  className="min-w-[44px] min-h-[44px] p-2 hover:bg-gray-100 rounded-lg text-gray-400 hover:text-gray-600 transition-colors flex items-center justify-center"
                 >
                   <Download className="w-4 h-4" />
                 </button>
@@ -206,7 +207,7 @@ const PanelCertificados = ({ onGenerarCertificado, onVerCertificado }) => {
                     onClick={() => handleCancelar(cert)}
                     disabled={cancelando === cert.id}
                     title="Cancelar certificado"
-                    className="p-2 hover:bg-red-50 rounded-lg text-gray-400 hover:text-red-600 transition-colors disabled:opacity-50"
+                    className="min-w-[44px] min-h-[44px] p-2 hover:bg-red-50 rounded-lg text-gray-400 hover:text-red-600 transition-colors disabled:opacity-50 flex items-center justify-center"
                   >
                     {cancelando === cert.id
                       ? <Loader2 className="w-4 h-4 animate-spin" />

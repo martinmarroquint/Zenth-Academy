@@ -288,20 +288,22 @@ const GenerarCertificado = ({ cursoId, onVolver, onGenerado }) => {
   return (
     <div className="max-w-3xl mx-auto space-y-6">
       {/* Header */}
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between gap-2">
         <button
           onClick={onVolver}
-          className="flex items-center gap-2 text-gray-500 hover:text-gray-700 transition-colors"
+          className="flex items-center gap-2 text-gray-500 hover:text-gray-700 transition-colors shrink-0"
         >
           <ArrowLeft className="w-4 h-4" />
           Volver
         </button>
-        <h2 className="text-lg font-semibold text-gray-900">Generar Certificado</h2>
-        <div className="w-20" />
+        <h2 className="text-base sm:text-lg font-semibold text-gray-900 truncate">
+          Generar Certificado
+        </h2>
+        <div className="w-14 sm:w-20 shrink-0" />
       </div>
 
       {/* Formulario */}
-      <div className="bg-white rounded-xl border border-gray-200 p-6 space-y-4">
+      <div className="bg-white rounded-xl border border-gray-200 p-4 sm:p-6 space-y-4">
         {error && (
           <div className="bg-red-50 border border-red-200 text-red-600 text-sm px-4 py-3 rounded-lg">
             {error}
@@ -356,7 +358,7 @@ const GenerarCertificado = ({ cursoId, onVolver, onGenerado }) => {
 
         {/* ===== DISEÑO DEL CERTIFICADO ===== */}
         <div className="border-t border-gray-200 pt-4 space-y-4">
-          <div className="flex items-center justify-between">
+          <div className="flex flex-wrap items-center justify-between gap-2">
             <h3 className="flex items-center gap-2 text-sm font-semibold text-gray-900">
               <Palette className="w-4 h-4 text-[#0f766e]" />
               Diseño del certificado
@@ -372,7 +374,7 @@ const GenerarCertificado = ({ cursoId, onVolver, onGenerado }) => {
           </div>
 
           {/* Selector de plantilla */}
-          <div className="grid grid-cols-3 gap-2">
+          <div className="grid grid-cols-3 gap-1.5 sm:gap-2">
             {TEMPLATES.map((t) => (
               <button
                 key={t.id}

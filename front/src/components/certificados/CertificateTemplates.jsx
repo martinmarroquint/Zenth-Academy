@@ -10,17 +10,17 @@ import { getValidacionUrl } from './certificateConfig';
 // =============================================
 
 const Marca = ({ config, claro = false }) => (
-  <div className="flex items-center justify-center gap-2">
+  <div className="flex items-center justify-center gap-1.5 sm:gap-2 min-w-0">
     {config.logo_url ? (
       <img
         src={config.logo_url}
         alt="Zenth Academy"
-        className="h-8 max-w-[110px] object-contain"
+        className="h-6 sm:h-8 max-w-[70px] sm:max-w-[110px] object-contain shrink-0"
         onError={(e) => { e.currentTarget.style.display = 'none'; }}
       />
     ) : null}
     <span
-      className={`text-[11px] font-semibold tracking-[0.25em] uppercase ${
+      className={`text-[9px] sm:text-[11px] font-semibold tracking-[0.25em] uppercase truncate ${
         claro ? 'text-white' : 'text-gray-700'
       }`}
     >
@@ -30,15 +30,15 @@ const Marca = ({ config, claro = false }) => (
 );
 
 const BloqueFirma = ({ config }) => (
-  <div className="min-w-[130px] max-w-[170px] text-center">
+  <div className="min-w-[80px] sm:min-w-[130px] max-w-[110px] sm:max-w-[170px] text-center">
     <div
-      className="w-full border-t mb-1.5 mx-auto"
+      className="w-full border-t mb-1 sm:mb-1.5 mx-auto"
       style={{ borderColor: config.color_acento }}
     />
-    <p className="text-[11px] font-semibold text-gray-800 truncate">
+    <p className="text-[8px] sm:text-[11px] font-semibold text-gray-800 truncate">
       {config.firma_nombre || '________________'}
     </p>
-    <p className="text-[9px] text-gray-500 truncate">
+    <p className="text-[7px] sm:text-[9px] text-gray-500 truncate">
       {config.firma_cargo || 'Instructor Certificado'}
     </p>
   </div>
@@ -46,10 +46,10 @@ const BloqueFirma = ({ config }) => (
 
 const BloqueFecha = ({ fechaEmision }) => (
   <div className="text-center">
-    <p className="text-[8px] uppercase tracking-[0.2em] text-gray-400 mb-0.5">
+    <p className="text-[6px] sm:text-[8px] uppercase tracking-[0.2em] text-gray-400 mb-0.5">
       Fecha de emisión
     </p>
-    <p className="text-[11px] text-gray-700">{fechaEmision}</p>
+    <p className="text-[8px] sm:text-[11px] text-gray-700">{fechaEmision}</p>
   </div>
 );
 
@@ -61,9 +61,12 @@ const BloqueQR = ({ codigo }) => (
       level="M"
       bgColor="#ffffff"
       fgColor="#0f172a"
+      className="w-9 h-9 sm:w-16 sm:h-16"
     />
-    <span className="text-[8px] text-gray-500 mt-1">Escanee para verificar</span>
-    <span className="font-mono text-[8px] text-gray-500 mt-0.5">
+    <span className="text-[7px] sm:text-[8px] text-gray-500 mt-0.5 sm:mt-1 text-center leading-tight">
+      Escanee para verificar
+    </span>
+    <span className="font-mono text-[6px] sm:text-[8px] text-gray-500 mt-0.5 text-center leading-tight">
       Código: {codigo}
     </span>
   </div>
@@ -78,37 +81,37 @@ const ContenidoCentral = ({ config, certificado, izquierda = false }) => {
     <div className={`min-w-0 max-w-full ${izquierda ? 'text-left' : 'text-center'}`}>
       {izquierda && (
         <div
-          className="w-12 h-[3px] mb-3"
+          className="w-8 sm:w-12 h-[3px] mb-2 sm:mb-3"
           style={{ background: config.color_acento }}
         />
       )}
       <h1
-        className={`text-[21px] font-bold leading-tight ${izquierda ? '' : 'text-center'}`}
+        className={`text-[13px] sm:text-[21px] font-bold leading-tight ${izquierda ? '' : 'text-center'}`}
         style={{ color: config.color_primario }}
       >
         {config.texto_titulo}
       </h1>
-      <p className="text-[9px] tracking-[0.35em] uppercase text-gray-400 mt-3">
+      <p className="text-[7px] sm:text-[9px] tracking-[0.35em] uppercase text-gray-400 mt-1.5 sm:mt-3">
         Otorgado a
       </p>
-      <p className="text-[26px] font-bold text-gray-900 mt-1 leading-tight break-words w-full">
+      <p className="text-[15px] sm:text-[26px] font-bold text-gray-900 mt-0.5 sm:mt-1 leading-tight break-words w-full">
         {estudiante}
       </p>
       {!izquierda && (
         <div
-          className="w-28 h-px mx-auto my-2.5"
+          className="w-20 sm:w-28 h-px mx-auto my-1.5 sm:my-2.5"
           style={{ background: config.color_acento }}
         />
       )}
-      <p className="text-[11px] text-gray-500 italic">{config.texto_parrafo}</p>
+      <p className="text-[8px] sm:text-[11px] text-gray-500 italic">{config.texto_parrafo}</p>
       <p
-        className="text-[15px] font-semibold mt-1 break-words"
+        className="text-[10px] sm:text-[15px] font-semibold mt-0.5 sm:mt-1 break-words"
         style={{ color: config.color_primario }}
       >
         {curso}
       </p>
       {mostrarNota && (
-        <p className="text-[11px] text-gray-600 mt-1.5">
+        <p className="text-[8px] sm:text-[11px] text-gray-600 mt-1">
           Calificación: {config.nota}
         </p>
       )}
@@ -117,7 +120,7 @@ const ContenidoCentral = ({ config, certificado, izquierda = false }) => {
 };
 
 const FooterComun = ({ config, fechaEmision, codigo }) => (
-  <div className="grid grid-cols-3 items-end w-full">
+  <div className="grid grid-cols-3 items-end w-full gap-1 sm:gap-0">
     <div className="justify-self-start">
       <BloqueFirma config={config} />
     </div>
@@ -171,10 +174,10 @@ const ClasicoTemplate = ({ certificado, config, fechaEmision }) => (
       style={{ color: config.color_acento }}
     >◆</span>
 
-    <div className="relative h-full flex flex-col items-center px-14 pt-7 pb-6">
+    <div className="relative h-full flex flex-col items-center px-4 sm:px-14 pt-3 sm:pt-7 pb-3 sm:pb-6">
       <Marca config={config} />
       <div
-        className="w-24 h-px my-2"
+        className="w-16 sm:w-24 h-px my-1.5 sm:my-2"
         style={{ background: config.color_acento }}
       />
       <div className="flex-1 flex flex-col items-center justify-center min-h-0 w-full">
@@ -214,11 +217,11 @@ const ModernoTemplate = ({ certificado, config, fechaEmision }) => (
       style={{ background: config.color_acento }}
     />
 
-    <div className="relative h-full flex flex-col pl-10 pr-8 py-6">
+    <div className="relative h-full flex flex-col pl-4 pr-3 sm:pl-10 sm:pr-8 py-3 sm:py-6">
       <div className="flex items-center justify-between">
         <Marca config={config} />
         <div
-          className="h-[3px] w-16"
+          className="h-[3px] w-10 sm:w-16"
           style={{ background: config.color_acento }}
         />
       </div>
@@ -246,24 +249,24 @@ const AcademicoTemplate = ({ certificado, config, fechaEmision }) => (
   >
     {/* Banda institucional oscura */}
     <div
-      className="h-[72px] shrink-0 px-10 flex items-center justify-between"
+      className="h-[48px] sm:h-[72px] shrink-0 px-4 sm:px-10 flex items-center justify-between gap-2"
       style={{ background: config.color_primario }}
     >
       <Marca config={config} claro />
-      <span className="text-[9px] tracking-[0.35em] uppercase text-white/70">
+      <span className="text-[7px] sm:text-[9px] tracking-[0.35em] uppercase text-white/70 shrink-0">
         Certificación oficial
       </span>
     </div>
     {/* Sello dorado */}
     <div
-      className="absolute right-8 top-16 w-14 h-14 rounded-full flex flex-col items-center justify-center shadow-md z-10"
+      className="absolute right-3 sm:right-8 top-10 sm:top-16 w-10 h-10 sm:w-14 sm:h-14 rounded-full flex flex-col items-center justify-center shadow-md z-10"
       style={{ background: config.color_acento }}
     >
-      <span className="text-[7px] font-bold text-white tracking-widest">ZENTH</span>
-      <span className="text-[11px] text-white leading-none mt-0.5">★</span>
+      <span className="text-[6px] sm:text-[7px] font-bold text-white tracking-widest">ZENTH</span>
+      <span className="text-[9px] sm:text-[11px] text-white leading-none mt-0.5">★</span>
     </div>
 
-    <div className="relative flex-1 min-h-0 flex flex-col px-12 pt-10 pb-6">
+    <div className="relative flex-1 min-h-0 flex flex-col px-4 sm:px-12 pt-4 sm:pt-10 pb-3 sm:pb-6">
       <div className="flex-1 flex flex-col items-center justify-center min-h-0 w-full">
         <ContenidoCentral config={config} certificado={certificado} />
       </div>

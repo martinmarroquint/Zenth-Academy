@@ -422,15 +422,16 @@ const PanelCursos = ({ onCrearCurso, onVerCurso, onEditarCurso }) => {
                   </div>
                 </div>
 
-                {/* Progreso (si está publicado) */}
-                {String(curso.estado || '').toUpperCase() === 'PUBLICADO' && curso.progreso !== undefined && (
+                {/* Progreso de alumnos (solo si la API lo trae; GET /cursos no
+                    incluye `progreso` del docente → no pintar UI muerta) */}
+                {typeof curso.progreso === 'number' && (
                   <div className="mt-3">
                     <div className="flex items-center justify-between text-xs text-gray-400 mb-1">
-                      <span>Progreso</span>
+                      <span>Progreso medio</span>
                       <span>{curso.progreso || 0}%</span>
                     </div>
                     <div className="w-full h-1 bg-gray-100 rounded-full overflow-hidden">
-                      <div 
+                      <div
                         className="h-full bg-[#0f766e] rounded-full transition-all duration-500"
                         style={{ width: `${curso.progreso || 0}%` }}
                       />

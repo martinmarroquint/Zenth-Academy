@@ -38,6 +38,13 @@ import LeccionItem from './LeccionItem';
 import {
   getBloquesDeLeccion, getTipoLeccion, getTipoLabel
 } from './leccionUtils';
+import {
+  esLeccionCompletada as esLeccionCompletadaPura,
+  esModuloCompleto as esModuloCompletoPuro,
+  puedeAvanzar as puedeAvanzarPura,
+  mostrarBannerContinuar as mostrarBannerContinuarPura,
+  leccionBloqueadaSecuencial as leccionBloqueadaSecuencialPura,
+} from './progresoCurso';
 
 // ============================================================
 // COMPONENTE PRINCIPAL
@@ -84,9 +91,7 @@ const DetalleCurso = ({
   // ✅ IDs de lecciones: el backend los serializa como string y el curso
   // puede traer números. Comparar con String evita bucles de "ya completada".
   const esLeccionCompletada = useCallback((id) => {
-    if (id === null || id === undefined) return false;
-    const clave = String(id);
-    return leccionesCompletadas.some(x => String(x) === clave);
+    return esLeccionCompletadaPura(id, leccionesCompletadas);
   }, [leccionesCompletadas]);
 
   // ✅ ESTADOS PARA EXAMEN
@@ -230,9 +235,7 @@ const DetalleCurso = ({
   }, [curso?.modulos, getLeccionesDeModulo]);
 
   const isModuloCompleto = useCallback((modulo) => {
-    const lecciones = getLeccionesDeModulo(modulo);
-    if (lecciones.length === 0) return false;
-    return lecciones.every(l => leccionesCompletadas.some(x => String(x) === String(l.id)));
+    return esModuloCompletoPuro(getLeccionesDeModulo(modulo), leccionesCompletadas);
   }, [getLeccionesDeModulo, leccionesCompletadas]);
 
   const isModuloBloqueado = useCallback((modulo) => {
@@ -270,13 +273,11 @@ const DetalleCurso = ({
     if (curso?.precio_tipo === 'pago' && !tieneAcceso) return true;
     const tipo = curso?.tipo_bloqueo || 'ninguno';
     if (tipo !== 'secuencial' && tipo !== 'mixto') return false;
-    if (!planLecciones.length) return false;
-    const idx = planLecciones.findIndex(x => x.leccion.id === leccionId);
-    if (idx <= 0) return false;
-    for (let i = 0; i < idx; i++) {
-      if (!leccionesCompletadas.some(x => String(x) === String(planLecciones[i].leccion.id))) return true;
-    }
-    return false;
+    return leccionBloqueadaSecuencialPura({
+      plan: planLecciones,
+      leccionId,
+      leccionesCompletadas,
+    });
   }, [esDocente, curso, tieneAcceso, planLecciones, leccionesCompletadas]);
 
   // Handlers
@@ -1094,12 +1095,19 @@ const DetalleCurso = ({
     // ✅ Avance controlado: la lección actual debe estar completada en el
     // backend; y si el siguiente salta de módulo, el módulo actual al 100%.
     const moduloActualCompleto = moduloActual ? isModuloCompleto(moduloActual) : false;
-    const puedeAvanzar =
-      !!siguienteLeccionInfo &&
-      estaCompletada &&
-      (siguienteLeccionInfo.modulo?.id === moduloActual?.id || moduloActualCompleto);
+    const mismoModulo = siguienteLeccionInfo?.modulo?.id === moduloActual?.id;
+    const puedeAvanzar = puedeAvanzarPura({
+      haySiguiente: !!siguienteLeccionInfo,
+      estaCompletada,
+      mismoModulo,
+      moduloActualCompleto,
+    });
     // Banner verde "Continuar" tras completar → el pie NO debe repetir "Siguiente"
-    const mostrarBannerContinuar = estaCompletada && !esBloqueada && !!siguienteLeccionInfo;
+    const mostrarBannerContinuar = mostrarBannerContinuarPura({
+      estaCompletada,
+      esBloqueada,
+      haySiguiente: !!siguienteLeccionInfo,
+    });
 
     return (
       <div className="bg-[#f8f9fa] min-h-screen">

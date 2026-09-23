@@ -2038,12 +2038,42 @@ async def listar_cursos(
             query = query.filter(Curso.categoria == categoria)
         if nivel:
             query = query.filter(Curso.nivel == nivel)
-        if estado:
-            query = query.filter(func.upper(Curso.estado) == estado.upper())
         if docente_id:
             query = query.filter(Curso.docente_id == docente_id)
         if titulo:
             query = query.filter(Curso.titulo.ilike(f"%{titulo}%"))
+
+        # ✅ SEGURIDAD: sin filtro `estado` (o con estado no público), un
+        # estudiante jamás ve borradores/archivados de otros. Un docente solo
+        # ve los suyos en cualquier estado + los publicados de todos.
+        usuario_id = str(current_user.id)
+        es_admin = current_user.rol == "admin"
+        es_docente = current_user.rol == "docente"
+        solo_publicados = or_(
+            func.upper(Curso.estado) == "PUBLICADO",
+            cast(Curso.docente_id, String) == usuario_id,
+        )
+
+        if not es_admin:
+            if es_docente:
+                if estado and estado.upper() != "PUBLICADO":
+                    query = query.filter(solo_publicados)
+                elif not estado:
+                    query = query.filter(solo_publicados)
+                # estado=PUBLICADO explícito → solo publicados (ya filtrado abajo)
+                if estado and estado.upper() == "PUBLICADO":
+                    pass
+            else:
+                # estudiante (y cualquier otro rol): solo publicados siempre
+                if not estado or estado.upper() != "PUBLICADO":
+                    query = query.filter(func.upper(Curso.estado) == "PUBLICADO")
+                # si pidió estado no público, forzar intersección vacía con PUBLICADO
+                if estado and estado.upper() != "PUBLICADO":
+                    query = query.filter(func.upper(Curso.estado) == "PUBLICADO")
+
+        if estado:
+            query = query.filter(func.upper(Curso.estado) == estado.upper())
+
         cursos = query.order_by(Curso.created_at.desc()).offset(offset).limit(limit).all()
         
         usuario_id = str(current_user.id)
@@ -2115,13 +2145,26 @@ async def obtener_curso(
         tiene_acceso = _verificar_acceso(db, id, usuario_id)
         tiene_solicitud_pendiente = _tiene_solicitud_pendiente(db, id, usuario_id)
         esta_inscrito = _esta_inscrito(db, id, usuario_id)
-        
+
         es_docente_del_curso = str(curso.docente_id) == usuario_id
+        es_admin = current_user.rol == "admin"
         if es_docente_del_curso:
             tiene_acceso = True
             tiene_solicitud_pendiente = False
             esta_inscrito = True
-        
+
+        # ✅ SEGURIDAD: un curso no publicado solo lo ven dueño, admin o
+        # quien ya esté inscrito/con acceso (evita filtrar borradores por id).
+        estado_curso = (curso.estado or "BORRADOR").upper()
+        if (
+            estado_curso != "PUBLICADO"
+            and not es_docente_del_curso
+            and not es_admin
+            and not esta_inscrito
+            and not tiene_acceso
+        ):
+            raise HTTPException(status_code=404, detail="Curso no encontrado")
+
         return _curso_to_dict(curso, tiene_acceso, tiene_solicitud_pendiente, esta_inscrito)
     except HTTPException:
         raise

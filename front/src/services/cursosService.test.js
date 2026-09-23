@@ -98,6 +98,43 @@ describe('cursosService', () => {
     });
   });
 
+  describe('listar / obtener / progreso', () => {
+    it('listar llama GET /cursos con filtros', async () => {
+      api.get.mockResolvedValue([{ id: 'c1' }]);
+
+      const result = await cursosService.listar({ estado: 'publicado' });
+
+      expect(api.get).toHaveBeenCalledWith('/cursos', { estado: 'publicado' });
+      expect(result).toEqual([{ id: 'c1' }]);
+    });
+
+    it('obtener llama GET /cursos/{id}', async () => {
+      api.get.mockResolvedValue({ id: 'c1', titulo: 'Curso' });
+
+      const result = await cursosService.obtener('c1');
+
+      expect(api.get).toHaveBeenCalledWith('/cursos/c1');
+      expect(result.id).toBe('c1');
+    });
+
+    it('obtenerProgreso llama GET /cursos/{id}/progreso/{uid}', async () => {
+      api.get.mockResolvedValue({ progreso: 50, lecciones_completadas: ['l1'] });
+
+      const result = await cursosService.obtenerProgreso('c1', 'u1');
+
+      expect(api.get).toHaveBeenCalledWith('/cursos/c1/progreso/u1');
+      expect(result.progreso).toBe(50);
+    });
+
+    it('misCursos llama GET /cursos/mis-cursos', async () => {
+      api.get.mockResolvedValue([{ curso_id: 'c1' }]);
+
+      await cursosService.misCursos();
+
+      expect(api.get).toHaveBeenCalledWith('/cursos/mis-cursos');
+    });
+  });
+
   describe('comentarios por lección', () => {
     it('listarComentariosLeccion llama al endpoint correcto', async () => {
       api.get.mockResolvedValue([]);

@@ -115,6 +115,182 @@ def test_listar_cursos_publicados(client, db, docente_user, estudiante_headers):
     assert "Curso Borrador" not in titulos
 
 
+@pytest.mark.integration
+def test_listar_sin_estado_estudiante_no_ve_borradores(
+    client, db, docente_user, estudiante_headers
+):
+    """Sin filtro estado, un estudiante solo debe ver PUBLICADO."""
+    _crear_curso(db, docente_user, titulo="Pub sin filtro", estado="PUBLICADO")
+    _crear_curso(db, docente_user, titulo="Borrador sin filtro", estado="BORRADOR")
+
+    resp = client.get("/api/v1/cursos/", headers=estudiante_headers)
+
+    assert resp.status_code == 200, resp.text
+    titulos = [c["titulo"] for c in resp.json()]
+    assert "Pub sin filtro" in titulos
+    assert "Borrador sin filtro" not in titulos
+
+
+@pytest.mark.integration
+def test_listar_borradores_estudiante_pidienestado_devuelve_vacio(
+    client, db, docente_user, estudiante_headers
+):
+    _crear_curso(db, docente_user, titulo="Borrador oculto", estado="BORRADOR")
+
+    resp = client.get("/api/v1/cursos/?estado=BORRADOR", headers=estudiante_headers)
+
+    assert resp.status_code == 200, resp.text
+    assert all(c["titulo"] != "Borrador oculto" for c in resp.json())
+
+
+@pytest.mark.integration
+def test_listar_docente_ve_sus_borradores_y_publicados_ajenos(
+    client, db, docente_user, otro_docente_user, docente_headers, estudiante_headers
+):
+    _crear_curso(db, docente_user, titulo="Mio borrador", estado="BORRADOR")
+    _crear_curso(db, otro_docente_user, titulo="Ajeno publicado", estado="PUBLICADO")
+    _crear_curso(db, otro_docente_user, titulo="Ajeno borrador", estado="BORRADOR")
+
+    resp_doc = client.get("/api/v1/cursos/", headers=docente_headers)
+    assert resp_doc.status_code == 200, resp_doc.text
+    titulos_doc = [c["titulo"] for c in resp_doc.json()]
+    assert "Mio borrador" in titulos_doc
+    assert "Ajeno publicado" in titulos_doc
+    assert "Ajeno borrador" not in titulos_doc
+
+    resp_est = client.get("/api/v1/cursos/", headers=estudiante_headers)
+    titulos_est = [c["titulo"] for c in resp_est.json()]
+    assert "Mio borrador" not in titulos_est
+    assert "Ajeno borrador" not in titulos_est
+    assert "Ajeno publicado" in titulos_est
+
+
+@pytest.mark.integration
+def test_listar_admin_ve_borradores_ajenos(
+    client, db, docente_user, admin_headers
+):
+    _crear_curso(db, docente_user, titulo="Borrador admin ve", estado="BORRADOR")
+
+    resp = client.get("/api/v1/cursos/", headers=admin_headers)
+
+    assert resp.status_code == 200, resp.text
+    assert "Borrador admin ve" in [c["titulo"] for c in resp.json()]
+
+
+# =============================================
+# DETALLE GET /cursos/{id} (flags de acceso)
+# =============================================
+
+@pytest.mark.integration
+def test_obtener_curso_publicado_sin_inscripcion_flags(
+    client, db, docente_user, estudiante_headers
+):
+    """200 + flags de acceso; módulos saneados (sin bloques) si no hay inscripción."""
+    curso = _crear_curso(
+        db,
+        docente_user,
+        titulo="Detalle publicado",
+        estado="PUBLICADO",
+        modulos=MODULOS_2_LECCIONES,
+    )
+
+    resp = client.get(f"/api/v1/cursos/{curso.id}", headers=estudiante_headers)
+
+    assert resp.status_code == 200, resp.text
+    data = resp.json()
+    assert data["id"] == str(curso.id)
+    assert data["tiene_acceso"] is False
+    assert data["esta_inscrito"] is False
+    assert data["tiene_solicitud_pendiente"] is False
+    assert data["estado"] == "PUBLICADO"
+    # Preview: sin inscripción no debe venir el contenido real de bloques
+    for modulo in data["modulos"]:
+        for leccion in modulo.get("lecciones", []):
+            assert not leccion.get("bloques"), "No debe exponer bloques en preview"
+
+
+@pytest.mark.integration
+def test_obtener_curso_publicado_inscrito_con_acceso(
+    client, db, docente_user, estudiante_user, estudiante_headers
+):
+    modulos_con_bloques = [
+        {
+            "id": "m1",
+            "titulo": "Módulo 1",
+            "lecciones": [
+                {
+                    "id": "l1",
+                    "titulo": "Lección 1",
+                    "bloques": [{"tipo": "texto", "contenido": "hola"}],
+                },
+            ],
+        }
+    ]
+    curso = _crear_curso(
+        db,
+        docente_user,
+        titulo="Detalle inscrito",
+        estado="PUBLICADO",
+        precio_tipo="gratis",
+        modulos=modulos_con_bloques,
+    )
+    r = client.post(f"/api/v1/cursos/{curso.id}/inscribirse", headers=estudiante_headers)
+    assert r.status_code == 200, r.text
+
+    resp = client.get(f"/api/v1/cursos/{curso.id}", headers=estudiante_headers)
+
+    assert resp.status_code == 200, resp.text
+    data = resp.json()
+    assert data["esta_inscrito"] is True
+    assert data["tiene_acceso"] is True
+    # Con acceso debe verse el contenido real (bloques presentes)
+    lecciones = [
+        l for m in data["modulos"] for l in m.get("lecciones", [])
+    ]
+    assert any(l.get("bloques") for l in lecciones), "Con acceso debe ver bloques"
+
+
+@pytest.mark.integration
+def test_obtener_curso_borrador_ajeno_es_404(
+    client, db, docente_user, estudiante_headers
+):
+    """Un estudiante no debe poder abrir un borrador por id directo."""
+    curso = _crear_curso(db, docente_user, titulo="Borrador privado", estado="BORRADOR")
+
+    resp = client.get(f"/api/v1/cursos/{curso.id}", headers=estudiante_headers)
+
+    assert resp.status_code == 404, resp.text
+
+
+@pytest.mark.integration
+def test_obtener_curso_borrador_dueno_ok(
+    client, db, docente_user, docente_headers
+):
+    curso = _crear_curso(db, docente_user, titulo="Mi borrador", estado="BORRADOR")
+
+    resp = client.get(f"/api/v1/cursos/{curso.id}", headers=docente_headers)
+
+    assert resp.status_code == 200, resp.text
+    assert resp.json()["titulo"] == "Mi borrador"
+
+
+@pytest.mark.integration
+def test_obtener_curso_borrador_admin_ok(
+    client, db, docente_user, admin_headers
+):
+    curso = _crear_curso(db, docente_user, titulo="Borrador admin", estado="BORRADOR")
+
+    resp = client.get(f"/api/v1/cursos/{curso.id}", headers=admin_headers)
+
+    assert resp.status_code == 200, resp.text
+
+
+@pytest.mark.integration
+def test_obtener_curso_inexistente_404(client, docente_headers):
+    resp = client.get("/api/v1/cursos/no-existe-xyz", headers=docente_headers)
+    assert resp.status_code == 404, resp.text
+
+
 # =============================================
 # INSCRIPCIÓN Y ACCESO
 # =============================================

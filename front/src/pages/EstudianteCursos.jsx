@@ -63,18 +63,43 @@ const EstudianteCursos = () => {
   const cargar = useCallback(async () => {
     setCargando(true);
     try {
+      // críticos: catálogo + mis cursos; no críticos: solicitudes y certificados
       const [cat, mis, sol, cert] = await Promise.allSettled([
         cursosService.listar({ estado: 'publicado' }),
         cursosService.misCursos(),
         cursosService.misSolicitudes().catch(() => []),
         certificadosService.listar({ estudiante_id: usuario?.id }).catch(() => []),
       ]);
-      
-      setCursos(Array.isArray(cat.value) ? cat.value : []);
-      setInscripciones(Array.isArray(mis.value) ? mis.value : []);
-      setSolicitudes(Array.isArray(sol.value) ? sol.value : []);
-      setCertificados(Array.isArray(cert.value) ? cert.value : []);
-      setError('');
+
+      const fallosCriticos = [];
+      if (cat.status === 'rejected') {
+        fallosCriticos.push('el catálogo');
+        setCursos([]);
+      } else {
+        setCursos(Array.isArray(cat.value) ? cat.value : []);
+      }
+      if (mis.status === 'rejected') {
+        fallosCriticos.push('tus cursos inscritos');
+        setInscripciones([]);
+      } else {
+        setInscripciones(Array.isArray(mis.value) ? mis.value : []);
+      }
+
+      setSolicitudes(
+        sol.status === 'fulfilled' && Array.isArray(sol.value) ? sol.value : []
+      );
+      setCertificados(
+        cert.status === 'fulfilled' && Array.isArray(cert.value) ? cert.value : []
+      );
+
+      if (fallosCriticos.length > 0) {
+        console.error('Error cargando cursos:', { cat, mis });
+        setError(
+          `No se pudieron cargar ${fallosCriticos.join(' ni ')}. Revisa tu conexión y vuelve a intentar.`
+        );
+      } else {
+        setError('');
+      }
     } catch (e) {
       console.error('Error cargando cursos:', e);
       setError('No se pudieron cargar los cursos');
@@ -110,24 +135,34 @@ const EstudianteCursos = () => {
   const { cursosConEstado } = useMemo(() => {
     const progreso = {};
     inscripciones.forEach((i) => {
-      progreso[i.curso_id] = {
+      progreso[String(i.curso_id)] = {
         progreso: i.progreso || 0,
         completado: !!i.completado,
         fecha: i.fecha_inscripcion,
+        // Datos embebidos por /mis-cursos: permiten renderizar aunque el
+        // curso no esté en el catálogo (borrador, archivado o fuera del top-N)
+        curso_titulo: i.curso_titulo,
+        curso_descripcion: i.curso_descripcion,
+        curso_imagen_url: i.curso_imagen_url,
+        curso_precio_tipo: i.curso_precio_tipo,
+        curso_categoria: i.curso_categoria,
+        curso_nivel: i.curso_nivel,
+        curso_docente_nombre: i.curso_docente_nombre,
+        curso_estado: i.curso_estado,
       };
     });
 
     const pendientes = {};
     solicitudes.filter(s => s.estado === 'pendiente').forEach((s) => {
-      pendientes[s.curso_id] = true;
+      pendientes[String(s.curso_id)] = true;
     });
 
     const catalogoPorId = {};
-    cursos.forEach((c) => { catalogoPorId[c.id] = c; });
+    cursos.forEach((c) => { catalogoPorId[String(c.id)] = c; });
 
     const conEstado = cursos.map((curso) => {
-      const inscrito = progreso[curso.id];
-      const tieneSolicitudPendiente = pendientes[curso.id] || false;
+      const inscrito = progreso[String(curso.id)];
+      const tieneSolicitudPendiente = pendientes[String(curso.id)] || false;
       return {
         ...curso,
         inscrito: !!inscrito,
@@ -138,10 +173,35 @@ const EstudianteCursos = () => {
       };
     });
 
+    // Fallback: inscripciones cuyo curso NO aparece en el catálogo publicado
+    // (borrador/archivado o fuera del limit del listado) → tarjeta propia
+    const idsCatalogo = new Set(conEstado.map((c) => String(c.id)));
+    const fueraDelCatalogo = inscripciones
+      .filter((i) => !idsCatalogo.has(String(i.curso_id)) && i.curso_titulo)
+      .map((i) => {
+        const meta = progreso[String(i.curso_id)] || {};
+        return {
+          id: String(i.curso_id),
+          titulo: meta.curso_titulo,
+          descripcion: meta.curso_descripcion || '',
+          imagen_url: meta.curso_imagen_url || null,
+          precio_tipo: meta.curso_precio_tipo || 'gratis',
+          categoria: meta.curso_categoria || null,
+          nivel: meta.curso_nivel || null,
+          docente_nombre: meta.curso_docente_nombre || null,
+          estado: meta.curso_estado || null,
+          inscrito: true,
+          progreso: i.progreso || 0,
+          completado: !!i.completado,
+          fecha_inscripcion: i.fecha_inscripcion,
+          tiene_solicitud_pendiente: false,
+        };
+      });
+
     return {
       progresoPorCurso: progreso,
       solicitudesPendientes: pendientes,
-      cursosConEstado: conEstado,
+      cursosConEstado: [...conEstado, ...fueraDelCatalogo],
     };
   }, [cursos, inscripciones, solicitudes]);
 
@@ -273,7 +333,13 @@ const EstudianteCursos = () => {
         <div className="flex items-center gap-3 p-4 bg-red-50 border border-red-200 rounded-xl text-sm text-red-600 mb-6">
           <AlertCircle className="w-5 h-5 text-red-500 flex-shrink-0" />
           <span>{error}</span>
-          <button onClick={() => setError('')} className="ml-auto p-1 hover:bg-red-100 rounded-lg">
+          <button
+            onClick={() => cargar()}
+            className="ml-auto px-3 py-1 text-xs font-medium text-white bg-red-500 hover:bg-red-600 rounded-lg transition-colors"
+          >
+            Reintentar
+          </button>
+          <button onClick={() => setError('')} className="p-1 hover:bg-red-100 rounded-lg" aria-label="Cerrar">
             <X className="w-4 h-4" />
           </button>
         </div>

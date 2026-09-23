@@ -378,3 +378,99 @@ def test_curso_gratis_inscrito_puede_completar_leccion(
     )
 
     assert resp.status_code == 200, resp.text
+
+
+@pytest.mark.integration
+def test_mis_cursos_incluye_datos_del_curso(
+    client, db, docente_user, estudiante_user, estudiante_headers
+):
+    """El front no debe depender del join con el catálogo (borradores/top-N)."""
+    curso = _crear_curso(db, docente_user, titulo="Curso embebido", estado="BORRADOR")
+    db.add(InscripcionCurso(
+        id=str(uuid.uuid4()),
+        curso_id=str(curso.id),
+        estudiante_id=str(estudiante_user.id),
+        estudiante_nombre=estudiante_user.nombre_completo,
+        progreso=40,
+        completado=False,
+        lecciones_completadas=[],
+    ))
+    db.commit()
+
+    resp = client.get("/api/v1/cursos/mis-cursos", headers=estudiante_headers)
+
+    assert resp.status_code == 200, resp.text
+    items = resp.json()
+    assert len(items) == 1
+    assert items[0]["curso_titulo"] == "Curso embebido"
+    assert items[0]["curso_estado"] == "BORRADOR"
+    assert items[0]["curso_precio_tipo"] == "gratis"
+    assert items[0]["progreso"] == 40
+
+
+@pytest.mark.integration
+def test_reinscribirse_backfilla_acceso_curso_legacy(
+    client, db, docente_user, estudiante_user, estudiante_headers
+):
+    """Inscripciones legacy sin AccesoCurso se curan al volver a inscribirse."""
+    curso = _crear_curso(db, docente_user, precio_tipo="gratis")
+    db.add(InscripcionCurso(
+        id=str(uuid.uuid4()),
+        curso_id=str(curso.id),
+        estudiante_id=str(estudiante_user.id),
+        estudiante_nombre=estudiante_user.nombre_completo,
+        progreso=0,
+        completado=False,
+        lecciones_completadas=[],
+    ))
+    db.commit()
+    assert db.query(AccesoCurso).filter(
+        AccesoCurso.curso_id == str(curso.id),
+        AccesoCurso.estudiante_id == str(estudiante_user.id),
+    ).count() == 0
+
+    resp = client.post(
+        f"/api/v1/cursos/{curso.id}/inscribirse",
+        headers=estudiante_headers,
+    )
+
+    assert resp.status_code == 200, resp.text
+    db.expire_all()
+    assert db.query(AccesoCurso).filter(
+        AccesoCurso.curso_id == str(curso.id),
+        AccesoCurso.estudiante_id == str(estudiante_user.id),
+        AccesoCurso.activo == True,  # noqa: E712
+    ).count() == 1
+
+
+@pytest.mark.integration
+def test_completar_leccion_gratis_legacy_sin_acceso_hace_backfill(
+    client, db, docente_user, estudiante_user, estudiante_headers
+):
+    """Inscripción gratis sin AccesoCurso: completar debe funcionar y curar el acceso."""
+    curso = _crear_curso(db, docente_user, precio_tipo="gratis", modulos=MODULOS_2_LECCIONES)
+    db.add(InscripcionCurso(
+        id=str(uuid.uuid4()),
+        curso_id=str(curso.id),
+        estudiante_id=str(estudiante_user.id),
+        estudiante_nombre=estudiante_user.nombre_completo,
+        progreso=0,
+        completado=False,
+        lecciones_completadas=[],
+    ))
+    db.commit()
+
+    resp = client.post(
+        f"/api/v1/cursos/{curso.id}/lecciones/l1/completar",
+        json={"usuario_id": str(estudiante_user.id)},
+        headers=estudiante_headers,
+    )
+
+    assert resp.status_code == 200, resp.text
+    assert resp.json()["progreso"] == 50
+    db.expire_all()
+    assert db.query(AccesoCurso).filter(
+        AccesoCurso.curso_id == str(curso.id),
+        AccesoCurso.estudiante_id == str(estudiante_user.id),
+        AccesoCurso.activo == True,  # noqa: E712
+    ).count() == 1

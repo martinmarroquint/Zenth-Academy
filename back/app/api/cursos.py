@@ -425,12 +425,18 @@ async def mis_cursos(
     db: Session = Depends(get_db),
     current_user: Usuario = Depends(get_current_active_user)
 ):
-    """Lista las inscripciones del usuario actual"""
+    """Lista las inscripciones del usuario actual (con datos del curso embebidos)"""
     try:
         inscripciones = db.query(InscripcionCurso).filter(
             cast(InscripcionCurso.estudiante_id, String) == str(current_user.id)
         ).order_by(InscripcionCurso.created_at.desc()).all()
-        
+
+        curso_ids = {str(insc.curso_id) for insc in inscripciones if insc.curso_id}
+        cursos_map = {
+            str(c.id): c
+            for c in db.query(Curso).filter(Curso.id.in_(curso_ids)).all()
+        } if curso_ids else {}
+
         return [
             {
                 "id": str(insc.id),
@@ -443,8 +449,17 @@ async def mis_cursos(
                 "fecha_inscripcion": insc.fecha_inscripcion,
                 "fecha_completado": insc.fecha_completado,
                 "created_at": insc.created_at,
+                "curso_titulo": (curso.titulo if curso else None),
+                "curso_descripcion": (curso.descripcion if curso else None),
+                "curso_imagen_url": (curso.imagen_url if curso else None),
+                "curso_estado": (curso.estado if curso else None),
+                "curso_precio_tipo": (curso.precio_tipo if curso else None),
+                "curso_categoria": (curso.categoria if curso else None),
+                "curso_nivel": (curso.nivel if curso else None),
+                "curso_docente_nombre": (curso.docente_nombre if curso else None),
             }
             for insc in inscripciones
+            for curso in [cursos_map.get(str(insc.curso_id))]
         ]
     except Exception as e:
         raise HTTPException(status_code=500, detail=error_interno(e, "Error listando inscripciones"))
@@ -790,6 +805,21 @@ async def inscribirse_curso(
             cast(InscripcionCurso.estudiante_id, String) == str(current_user.id)
         ).first()
         if inscripcion:
+            # ✅ Backfill: inscripciones legacy podían quedar sin AccesoCurso
+            # (early-return anterior al fix). Curar al re-inscribirse.
+            if not _verificar_acceso(db, id, str(current_user.id)):
+                db.add(AccesoCurso(
+                    id=str(uuid.uuid4()),
+                    curso_id=id,
+                    estudiante_id=str(current_user.id),
+                    estudiante_nombre=current_user.nombre_completo,
+                    activo=True,
+                    tipo_acceso="vitalicio",
+                    fecha_inicio=datetime.now(timezone.utc),
+                    activado_por=str(current_user.id),
+                    comentario="Backfill de acceso por re-inscripción",
+                ))
+                db.commit()
             return {
                 "id": str(inscripcion.id),
                 "curso_id": str(inscripcion.curso_id),
@@ -1620,10 +1650,32 @@ async def completar_leccion(
         if current_user.rol not in ["admin", "docente"]:
             tiene_acceso = _verificar_acceso(db, curso_id, estudiante_id)
             if not tiene_acceso:
-                raise HTTPException(
-                    status_code=status.HTTP_403_FORBIDDEN,
-                    detail="No tienes acceso a este curso"
-                )
+                # ✅ Cursos gratuitos: una inscripción activa basta (y se cura
+                # el AccesoCurso legacy que falte). Pago sigue exigiendo acceso.
+                if curso.precio_tipo != "pago":
+                    insc_acc = db.query(InscripcionCurso).filter(
+                        cast(InscripcionCurso.curso_id, String) == curso_id,
+                        cast(InscripcionCurso.estudiante_id, String) == estudiante_id
+                    ).first()
+                    if insc_acc:
+                        db.add(AccesoCurso(
+                            id=str(uuid.uuid4()),
+                            curso_id=curso_id,
+                            estudiante_id=estudiante_id,
+                            estudiante_nombre=insc_acc.estudiante_nombre or current_user.nombre_completo,
+                            activo=True,
+                            tipo_acceso="vitalicio",
+                            fecha_inicio=datetime.now(timezone.utc),
+                            activado_por=str(current_user.id),
+                            comentario="Backfill de acceso por inscripción existente",
+                        ))
+                        db.commit()
+                        tiene_acceso = True
+                if not tiene_acceso:
+                    raise HTTPException(
+                        status_code=status.HTTP_403_FORBIDDEN,
+                        detail="No tienes acceso a este curso"
+                    )
         
         # Validar que la lección existe y obtener módulo
         leccion, _, modulo = _encontrar_leccion_y_anterior(curso, leccion_id)

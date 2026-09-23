@@ -388,6 +388,16 @@ class InscripcionCursoResponse(BaseModel):
     fecha_inscripcion: Optional[datetime]
     fecha_completado: Optional[datetime]
     created_at: Optional[datetime]
+    # Datos del curso embebidos para no depender del join con el catálogo
+    # (el catálogo solo trae publicados y top-N; sin esto el front "pierde" cursos)
+    curso_titulo: Optional[str] = None
+    curso_descripcion: Optional[str] = None
+    curso_imagen_url: Optional[str] = None
+    curso_estado: Optional[str] = None
+    curso_precio_tipo: Optional[str] = None
+    curso_categoria: Optional[str] = None
+    curso_nivel: Optional[str] = None
+    curso_docente_nombre: Optional[str] = None
 
     class Config:
         from_attributes = True

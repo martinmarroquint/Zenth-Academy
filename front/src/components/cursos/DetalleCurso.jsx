@@ -504,13 +504,15 @@ const DetalleCurso = ({
       }
     } catch (error) {
       const mensaje = error?.response?.data?.detail || error?.message || 'Error al completar la leccion';
-      // En auto-completado silencioso, solo avisar si no es ya "completada"
-      if (!silencioso || !String(mensaje).toLowerCase().includes('completad')) {
+      // En auto-completado silencioso: no spamear toasts de error
+      // (403 "No tienes acceso" / red / 5xx no deben reintentar en loop)
+      if (!silencioso) {
         toast.error(mensaje);
       }
       console.error('Error completando leccion:', error);
-      // Permitir reintento en el próximo cambio de deps si falló
-      autoCompletadoLeccionIdRef.current = null;
+      // NO limpiar autoCompletadoLeccionIdRef en error: con `marcando` en deps
+      // del efecto, limpiarlo re-disparaba POST /completar en bucle infinito.
+      // El one-shot de la lección se resetea al cambiar de video/lección.
     } finally {
       setMarcando(false);
     }

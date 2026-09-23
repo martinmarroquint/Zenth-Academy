@@ -37,6 +37,8 @@ class CertificadoResponse(BaseModel):
     fecha_emision: Optional[datetime]
     url: Optional[str]
     estado: str
+    firma: Optional[str] = None
+    metadata_extra: Optional[dict] = None
     created_at: Optional[datetime]
     updated_at: Optional[datetime]
 

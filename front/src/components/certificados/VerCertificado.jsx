@@ -1,11 +1,14 @@
 // front/src/components/certificados/VerCertificado.jsx
 import React, { useState, useEffect, useRef } from 'react';
+import { Link } from 'react-router-dom';
 import {
-  ArrowLeft, Award, Loader2, Download, Printer, Share2, XCircle
+  ArrowLeft, Loader2, Download, Printer, Share2, XCircle, ShieldCheck
 } from 'lucide-react';
 import certificadosService from '../../services/certificadosService';
-import { Button } from '../ui';
+import { Button, Badge } from '../ui';
 import { useFeedback } from '../../hooks/useFeedback';
+import CertificateTemplates from './CertificateTemplates';
+import { loadTemplateConfig } from './certificateConfig';
 
 const normalizarEstado = (estado) => String(estado || '').toLowerCase();
 
@@ -19,7 +22,6 @@ const VerCertificado = ({ certificadoId, onVolver }) => {
   const [copiado, setCopiado] = useState(false);
   const [descargando, setDescargando] = useState(false);
   const [cancelando, setCancelando] = useState(false);
-  const certificadoRef = useRef(null);
   const copiadoTimer = useRef(null);
 
   if (certificadoId !== prevCertificadoId) {
@@ -33,7 +35,7 @@ const VerCertificado = ({ certificadoId, onVolver }) => {
     certificadosService.obtener(certificadoId)
       .then((data) => {
         setCertificado(data);
-        setFechaEmision(new Date(data.fecha_emision || Date.now()).toLocaleDateString());
+        setFechaEmision(new Date(data.fecha_emision || Date.now()).toLocaleDateString('es-ES'));
       })
       .catch((e) => {
         console.error('Error cargando certificado:', e);
@@ -74,39 +76,13 @@ const VerCertificado = ({ certificadoId, onVolver }) => {
     );
   }
 
+  const config = loadTemplateConfig();
+
   const handleDescargar = async () => {
-    if (!certificadoRef.current) return;
     setDescargando(true);
     try {
-      const [{ default: html2canvas }, { default: jsPDF }] = await Promise.all([
-        import('html2canvas'),
-        import('jspdf')
-      ]);
-      const canvas = await html2canvas(certificadoRef.current, {
-        scale: 2,
-        backgroundColor: '#ffffff',
-        useCORS: true
-      });
-      const imgData = canvas.toDataURL('image/png');
-      const pdf = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
-      const pageWidth = pdf.internal.pageSize.getWidth();
-      const pageHeight = pdf.internal.pageSize.getHeight();
-      const margin = 10;
-      const ratio = Math.min(
-        (pageWidth - margin * 2) / canvas.width,
-        (pageHeight - margin * 2) / canvas.height
-      );
-      const imgWidth = canvas.width * ratio;
-      const imgHeight = canvas.height * ratio;
-      pdf.addImage(
-        imgData,
-        'PNG',
-        (pageWidth - imgWidth) / 2,
-        (pageHeight - imgHeight) / 2,
-        imgWidth,
-        imgHeight
-      );
-      pdf.save(`certificado-${String(certificado.codigo || certificado.id || 'zenth').toLowerCase()}.pdf`);
+      const { generarPDF } = await import('./CertificatePDF');
+      await generarPDF({ certificado, config, fechaEmision });
       toast.success('PDF descargado');
     } catch (e) {
       console.error('Error generando PDF:', e);
@@ -153,7 +129,7 @@ const VerCertificado = ({ certificadoId, onVolver }) => {
   const esEmitido = normalizarEstado(certificado.estado) === 'emitido';
 
   return (
-    <div className="max-w-2xl mx-auto space-y-6">
+    <div className="max-w-3xl mx-auto space-y-6">
       <div className="flex items-center justify-between no-print">
         <button
           onClick={onVolver}
@@ -166,17 +142,18 @@ const VerCertificado = ({ certificadoId, onVolver }) => {
         <div className="w-20" />
       </div>
 
-      <div className="bg-white rounded-xl border border-gray-200 p-8 text-center">
-        <div ref={certificadoRef} className="certificado-print border-2 border-gray-200 rounded-lg p-6 bg-white">
-          <Award className="w-16 h-16 text-amber-500 mx-auto mb-4" />
-          <h3 className="text-xl font-bold text-gray-900">Certificado de Finalización</h3>
-          <p className="text-sm text-gray-500 mt-1">Otorgado a</p>
-          <p className="text-lg font-semibold text-gray-900 mt-2">{certificado.estudiante_nombre}</p>
-          <p className="text-sm text-gray-500 mt-3">Por completar el curso</p>
-          <p className="text-md font-medium text-gray-800">{certificado.curso_titulo}</p>
-          <p className="text-xs text-gray-400 mt-4">Código: {certificado.codigo}</p>
-          <p className="text-xs text-gray-400">Fecha: {fechaEmision}</p>
+      {certificado.firma && (
+        <div className="flex items-center justify-center gap-2 no-print">
+          <Badge variant="success" size="md">Firmado ✓</Badge>
         </div>
+      )}
+
+      <div className="bg-white rounded-xl border border-gray-200 p-6 sm:p-8">
+        <CertificateTemplates
+          certificado={certificado}
+          config={config}
+          fechaEmision={fechaEmision}
+        />
 
         <div className="flex flex-wrap items-center justify-center gap-3 mt-6 no-print">
           <Button
@@ -204,6 +181,13 @@ const VerCertificado = ({ certificadoId, onVolver }) => {
           >
             {copiado ? '¡Copiado!' : 'Compartir'}
           </Button>
+          <Link
+            to={`/validar/${certificado.codigo}`}
+            className="inline-flex items-center justify-center gap-2 font-medium rounded-xl px-3 py-1.5 text-xs border border-gray-300 hover:border-gray-400 bg-transparent hover:bg-gray-50 text-gray-700 transition-all"
+          >
+            <ShieldCheck className="w-4 h-4" />
+            Verificar en línea
+          </Link>
           {esEmitido && (
             <Button
               variant="danger"
@@ -224,7 +208,7 @@ const VerCertificado = ({ certificadoId, onVolver }) => {
           .no-print, .no-print * { display: none !important; }
           body * { visibility: hidden; }
           .certificado-print, .certificado-print * { visibility: visible; }
-          .certificado-print { position: absolute; left: 0; top: 0; width: 100%; border: none !important; }
+          .certificado-print { position: absolute; left: 0; top: 0; width: 100%; border: none !important; box-shadow: none !important; }
         }
       `}</style>
     </div>

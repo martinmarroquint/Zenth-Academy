@@ -26,6 +26,7 @@ from app.models.curso import (
     ProgresoLeccion, EvaluacionLeccion
 )
 from app.models.certificado import Certificado
+from app.core.certificado_firma import calcular_firma
 from app.models.resultado_examen import ResultadoExamen
 from app.models.comentario_leccion import ComentarioLeccion, LikeComentarioLeccion
 from app.schemas.curso import (
@@ -225,6 +226,7 @@ def _emitir_certificado_automatico(db: Session, curso: Curso, estudiante_id: str
             return
 
         codigo = f"CERT-{uuid.uuid4().hex[:8].upper()}"
+        fecha_emision = datetime.now(timezone.utc)
         certificado = Certificado(
             id=str(uuid.uuid4()),
             codigo=codigo,
@@ -236,7 +238,14 @@ def _emitir_certificado_automatico(db: Session, curso: Curso, estudiante_id: str
             docente_nombre=curso.docente_nombre or "",
             url=None,
             estado="emitido",
-            fecha_emision=datetime.now(timezone.utc)
+            fecha_emision=fecha_emision
+        )
+        # ✅ FIRMA HMAC (misma lógica que emisión manual)
+        certificado.firma = calcular_firma(
+            certificado.codigo,
+            certificado.estudiante_id,
+            certificado.curso_id,
+            certificado.fecha_emision,
         )
         db.add(certificado)
         logger.info(f"Certificado automático emitido: {codigo} para estudiante {estudiante_id} en curso {curso.titulo}")

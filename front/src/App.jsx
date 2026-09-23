@@ -26,6 +26,7 @@ const Home = lazy(() => import('./pages/Home'));
 const Registro = lazy(() => import('./pages/Registro'));
 const UiDemo = lazy(() => import('./pages/UiDemo'));
 const ExamenPublicoPage = lazy(() => import('./pages/ExamenPublicoPage'));
+const ValidarCertificado = lazy(() => import('./pages/ValidarCertificado'));
 const SolicitarDocente = lazy(() => import('./pages/SolicitarDocente'));
 const AdminSolicitudesDocente = lazy(() => import('./pages/AdminSolicitudesDocente'));
 
@@ -125,6 +126,12 @@ function App() {
               EXAMEN PUBLICO — SIN LOGIN (acceso con codigo)
           ============================================= */}
           <Route path="/examen/:codigo" element={<ExamenPublicoPage />} />
+
+          {/* =============================================
+              VERIFICACIÓN DE CERTIFICADOS — PÚBLICO (sin login)
+          ============================================= */}
+          <Route path="/validar" element={<ValidarCertificado />} />
+          <Route path="/validar/:codigo" element={<ValidarCertificado />} />
 
           {/* =============================================
               PANEL DE ADMINISTRACIÓN

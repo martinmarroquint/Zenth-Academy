@@ -50,6 +50,21 @@ const certificadosService = {
       console.error('Error cancelando certificado:', error);
       throw error;
     }
+  },
+
+  // =============================================
+  // ACCESO PUBLICO (sin autenticacion)
+  // =============================================
+  validarPublico: async (codigo) => {
+    const baseUrl = import.meta.env.VITE_API_URL || 'http://localhost:8000/api/v1';
+    const response = await fetch(`${baseUrl}/certificados/validar/${encodeURIComponent(codigo)}`);
+    const data = await response.json().catch(() => null);
+    if (!response.ok) {
+      // El backend puede responder 200/4xx con el cuerpo { valido, motivo }
+      if (data && typeof data.valido === 'boolean') return data;
+      throw new Error(data?.detail || data?.motivo || 'Error validando certificado');
+    }
+    return data;
   }
 };
 

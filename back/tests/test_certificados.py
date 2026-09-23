@@ -111,6 +111,8 @@ def test_docente_crea_certificado_201(client, docente_user, docente_headers):
     assert data["curso_titulo"] == "Curso de Python"
     assert data["estado"] == "emitido"
     assert data["codigo"].startswith("CERT-")
+    # ✅ DEBE incluir firma HMAC
+    assert data.get("firma"), "El certificado debe incluir firma HMAC"
 
 
 @pytest.mark.security
@@ -315,3 +317,122 @@ def test_no_emite_certificado_si_esta_deshabilitado(
         Certificado.estudiante_id == str(estudiante_user.id),
     ).first()
     assert cert is None
+
+
+# =====================================================
+# 4. VALIDACIÓN PÚBLICA (SIN LOGIN)
+# =====================================================
+
+@pytest.mark.integration
+def test_validacion_publica_sin_login(client, db, docente_user):
+    """Cualquier persona (sin token) puede validar un certificado por código."""
+    from app.core.certificado_firma import calcular_firma
+
+    fecha = datetime.now(timezone.utc)
+    cert = _crear_certificado(db, estudiante_id="est-1", curso_titulo="Curso Python", docente_id=docente_user.id)
+    cert.firma = calcular_firma(cert.codigo, cert.estudiante_id, cert.curso_id, cert.fecha_emision)
+    db.commit()
+
+    resp = client.get(f"/api/v1/certificados/validar/{cert.codigo}")  # SIN headers
+
+    assert resp.status_code == 200, resp.text
+    data = resp.json()
+    assert data["valido"] is True
+    assert data["codigo"] == cert.codigo
+    assert data["estudiante_nombre"] == "Estudiante Test"
+    assert data["curso_titulo"] == "Curso Python"
+    assert data["firma_verificada"] is True
+    assert "emitido_por" in data
+    # ✅ NO debe exponer IDs internos
+    assert "estudiante_id" not in data
+    assert "docente_id" not in data
+    assert "id" not in data
+
+
+@pytest.mark.integration
+def test_validacion_publica_no_encontrado(client):
+    resp = client.get("/api/v1/certificados/validar/CERT-NOEXISTE-999")
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["valido"] is False
+    assert "no encontrado" in data["motivo"].lower()
+
+
+@pytest.mark.security
+@pytest.mark.integration
+def test_validacion_publica_certificado_cancelado(client, db, docente_user):
+    cert = _crear_certificado(
+        db, estudiante_id="est-1", docente_id=docente_user.id, estado="cancelado"
+    )
+    resp = client.get(f"/api/v1/certificados/validar/{cert.codigo}")
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["valido"] is False
+    assert "cancelado" in data["motivo"].lower()
+
+
+@pytest.mark.security
+@pytest.mark.integration
+def test_validacion_publica_firma_invalida(client, db, docente_user):
+    """Un certificado con firma alterada no debe validar."""
+    cert = _crear_certificado(db, estudiante_id="est-1", docente_id=docente_user.id)
+    cert.firma = "a" * 64  # firma falsa
+    db.commit()
+
+    resp = client.get(f"/api/v1/certificados/validar/{cert.codigo}")
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["valido"] is False
+    assert data["firma_verificada"] is False
+
+
+@pytest.mark.integration
+def test_firma_hmac_unica_por_certificado():
+    """Dos certificados con distinto código deben tener firmas distintas."""
+    from app.core.certificado_firma import calcular_firma
+
+    f1 = calcular_firma("CERT-A", "est-1", "curso-1", "2026-01-01T00:00:00")
+    f2 = calcular_firma("CERT-B", "est-1", "curso-1", "2026-01-01T00:00:00")
+    f1b = calcular_firma("CERT-A", "est-1", "curso-1", "2026-01-01T00:00:00")
+
+    assert f1 != f2, "Distinto código → distinta firma"
+    assert f1 == f1b, "Mismos datos → misma firma (determinista)"
+    assert len(f1) == 64, "SHA256 hex = 64 chars"
+
+
+@pytest.mark.integration
+def test_emision_automatica_incluye_firma(client, db, docente_user, estudiante_user):
+    """La emisión automática al completar curso también debe firmar."""
+    from app.api.cursos import _actualizar_progreso_curso
+
+    curso = _crear_curso_certificable(db, docente_user, certificado_habilitado=True)
+    db.add(InscripcionCurso(
+        id=str(uuid.uuid4()),
+        curso_id=str(curso.id),
+        estudiante_id=str(estudiante_user.id),
+        estudiante_nombre=estudiante_user.nombre_completo,
+        progreso=0,
+        completado=False,
+        lecciones_completadas=[],
+    ))
+    for leccion_id in ("l1", "l2"):
+        db.add(ProgresoLeccion(
+            id=str(uuid.uuid4()),
+            curso_id=str(curso.id),
+            estudiante_id=str(estudiante_user.id),
+            leccion_id=leccion_id,
+            modulo_id="m1",
+            completado=True,
+            fecha_completado=datetime.now(timezone.utc),
+        ))
+    db.commit()
+
+    _actualizar_progreso_curso(db, str(curso.id), str(estudiante_user.id))
+    db.expire_all()
+
+    cert = db.query(Certificado).filter(
+        Certificado.curso_id == str(curso.id),
+        Certificado.estudiante_id == str(estudiante_user.id),
+    ).first()
+    assert cert is not None
+    assert cert.firma, "La emisión automática debe incluir firma HMAC"

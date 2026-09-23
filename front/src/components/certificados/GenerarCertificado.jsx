@@ -2,13 +2,20 @@
 
 import React, { useState, useEffect, useRef } from 'react';
 import {
-  ArrowLeft, Award, CheckCircle, Download, Printer, Share2
+  ArrowLeft, Award, CheckCircle, Download, Printer, Share2, Palette, RotateCcw
 } from 'lucide-react';
 import certificadosService from '../../services/certificadosService';
 import cursosService from '../../services/cursosService';
 import { authService } from '../../services/authService';
-import { Dropdown, Button } from '../ui';
+import { Dropdown, Button, Switch } from '../ui';
 import { useFeedback } from '../../hooks/useFeedback';
+import CertificateTemplates from './CertificateTemplates';
+import {
+  TEMPLATE_DEFAULT, TEMPLATES, loadTemplateConfig, saveTemplateConfig
+} from './certificateConfig';
+
+const inputCls =
+  'w-full px-3 py-2 text-sm border border-gray-200 rounded-lg outline-none focus:border-[#0f766e] transition-colors';
 
 const GenerarCertificado = ({ cursoId, onVolver, onGenerado }) => {
   const { toast } = useFeedback();
@@ -30,12 +37,17 @@ const GenerarCertificado = ({ cursoId, onVolver, onGenerado }) => {
   const [estudiantes, setEstudiantes] = useState([]);
   const [estudianteSeleccionado, setEstudianteSeleccionado] = useState('');
 
+  const [config, setConfig] = useState(() => loadTemplateConfig());
+
   const [copiado, setCopiado] = useState(false);
   const [descargando, setDescargando] = useState(false);
-  const certificadoRef = useRef(null);
   const copiadoTimer = useRef(null);
 
   useEffect(() => () => clearTimeout(copiadoTimer.current), []);
+
+  useEffect(() => {
+    saveTemplateConfig(config);
+  }, [config]);
 
   // Cargar cursos del docente cuando no se recibe un cursoId
   useEffect(() => {
@@ -60,8 +72,10 @@ const GenerarCertificado = ({ cursoId, onVolver, onGenerado }) => {
 
   // Cargar estudiantes reales del curso seleccionado
   useEffect(() => {
+    // setState vía función anidada (patrón del repo — evita set-state-in-effect)
+    const limpiar = () => setEstudiantes([]);
     if (!cursoSeleccionado) {
-      setEstudiantes([]);
+      limpiar();
       return;
     }
     let activo = true;
@@ -93,6 +107,12 @@ const GenerarCertificado = ({ cursoId, onVolver, onGenerado }) => {
     setCursoTitulo(curso?.titulo || '');
   };
 
+  const actualizarConfig = (campo, valor) => {
+    setConfig((prev) => ({ ...prev, [campo]: valor }));
+  };
+
+  const restablecerConfig = () => setConfig({ ...TEMPLATE_DEFAULT });
+
   const estudiante = estudiantes.find((e) => e.estudiante_id === estudianteSeleccionado);
 
   const opcionesCursos = cursos.map((c) => ({ value: c.id, label: c.titulo }));
@@ -100,6 +120,17 @@ const GenerarCertificado = ({ cursoId, onVolver, onGenerado }) => {
     value: e.estudiante_id,
     label: e.estudiante_nombre || 'Estudiante'
   }));
+
+  const fechaPreview = fecha
+    ? new Date(fecha).toLocaleDateString('es-ES')
+    : new Date().toLocaleDateString('es-ES');
+
+  const certificadoPreview = {
+    estudiante_nombre: estudiante?.estudiante_nombre || 'Nombre del estudiante',
+    curso_titulo: cursoTitulo || 'Título del curso',
+    codigo: 'CERT-XXXXXXXX',
+    docente_nombre: usuarioActual?.nombre || usuarioActual?.usuario || '',
+  };
 
   const handleGenerar = async () => {
     if (!estudianteSeleccionado || !cursoSeleccionado) return;
@@ -127,38 +158,14 @@ const GenerarCertificado = ({ cursoId, onVolver, onGenerado }) => {
   };
 
   const handleDescargar = async () => {
-    if (!certificadoRef.current) return;
     setDescargando(true);
     try {
-      const [{ default: html2canvas }, { default: jsPDF }] = await Promise.all([
-        import('html2canvas'),
-        import('jspdf')
-      ]);
-      const canvas = await html2canvas(certificadoRef.current, {
-        scale: 2,
-        backgroundColor: '#ffffff',
-        useCORS: true
+      const { generarPDF } = await import('./CertificatePDF');
+      await generarPDF({
+        certificado: certFinal,
+        config,
+        fechaEmision: fechaEmisionFinal,
       });
-      const imgData = canvas.toDataURL('image/png');
-      const pdf = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
-      const pageWidth = pdf.internal.pageSize.getWidth();
-      const pageHeight = pdf.internal.pageSize.getHeight();
-      const margin = 10;
-      const ratio = Math.min(
-        (pageWidth - margin * 2) / canvas.width,
-        (pageHeight - margin * 2) / canvas.height
-      );
-      const imgWidth = canvas.width * ratio;
-      const imgHeight = canvas.height * ratio;
-      pdf.addImage(
-        imgData,
-        'PNG',
-        (pageWidth - imgWidth) / 2,
-        (pageHeight - imgHeight) / 2,
-        imgWidth,
-        imgHeight
-      );
-      pdf.save(`certificado-${String(certificadoGenerado?.codigo || 'zenth').toLowerCase()}.pdf`);
       toast.success('PDF descargado');
     } catch (e) {
       console.error('Error generando PDF:', e);
@@ -182,9 +189,23 @@ const GenerarCertificado = ({ cursoId, onVolver, onGenerado }) => {
     }
   };
 
+  const certFinal = {
+    ...certificadoGenerado,
+    estudiante_nombre:
+      certificadoGenerado?.estudiante_nombre ||
+      estudiante?.estudiante_nombre ||
+      'Estudiante',
+    curso_titulo: certificadoGenerado?.curso_titulo || cursoTitulo || 'Curso',
+    codigo: certificadoGenerado?.codigo || '',
+  };
+
+  const fechaEmisionFinal = new Date(
+    certificadoGenerado?.fecha_emision || fecha
+  ).toLocaleDateString('es-ES');
+
   if (generado) {
     return (
-      <div className="max-w-2xl mx-auto space-y-6">
+      <div className="max-w-3xl mx-auto space-y-6">
         <div className="text-center no-print">
           <div className="w-20 h-20 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4">
             <CheckCircle className="w-10 h-10 text-green-600" />
@@ -193,17 +214,12 @@ const GenerarCertificado = ({ cursoId, onVolver, onGenerado }) => {
           <p className="text-sm text-gray-500 mt-1">El certificado se ha creado correctamente</p>
         </div>
 
-        <div className="bg-white rounded-xl border border-gray-200 p-8 text-center">
-          <div ref={certificadoRef} className="certificado-print border-2 border-gray-200 rounded-lg p-6 bg-white">
-            <Award className="w-16 h-16 text-amber-500 mx-auto mb-4" />
-            <h3 className="text-xl font-bold text-gray-900">Certificado de Finalización</h3>
-            <p className="text-sm text-gray-500 mt-1">Otorgado a</p>
-            <p className="text-lg font-semibold text-gray-900 mt-2">{estudiante?.estudiante_nombre || 'Estudiante'}</p>
-            <p className="text-sm text-gray-500 mt-3">Por completar el curso</p>
-            <p className="text-md font-medium text-gray-800">{cursoTitulo || 'Curso'}</p>
-            <p className="text-xs text-gray-400 mt-4">Código: {certificadoGenerado?.codigo || ''}</p>
-            <p className="text-xs text-gray-400">Fecha: {new Date(certificadoGenerado?.fecha_emision || fecha).toLocaleDateString()}</p>
-          </div>
+        <div className="bg-white rounded-xl border border-gray-200 p-6 sm:p-8">
+          <CertificateTemplates
+            certificado={certFinal}
+            config={config}
+            fechaEmision={fechaEmisionFinal}
+          />
 
           <div className="flex flex-wrap items-center justify-center gap-3 mt-6 no-print">
             <Button
@@ -249,7 +265,7 @@ const GenerarCertificado = ({ cursoId, onVolver, onGenerado }) => {
             .no-print, .no-print * { display: none !important; }
             body * { visibility: hidden; }
             .certificado-print, .certificado-print * { visibility: visible; }
-            .certificado-print { position: absolute; left: 0; top: 0; width: 100%; border: none !important; }
+            .certificado-print { position: absolute; left: 0; top: 0; width: 100%; border: none !important; box-shadow: none !important; }
           }
         `}</style>
       </div>
@@ -257,7 +273,7 @@ const GenerarCertificado = ({ cursoId, onVolver, onGenerado }) => {
   }
 
   return (
-    <div className="max-w-2xl mx-auto space-y-6">
+    <div className="max-w-3xl mx-auto space-y-6">
       {/* Header */}
       <div className="flex items-center justify-between">
         <button
@@ -321,8 +337,175 @@ const GenerarCertificado = ({ cursoId, onVolver, onGenerado }) => {
             type="date"
             value={fecha}
             onChange={(e) => setFecha(e.target.value)}
-            className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg outline-none focus:border-[#0f766e] transition-colors"
+            className={inputCls}
           />
+        </div>
+
+        {/* ===== DISEÑO DEL CERTIFICADO ===== */}
+        <div className="border-t border-gray-200 pt-4 space-y-4">
+          <div className="flex items-center justify-between">
+            <h3 className="flex items-center gap-2 text-sm font-semibold text-gray-900">
+              <Palette className="w-4 h-4 text-[#0f766e]" />
+              Diseño del certificado
+            </h3>
+            <button
+              type="button"
+              onClick={restablecerConfig}
+              className="flex items-center gap-1.5 text-xs text-gray-500 hover:text-gray-700 transition-colors"
+            >
+              <RotateCcw className="w-3.5 h-3.5" />
+              Restablecer diseño
+            </button>
+          </div>
+
+          {/* Selector de plantilla */}
+          <div className="grid grid-cols-3 gap-2">
+            {TEMPLATES.map((t) => (
+              <button
+                key={t.id}
+                type="button"
+                onClick={() => actualizarConfig('template', t.id)}
+                className={`rounded-lg border-2 px-2.5 py-2.5 text-left transition-all ${
+                  config.template === t.id
+                    ? 'border-[#0f766e] bg-[#e6f4f2]'
+                    : 'border-gray-200 hover:border-gray-300'
+                }`}
+              >
+                <span className="block text-xs font-semibold text-gray-900">{t.label}</span>
+                <span className="block text-[10px] text-gray-500 leading-tight mt-0.5">
+                  {t.desc}
+                </span>
+              </button>
+            ))}
+          </div>
+
+          {/* Colores */}
+          <div className="grid grid-cols-2 gap-3">
+            <label className="flex items-center justify-between gap-2 text-xs font-medium text-gray-700 bg-gray-50 rounded-lg px-3 py-2">
+              Color principal
+              <input
+                type="color"
+                value={config.color_primario}
+                onChange={(e) => actualizarConfig('color_primario', e.target.value)}
+                className="w-8 h-8 p-0 border border-gray-200 rounded cursor-pointer bg-transparent"
+              />
+            </label>
+            <label className="flex items-center justify-between gap-2 text-xs font-medium text-gray-700 bg-gray-50 rounded-lg px-3 py-2">
+              Color de acento
+              <input
+                type="color"
+                value={config.color_acento}
+                onChange={(e) => actualizarConfig('color_acento', e.target.value)}
+                className="w-8 h-8 p-0 border border-gray-200 rounded cursor-pointer bg-transparent"
+              />
+            </label>
+          </div>
+
+          {/* Textos */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div>
+              <label className="block text-xs font-medium text-gray-700 mb-1">
+                Nombre de la firma
+              </label>
+              <input
+                type="text"
+                value={config.firma_nombre}
+                onChange={(e) => actualizarConfig('firma_nombre', e.target.value)}
+                placeholder="Ej. María López"
+                className={inputCls}
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-gray-700 mb-1">
+                Cargo de la firma
+              </label>
+              <input
+                type="text"
+                value={config.firma_cargo}
+                onChange={(e) => actualizarConfig('firma_cargo', e.target.value)}
+                placeholder="Instructor Certificado"
+                className={inputCls}
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-gray-700 mb-1">
+                Título del certificado
+              </label>
+              <input
+                type="text"
+                value={config.texto_titulo}
+                onChange={(e) => actualizarConfig('texto_titulo', e.target.value)}
+                placeholder="Certificado de Finalización"
+                className={inputCls}
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-gray-700 mb-1">
+                Párrafo
+              </label>
+              <input
+                type="text"
+                value={config.texto_parrafo}
+                onChange={(e) => actualizarConfig('texto_parrafo', e.target.value)}
+                placeholder="Por completar satisfactoriamente el curso"
+                className={inputCls}
+              />
+            </div>
+          </div>
+
+          {/* Nota */}
+          <div className="flex items-center justify-between gap-3 bg-gray-50 rounded-lg px-3 py-2.5">
+            <Switch
+              checked={config.mostrar_nota}
+              onChange={(v) => actualizarConfig('mostrar_nota', v)}
+              label="Mostrar calificación"
+              size="sm"
+            />
+            <div className="flex items-center gap-2">
+              <label className="text-xs text-gray-500" htmlFor="cert-nota">Nota</label>
+              <input
+                id="cert-nota"
+                type="number"
+                min="0"
+                max="100"
+                disabled={!config.mostrar_nota}
+                value={config.nota ?? ''}
+                onChange={(e) =>
+                  actualizarConfig(
+                    'nota',
+                    e.target.value === '' ? null : Number(e.target.value)
+                  )
+                }
+                className="w-20 px-2 py-1.5 text-sm border border-gray-200 rounded-lg outline-none focus:border-[#0f766e] transition-colors disabled:opacity-50 disabled:bg-gray-100"
+              />
+            </div>
+          </div>
+
+          {/* Logo */}
+          <div>
+            <label className="block text-xs font-medium text-gray-700 mb-1">
+              Logo (URL, opcional)
+            </label>
+            <input
+              type="url"
+              value={config.logo_url || ''}
+              onChange={(e) =>
+                actualizarConfig('logo_url', e.target.value.trim() || null)
+              }
+              placeholder="https://..."
+              className={inputCls}
+            />
+          </div>
+
+          {/* Vista previa */}
+          <div>
+            <p className="text-xs font-medium text-gray-700 mb-2">Vista previa</p>
+            <CertificateTemplates
+              certificado={certificadoPreview}
+              config={config}
+              fechaEmision={fechaPreview}
+            />
+          </div>
         </div>
 
         <div className="bg-gray-50 rounded-lg p-3">
@@ -353,6 +536,16 @@ const GenerarCertificado = ({ cursoId, onVolver, onGenerado }) => {
           <li>• Puedes descargarlo en formato PDF o imprimirlo</li>
         </ul>
       </div>
+
+      <style>{`
+        @page { size: A4 landscape; margin: 10mm; }
+        @media print {
+          .no-print, .no-print * { display: none !important; }
+          body * { visibility: hidden; }
+          .certificado-print, .certificado-print * { visibility: visible; }
+          .certificado-print { position: absolute; left: 0; top: 0; width: 100%; border: none !important; box-shadow: none !important; }
+        }
+      `}</style>
     </div>
   );
 };

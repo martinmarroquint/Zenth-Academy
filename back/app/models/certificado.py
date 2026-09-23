@@ -26,6 +26,8 @@ class Certificado(Base):
     fecha_emision = Column(DateTime, default=lambda: datetime.now(timezone.utc))
     url = Column(String(500), nullable=True)
     estado = Column(String(20), default="emitido")
+    # ✅ FIRMA HMAC-SHA256 sobre los datos del certificado (integridad + no repudio)
+    firma = Column(String(128), nullable=True, index=True)
     metadata_extra = Column("metadata", JSON, default={})
     created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
     updated_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))

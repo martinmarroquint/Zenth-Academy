@@ -10,6 +10,7 @@ import logging
 from app.database import get_db
 from app.core.dependencies import require_roles
 from app.core.errors import error_interno
+from app.core.certificado_firma import calcular_firma, verificar_firma
 from app.models.certificado import Certificado
 from app.schemas.certificado import (
     CertificadoCreate, CertificadoUpdate, CertificadoResponse, MensajeResponse
@@ -31,6 +32,8 @@ def _cert_to_dict(cert: Certificado) -> dict:
         "fecha_emision": cert.fecha_emision.isoformat() if cert.fecha_emision else None,
         "url": cert.url,
         "estado": cert.estado or "emitido",
+        "firma": cert.firma,
+        "metadata_extra": cert.metadata_extra or {},
         "created_at": cert.created_at.isoformat() if cert.created_at else None,
         "updated_at": cert.updated_at.isoformat() if cert.updated_at else None,
     }
@@ -142,6 +145,14 @@ async def crear_certificado(
             estado="emitido"
         )
         db.add(certificado)
+        db.flush()  # para obtener fecha_emision default
+        # ✅ FIRMA HMAC sobre los datos identitarios (integridad + verificación pública)
+        certificado.firma = calcular_firma(
+            certificado.codigo,
+            certificado.estudiante_id,
+            certificado.curso_id,
+            certificado.fecha_emision,
+        )
         db.commit()
         db.refresh(certificado)
         logger.info(f"Certificado creado: {certificado.codigo}")
@@ -151,6 +162,64 @@ async def crear_certificado(
     except Exception as e:
         db.rollback()
         raise HTTPException(status_code=500, detail=error_interno(e, "Error creando certificado"))
+
+
+# =====================================================
+# ✅ VALIDACIÓN PÚBLICA (SIN LOGIN)
+# Para que cualquiera que escanee el QR pueda verificar
+# la originalidad sin necesidad de sesión.
+# =====================================================
+
+@router.get("/validar/{codigo}")
+async def validar_certificado_publico(
+    codigo: str,
+    db: Session = Depends(get_db),
+):
+    """
+    Endpoint PÚBLICO — no requiere autenticación.
+    Devuelve datos sanitizados para verificación de originalidad.
+    """
+    try:
+        cert = db.query(Certificado).filter(Certificado.codigo == codigo).first()
+        if not cert:
+            return {
+                "valido": False,
+                "motivo": "Certificado no encontrado",
+                "codigo": codigo,
+            }
+
+        estado = (cert.estado or "emitido").lower()
+        firma_ok = verificar_firma(
+            cert.firma, cert.codigo, cert.estudiante_id, cert.curso_id, cert.fecha_emision
+        )
+
+        valido = estado == "emitido" and firma_ok
+        motivo = None
+        if estado == "cancelado":
+            motivo = "Certificado cancelado por la institución"
+        elif not firma_ok:
+            motivo = "Firma de integridad inválida"
+
+        # ✅ Datos sanitizados: NO exponemos estudiante_id, docente_id ni internos
+        return {
+            "valido": valido,
+            "motivo": motivo,
+            "codigo": cert.codigo,
+            "estudiante_nombre": cert.estudiante_nombre,
+            "curso_titulo": cert.curso_titulo,
+            "docente_nombre": cert.docente_nombre,
+            "fecha_emision": cert.fecha_emision.isoformat() if cert.fecha_emision else None,
+            "estado": estado,
+            "firma_verificada": firma_ok,
+            "emitido_por": "Zenth Academy",
+        }
+    except Exception as e:
+        logger.error(f"Error validando certificado {codigo}: {e}")
+        return {
+            "valido": False,
+            "motivo": "Error interno al validar",
+            "codigo": codigo,
+        }
 
 
 @router.put("/{id}", response_model=CertificadoResponse)

@@ -1096,6 +1096,8 @@ const DetalleCurso = ({
       !!siguienteLeccionInfo &&
       estaCompletada &&
       (siguienteLeccionInfo.modulo?.id === moduloActual?.id || moduloActualCompleto);
+    // Banner verde "Continuar" tras completar → el pie NO debe repetir "Siguiente"
+    const mostrarBannerContinuar = estaCompletada && !esBloqueada && !!siguienteLeccionInfo;
 
     return (
       <div className="bg-[#f8f9fa] min-h-screen">
@@ -1183,7 +1185,8 @@ const DetalleCurso = ({
             usuario={usuario}
           />
 
-          {/* Navegación entre lecciones (cruza módulos, respeta bloqueo secuencial) */}
+          {/* Navegación entre lecciones (cruza módulos, respeta bloqueo secuencial).
+              "Siguiente" solo si NO hay banner Continuar (evita botones duplicados). */}
           {planLecciones.length > 1 && !esBloqueada && (
             <div className="flex items-center justify-between pt-6 border-t border-gray-200">
               <button
@@ -1203,29 +1206,34 @@ const DetalleCurso = ({
                   </span>
                 )}
               </span>
-              <button
-                onClick={() => navegarALeccion(indiceLeccionActual + 1)}
-                disabled={!puedeAvanzar}
-                title={
-                  !estaCompletada
-                    ? 'Completa esta lección para continuar'
-                    : !moduloActualCompleto && siguienteLeccionInfo?.modulo?.id !== moduloActual?.id
-                      ? 'Termina todo el módulo actual para pasar al siguiente'
-                      : undefined
-                }
-                className={`flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-lg transition-colors ${
-                  puedeAvanzar
-                    ? 'text-white bg-[#0f766e] hover:bg-[#0d5e57]'
-                    : 'text-gray-300 cursor-not-allowed'
-                }`}
-              >
-                Siguiente <ChevronRight className="w-4 h-4" />
-              </button>
+              {mostrarBannerContinuar ? (
+                // Reservar espacio a la derecha: el CTA está en el banner Continuar
+                <span aria-hidden="true" className="w-[92px]" />
+              ) : (
+                <button
+                  onClick={() => navegarALeccion(indiceLeccionActual + 1)}
+                  disabled={!puedeAvanzar}
+                  title={
+                    !estaCompletada
+                      ? 'Completa esta lección para continuar'
+                      : !moduloActualCompleto && siguienteLeccionInfo?.modulo?.id !== moduloActual?.id
+                        ? 'Termina todo el módulo actual para pasar al siguiente'
+                        : undefined
+                  }
+                  className={`flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-lg transition-colors ${
+                    puedeAvanzar
+                      ? 'text-white bg-[#0f766e] hover:bg-[#0d5e57]'
+                      : 'text-gray-300 cursor-not-allowed'
+                  }`}
+                >
+                  Siguiente <ChevronRight className="w-4 h-4" />
+                </button>
+              )}
             </div>
           )}
 
           {/* ✅ Acción destacada tras completar: pasar a la siguiente lección */}
-          {estaCompletada && !esBloqueada && siguienteLeccionInfo && (
+          {mostrarBannerContinuar && (
             <div className="bg-emerald-50/60 border border-emerald-100 rounded-xl p-4 flex flex-col sm:flex-row items-center justify-between gap-3">
               <div className="text-center sm:text-left">
                 <p className="text-sm font-medium text-emerald-800">

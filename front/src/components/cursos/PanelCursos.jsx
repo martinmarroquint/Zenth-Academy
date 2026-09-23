@@ -131,7 +131,7 @@ const PanelCursos = ({ onCrearCurso, onVerCurso, onEditarCurso }) => {
   ];
 
   const estadoOptions = [
-    { value: 'todos', label: 'Todos los estados' },
+    { value: 'todos', label: 'Todos' },
     { value: 'publicado', label: 'Publicados' },
     { value: 'borrador', label: 'Borradores' },
     { value: 'archivado', label: 'Archivados' },
@@ -245,13 +245,13 @@ const PanelCursos = ({ onCrearCurso, onVerCurso, onEditarCurso }) => {
       {/* Barra de herramientas - Estilo Google Classroom */}
       <div className="flex flex-col sm:flex-row gap-3">
         <div className="relative flex-1">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+          <Search className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
           <input
             type="text"
             value={busqueda}
             onChange={(e) => setBusqueda(e.target.value)}
             placeholder="Buscar cursos..."
-            className="w-full pl-10 pr-4 py-2 text-sm border border-gray-200 rounded-xl outline-none focus:border-[#0f766e] focus:ring-2 focus:ring-[#0f766e]/20 transition-all bg-white"
+            className="w-full pl-9 pr-4 py-2 text-sm border border-gray-200 rounded-xl outline-none focus:border-[#0f766e] focus:ring-2 focus:ring-[#0f766e]/20 transition-all bg-white"
           />
         </div>
         <div className="flex flex-wrap gap-2">
@@ -263,14 +263,21 @@ const PanelCursos = ({ onCrearCurso, onVerCurso, onEditarCurso }) => {
             size="sm"
             className="w-36"
           />
-          <Dropdown
-            options={estadoOptions}
-            value={filtroEstado}
-            onChange={setFiltroEstado}
-            placeholder="Estado"
-            size="sm"
-            className="w-36"
-          />
+          <div className="flex items-center bg-gray-100 rounded-lg p-0.5 gap-0.5">
+            {estadoOptions.map((op) => (
+              <button
+                key={op.value}
+                onClick={() => setFiltroEstado(op.value)}
+                className={`px-2.5 py-1 text-xs font-medium rounded-md transition-colors ${
+                  filtroEstado === op.value
+                    ? 'bg-white text-[#0f766e] shadow-sm'
+                    : 'text-gray-500 hover:text-gray-700'
+                }`}
+              >
+                {op.label}
+              </button>
+            ))}
+          </div>
         </div>
       </div>
 

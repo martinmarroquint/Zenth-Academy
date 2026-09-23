@@ -48,7 +48,8 @@ const EstudianteCursos = () => {
   const [error, setError] = useState('');
   const [inscribiendo, setInscribiendo] = useState(null);
   const [filtro, setFiltro] = useState('todos');
-  const [busqueda, setBusqueda] = useState('');
+  const [busquedaMisCursos, setBusquedaMisCursos] = useState('');
+  const [busquedaCatalogo, setBusquedaCatalogo] = useState('');
   const [solicitudes, setSolicitudes] = useState([]);
   const [certificados, setCertificados] = useState([]);
   const [ordenarPor] = useState('fecha');
@@ -182,8 +183,8 @@ const EstudianteCursos = () => {
       filtered = filtered.filter((i) => i.completado);
     }
 
-    if (busqueda) {
-      const searchLower = busqueda.toLowerCase();
+    if (busquedaMisCursos) {
+      const searchLower = busquedaMisCursos.toLowerCase();
       filtered = filtered.filter((c) =>
         c.titulo.toLowerCase().includes(searchLower) ||
         (c.descripcion && c.descripcion.toLowerCase().includes(searchLower))
@@ -216,14 +217,14 @@ const EstudianteCursos = () => {
     });
 
     return filtered;
-  }, [misCursos, filtro, busqueda, ordenarPor, ordenDireccion]);
+  }, [misCursos, filtro, busquedaMisCursos, ordenarPor, ordenDireccion]);
 
   // Filtrar catálogo
   const catalogoFiltrado = useMemo(() => {
     let filtered = [...catalogoDisponible];
 
-    if (busqueda) {
-      const searchLower = busqueda.toLowerCase();
+    if (busquedaCatalogo) {
+      const searchLower = busquedaCatalogo.toLowerCase();
       filtered = filtered.filter((c) =>
         c.titulo.toLowerCase().includes(searchLower) ||
         (c.descripcion && c.descripcion.toLowerCase().includes(searchLower))
@@ -239,7 +240,7 @@ const EstudianteCursos = () => {
     }
 
     return filtered;
-  }, [catalogoDisponible, busqueda, filtroCategoria, filtroNivel]);
+  }, [catalogoDisponible, busquedaCatalogo, filtroCategoria, filtroNivel]);
 
   // Categorías únicas para filtros
   const categorias = useMemo(() => {
@@ -397,13 +398,13 @@ const EstudianteCursos = () => {
           </div>
           <div className="flex items-center gap-2">
             <div className="relative">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+              <Search className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
               <input
                 type="text"
-                value={busqueda}
-                onChange={(e) => setBusqueda(e.target.value)}
-                placeholder="Buscar cursos..."
-                className="w-full sm:w-48 pl-9 pr-4 py-1.5 text-sm border border-gray-200 rounded-lg outline-none focus:border-[#0f766e] focus:ring-2 focus:ring-[#0f766e]/20 transition-all"
+                value={busquedaMisCursos}
+                onChange={(e) => setBusquedaMisCursos(e.target.value)}
+                placeholder="Buscar en mis cursos..."
+                className="w-full sm:w-52 pl-9 pr-4 py-1.5 text-sm border border-gray-200 rounded-lg outline-none focus:border-[#0f766e] focus:ring-2 focus:ring-[#0f766e]/20 transition-all"
               />
             </div>
           </div>
@@ -430,84 +431,81 @@ const EstudianteCursos = () => {
           </button>
         </div>
       ) : (
-        <div className="space-y-3">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
           {filtrarCursos.map((curso) => {
             const pct = formatearProgreso(curso.progreso);
             return (
               <div
                 key={curso.id}
                 onClick={() => verCurso(curso.id)}
-                className="group bg-white border border-gray-200/60 rounded-xl hover:border-[#0f766e]/30 hover:shadow-md transition-all cursor-pointer"
+                className="group bg-white border border-gray-200/60 rounded-xl overflow-hidden hover:border-[#0f766e]/30 hover:shadow-lg transition-all cursor-pointer"
               >
-                <div className="px-5 py-4 flex items-center gap-4">
-                  {/* Icono de estado */}
-                  <div className={`w-11 h-11 rounded-xl flex items-center justify-center flex-shrink-0 ${
-                    curso.completado ? 'bg-emerald-50' : 'bg-gray-50'
-                  }`}>
-                    {curso.completado ? (
-                      <CheckCircle2 className="w-5 h-5 text-emerald-500" />
-                    ) : (
-                      <BookOpen className="w-5 h-5 text-gray-400" />
-                    )}
-                  </div>
-
-                  {/* Info */}
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2 flex-wrap">
-                      <h3 className="text-sm font-medium text-gray-800 truncate">
-                        {curso.titulo}
-                      </h3>
-                      {curso.completado && (
-                        <Badge variant="success" size="sm">Completado</Badge>
-                      )}
-                      {curso.precio_tipo === 'pago' && (
-                        <Badge variant="warning" size="sm" className="flex items-center gap-0.5">
-                          <DollarSign className="w-2.5 h-2.5" />
-                          Pago
-                        </Badge>
-                      )}
-                      {curso.categoria && (
-                        <Badge variant="secondary" size="sm">{curso.categoria}</Badge>
-                      )}
+                <div className="relative h-28 bg-gradient-to-br from-gray-50 to-gray-100 flex items-center justify-center overflow-hidden">
+                  {curso.imagen_url ? (
+                    <CourseImage
+                      src={curso.imagen_url}
+                      alt={curso.titulo}
+                      className="w-full h-full"
+                      imgClassName="w-full h-full object-cover"
+                    />
+                  ) : (
+                    <div className="w-12 h-12 rounded-2xl bg-white/80 backdrop-blur-sm border border-gray-200 flex items-center justify-center shadow-sm">
+                      <GraduationCap className="w-6 h-6 text-[#0f766e]" />
                     </div>
-                    <div className="flex items-center gap-4 mt-1.5">
-                      <div className="flex items-center gap-2 flex-1 max-w-[200px]">
-                        <div className="flex-1 h-1.5 bg-gray-100 rounded-full overflow-hidden">
-                          <div
-                            className={`h-full rounded-full transition-all duration-500 ${
-                              curso.completado ? 'bg-emerald-500' : 'bg-[#0f766e]'
-                            }`}
-                            style={{ width: `${pct}%` }}
-                          />
-                        </div>
-                        <span className="text-[10px] text-gray-400 font-medium min-w-[30px]">
-                          {pct}%
-                        </span>
-                      </div>
-                      {curso.fecha_inscripcion && (
-                        <span className="text-[10px] text-gray-400 flex items-center gap-1">
-                          <Calendar className="w-3 h-3" />
-                          {obtenerFecha(curso.fecha_inscripcion)}
-                        </span>
-                      )}
-                      {(curso.docente_nombre || curso.instructor) && (
-                        <span className="text-[10px] text-gray-400 flex items-center gap-1">
-                          <User className="w-3 h-3" />
-                          {curso.docente_nombre || curso.instructor}
-                        </span>
-                      )}
+                  )}
+                  <span
+                    className={`absolute top-3 left-3 px-2.5 py-0.5 text-[10px] font-semibold rounded-full backdrop-blur-sm border ${
+                      curso.completado
+                        ? 'bg-emerald-500/90 text-white border-emerald-400'
+                        : 'bg-blue-500/90 text-white border-blue-400'
+                    }`}
+                  >
+                    {curso.completado ? 'Completado' : 'En curso'}
+                  </span>
+                  {curso.precio_tipo === 'pago' && (
+                    <span className="absolute top-3 right-3 px-2 py-0.5 text-[9px] font-semibold rounded-full bg-amber-100/95 text-amber-700 border border-amber-200">
+                      Pago
+                    </span>
+                  )}
+                </div>
+                <div className="p-4">
+                  <div className="flex items-start justify-between gap-2">
+                    <h3 className="text-sm font-semibold text-gray-800 leading-snug line-clamp-2 group-hover:text-[#0f766e] transition-colors">
+                      {curso.titulo}
+                    </h3>
+                    <ChevronRight className="w-4 h-4 text-gray-300 group-hover:text-[#0f766e] group-hover:translate-x-0.5 transition-all flex-shrink-0 mt-0.5" />
+                  </div>
+                  <p className="text-xs text-gray-400 mt-1 flex items-center gap-1 truncate">
+                    <User className="w-3 h-3 flex-shrink-0" />
+                    {curso.docente_nombre || curso.instructor || 'Instructor'}
+                  </p>
+                  <div className="mt-3">
+                    <div className="flex items-center justify-between mb-1">
+                      <span className="text-[10px] text-gray-400 font-medium">Progreso</span>
+                      <span className={`text-[10px] font-semibold ${curso.completado ? 'text-emerald-600' : 'text-[#0f766e]'}`}>
+                        {pct}%
+                      </span>
+                    </div>
+                    <div className="h-1.5 bg-gray-100 rounded-full overflow-hidden">
+                      <div
+                        className={`h-full rounded-full transition-all duration-500 ${
+                          curso.completado ? 'bg-emerald-500' : 'bg-[#0f766e]'
+                        }`}
+                        style={{ width: `${pct}%` }}
+                      />
                     </div>
                   </div>
-
-                  {/* Acción */}
-                  <div className="flex items-center gap-2 flex-shrink-0">
-                    {!curso.completado && (
-                      <span className="text-xs font-medium text-[#0f766e] group-hover:text-[#0d5e57] transition-colors flex items-center gap-1">
-                        <Play className="w-3 h-3" />
-                        Continuar
+                  <div className="flex items-center justify-between mt-3 pt-3 border-t border-gray-100">
+                    {curso.fecha_inscripcion && (
+                      <span className="text-[10px] text-gray-400 flex items-center gap-1">
+                        <Calendar className="w-3 h-3" />
+                        {obtenerFecha(curso.fecha_inscripcion)}
                       </span>
                     )}
-                    <ChevronRight className="w-4 h-4 text-gray-300 group-hover:text-gray-500 transition-colors" />
+                    <span className="text-xs font-medium text-[#0f766e] group-hover:text-[#0d5e57] transition-colors flex items-center gap-1 ml-auto">
+                      <Play className="w-3 h-3" />
+                      {curso.completado ? 'Repasar' : 'Continuar'}
+                    </span>
                   </div>
                 </div>
               </div>
@@ -537,11 +535,11 @@ const EstudianteCursos = () => {
               Filtros
             </button>
             <div className="relative">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+              <Search className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
               <input
                 type="text"
-                value={busqueda}
-                onChange={(e) => setBusqueda(e.target.value)}
+                value={busquedaCatalogo}
+                onChange={(e) => setBusquedaCatalogo(e.target.value)}
                 placeholder="Buscar en catálogo..."
                 className="w-full sm:w-56 pl-9 pr-4 py-1.5 text-sm border border-gray-200 rounded-lg outline-none focus:border-[#0f766e] focus:ring-2 focus:ring-[#0f766e]/20 transition-all"
               />
@@ -584,7 +582,7 @@ const EstudianteCursos = () => {
               onClick={() => {
                 setFiltroCategoria('todas');
                 setFiltroNivel('todos');
-                setBusqueda('');
+                setBusquedaCatalogo('');
               }}
               className="text-xs text-gray-400 hover:text-gray-600 transition-colors"
             >
@@ -600,7 +598,7 @@ const EstudianteCursos = () => {
             </div>
             <h3 className="text-lg font-semibold text-gray-700 mb-1">No hay cursos disponibles</h3>
             <p className="text-sm text-gray-400">
-              {busqueda || filtroCategoria !== 'todas' || filtroNivel !== 'todos'
+              {busquedaCatalogo || filtroCategoria !== 'todas' || filtroNivel !== 'todos'
                 ? 'Intenta con otros filtros de búsqueda'
                 : 'Vuelve más tarde para nuevos cursos'}
             </p>

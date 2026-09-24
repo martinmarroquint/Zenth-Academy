@@ -1,7 +1,7 @@
 // front/src/components/cursos/LeccionItem.jsx
 
 import React from 'react';
-import { Layers, Clock, Lock, Eye, Check, CheckCircle, Play } from 'lucide-react';
+import { Layers, Clock, Lock, Check, CheckCircle, Play } from 'lucide-react';
 import { Badge } from '../ui';
 import {
   getBloquesDeLeccion, getTipoLeccion, getTipoIcon, getTipoLabel
@@ -24,16 +24,17 @@ const LeccionItem = ({
 
   if (isBloqueada) {
     return (
-      <div 
-        className="w-full flex items-center gap-4 px-4 py-3 rounded-xl transition-all duration-200 text-left border border-gray-100/50 bg-gray-50/30 cursor-pointer hover:bg-gray-50/80 group"
+      <div
+        className="w-full flex items-center gap-4 px-4 py-3 rounded-xl transition-all duration-200 text-left border border-gray-100/50 bg-gray-50/30 cursor-not-allowed group"
         onClick={onClick}
+        title="Completa las lecciones anteriores para desbloquear"
       >
-        <div className="w-8 h-8 rounded-full bg-gray-100 flex items-center justify-center text-xs font-medium text-gray-400 flex-shrink-0">
-          {index + 1}
+        <div className="w-8 h-8 rounded-full bg-gray-100 flex items-center justify-center flex-shrink-0">
+          <Lock className="w-3.5 h-3.5 text-gray-400" />
         </div>
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2">
-            <p className="text-sm font-medium text-gray-500 truncate group-hover:text-gray-700 transition-colors">
+            <p className="text-sm font-medium text-gray-400 truncate">
               {leccion.titulo}
             </p>
             <div className="flex items-center gap-1">
@@ -62,14 +63,14 @@ const LeccionItem = ({
                 </span>
               </>
             )}
-            <span className="flex items-center gap-0.5 text-gray-300 ml-1">
+            <span className="flex items-center gap-1 text-gray-400 ml-1">
               <Lock className="w-3 h-3" />
-              <span className="text-[10px]">Vista previa</span>
+              <span className="text-[10px] font-medium">Bloqueada</span>
             </span>
           </div>
         </div>
         <div className="flex-shrink-0">
-          <Eye className="w-4 h-4 text-gray-300 group-hover:text-gray-400 transition-colors" />
+          <Lock className="w-4 h-4 text-gray-300" />
         </div>
       </div>
     );

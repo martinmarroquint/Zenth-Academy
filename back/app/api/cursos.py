@@ -2205,7 +2205,7 @@ async def crear_curso(
             requisitos=data.requisitos or [],
             objetivos=data.objetivos or [],
             publico_objetivo=data.publico_objetivo,
-            tipo_bloqueo=data.tipo_bloqueo or "ninguno",
+            tipo_bloqueo=data.tipo_bloqueo or "secuencial",
             bloqueo_config=data.bloqueo_config or {},
             certificado_habilitado=True if data.certificado_habilitado is None else data.certificado_habilitado,
             certificado_nota_minima=data.certificado_nota_minima

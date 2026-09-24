@@ -39,7 +39,7 @@ class Curso(Base):
     instrucciones_pago = Column(Text, nullable=True)
     
     # CONFIGURACIÓN DE BLOQUEO
-    tipo_bloqueo = Column(String(20), default="ninguno")
+    tipo_bloqueo = Column(String(20), default="secuencial")
     bloqueo_config = Column(JSON, default=dict)
 
     # CERTIFICADO

@@ -110,7 +110,7 @@ class CursoBase(BaseModel):
     requisitos: Optional[List[str]] = []
     objetivos: Optional[List[str]] = []
     publico_objetivo: Optional[str] = None
-    tipo_bloqueo: Optional[str] = "ninguno"
+    tipo_bloqueo: Optional[str] = "secuencial"
     bloqueo_config: Optional[dict] = {}
     certificado_habilitado: Optional[bool] = True
     certificado_nota_minima: Optional[Decimal] = None

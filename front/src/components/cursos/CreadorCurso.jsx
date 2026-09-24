@@ -75,10 +75,12 @@ const MONEDAS = [
 // `secuencial` lo implementa el backend con el estado actual del curso.
 // NOTA (pendiente): `fecha`, `desempeno` y `mixto` requieren UI de configuración
 // adicional (respectivamente `bloqueo_config.fechas` y `EvaluacionLeccion`) que
-// todavía no existe; si se ofrecen, el usuario elegiría opciones que no hacen nada.
+// todavía no existe; si se ofrecen, el usuario elegiraría opciones que no hacen nada.
+// El DEFAULT es secuencial (flujo estilo Platzi): cada lección se desbloquea
+// solo al completar la anterior; las demás muestran candado.
 const TIPOS_BLOQUEO = [
-  { value: 'ninguno', label: 'Sin bloqueo' },
-  { value: 'secuencial', label: 'Secuencial (aprobar modulo anterior)' },
+  { value: 'secuencial', label: 'Secuencial (desbloquear al completar la anterior)' },
+  { value: 'ninguno', label: 'Sin bloqueo (acceso libre a todas)' },
 ];
 
 // ✅ Genera IDs únicos y estables para módulos/lecciones/bloques.
@@ -913,7 +915,7 @@ const CreadorCurso = ({ cursoInicial = null, onGuardar, onVolver }) => {
     numero_pago: cursoInicial?.numero_pago || '',
     instructor: cursoInicial?.instructor || cursoInicial?.docente_nombre || nombreDocente,
     imagen_url: cursoInicial?.imagen_url || '',
-    tipo_bloqueo: cursoInicial?.tipo_bloqueo || 'ninguno',
+    tipo_bloqueo: cursoInicial?.tipo_bloqueo || 'secuencial',
     bloqueo_config: cursoInicial?.bloqueo_config || {},
     certificado_habilitado: cursoInicial?.certificado_habilitado !== false,
     certificado_nota_minima: cursoInicial?.certificado_nota_minima ?? '',
@@ -1299,7 +1301,7 @@ const CreadorCurso = ({ cursoInicial = null, onGuardar, onVolver }) => {
       precio_monto: datos.precio_tipo === 'pago' && datos.precio_monto ? parseFloat(datos.precio_monto) : null,
       moneda: datos.moneda || 'PEN',
       numero_pago: datos.precio_tipo === 'pago' ? datos.numero_pago : null,
-      tipo_bloqueo: datos.tipo_bloqueo || 'ninguno',
+      tipo_bloqueo: datos.tipo_bloqueo || 'secuencial',
       bloqueo_config: datos.bloqueo_config || {},
       certificado_habilitado: !!datos.certificado_habilitado,
       certificado_nota_minima: datos.certificado_nota_minima

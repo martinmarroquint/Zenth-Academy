@@ -286,7 +286,7 @@ CREATE TABLE IF NOT EXISTS cursos (
   numero_pago VARCHAR(20),
   instrucciones_pago TEXT,
   -- Configuración de bloqueo de lecciones
-  tipo_bloqueo VARCHAR(20) DEFAULT 'ninguno',
+  tipo_bloqueo VARCHAR(20) DEFAULT 'secuencial',
   bloqueo_config JSONB DEFAULT '{}'::jsonb,
   -- CERTIFICADO (FASE 1.8)
   certificado_habilitado BOOLEAN DEFAULT TRUE,

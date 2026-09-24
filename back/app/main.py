@@ -548,6 +548,21 @@ async def startup_event():
                 except Exception as _e3:
                     logger.warning(f"No se pudieron crear índices OAuth: {_e3}")
                 _conn3.commit()
+
+        # 4) ✅ FLUJO SECUENCIAL POR DEFECTO (estilo Platzi): cada lección se
+        # desbloquea solo al completar la anterior. Los cursos sin bloqueo
+        # pasan a 'secuencial'. Idempotente: solo toca los que están en 'ninguno'.
+        if "cursos" in tablas_actuales:
+            with _eng2.connect() as _conn_seq:
+                _res_seq = _conn_seq.execute(_text2(
+                    "UPDATE cursos SET tipo_bloqueo = 'secuencial' "
+                    "WHERE tipo_bloqueo = 'ninguno';"
+                ))
+                _conn_seq.commit()
+                if getattr(_res_seq, "rowcount", 0):
+                    logger.info(
+                        f"✅ {_res_seq.rowcount} curso(s) pasados a bloqueo secuencial"
+                    )
     except Exception as e:
         logger.warning(f"⚠️ Error sincronizando esquema: {e}")
 

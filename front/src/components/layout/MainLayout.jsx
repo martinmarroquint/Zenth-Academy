@@ -156,6 +156,10 @@ const MainLayout = () => {
   }, [sidebarAbierto]);
 
   const [menuMovil, setMenuMovil] = useState(false);
+  // ✅ "Expandido" = sidebar abierto en desktop O menú móvil abierto (siempre w-64).
+  // Evita que al colapsar en desktop y abrir el menú móvil se oculten las etiquetas,
+  // y que el selector Docente/Estudiante desborde el ancho colapsado (w-14).
+  const expandido = sidebarAbierto || menuMovil;
   const [modalSolicitudAbierto, setModalSolicitudAbierto] = useState(false);
   const [solicitudPendiente, setSolicitudPendiente] = useState(false);
   const [postulacionesPendientes, setPostulacionesPendientes] = useState(0);
@@ -297,7 +301,7 @@ const MainLayout = () => {
       {/* ===================== SIDEBAR FIJO ===================== */}
       <aside className={sidebarClasses}>
         {/* Logo - Versión expandida */}
-        {sidebarAbierto && (
+        {expandido && (
           <div className="h-14 border-b border-gray-200 flex items-center px-3 flex-shrink-0">
             <div className="flex items-center gap-2 overflow-hidden min-w-0">
               <div className="w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0" style={{ backgroundColor: '#0f766e' }}>
@@ -309,7 +313,7 @@ const MainLayout = () => {
         )}
 
         {/* Logo - Versión colapsada */}
-        {!sidebarAbierto && (
+        {!expandido && (
           <div className="h-14 border-b border-gray-200 flex items-center justify-center flex-shrink-0">
             <div className="w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0" style={{ backgroundColor: '#0f766e' }}>
               <span className="text-white font-bold text-xs">CV</span>
@@ -321,14 +325,14 @@ const MainLayout = () => {
         <nav className="flex-1 overflow-y-auto py-2 px-2 space-y-1">
           {secciones.map((seccion) => (
             <div key={seccion.seccion}>
-              {sidebarAbierto && (
+              {expandido && (
                 <div className="px-3 pt-3 pb-1">
                   <span className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider">
                     {seccion.seccion}
                   </span>
                 </div>
               )}
-              {!sidebarAbierto && (
+              {!expandido && (
                 <div className="h-5" />
               )}
               <div className="space-y-0.5">
@@ -351,13 +355,13 @@ const MainLayout = () => {
                           isActive
                             ? 'text-white shadow-sm'
                             : 'text-gray-600 hover:bg-gray-100'
-                        } ${!sidebarAbierto && 'lg:justify-center'}`
+                        } ${!expandido && 'lg:justify-center'}`
                       }
                       style={({ isActive }) => isActive ? { backgroundColor: '#0f766e' } : {}}
-                      title={!sidebarAbierto ? item.label : ''}
+                      title={!expandido ? item.label : ''}
                     >
                       <Icon className="w-5 h-5 flex-shrink-0" />
-                      {sidebarAbierto && (
+                      {expandido && (
                         <>
                           <span className="text-sm font-medium whitespace-nowrap">{item.label}</span>
                           {tieneBadge && (
@@ -367,7 +371,7 @@ const MainLayout = () => {
                           )}
                         </>
                       )}
-                      {!sidebarAbierto && tieneBadge && (
+                      {!expandido && tieneBadge && (
                         <span className="absolute -top-1 -right-1 bg-amber-500 text-white text-[9px] font-bold px-1.5 py-0.5 rounded-full min-w-[18px] text-center">
                           {badgeCount}
                         </span>
@@ -383,7 +387,7 @@ const MainLayout = () => {
         {/* Footer - Selector de modo + Botón Ser Docente + Salir */}
         <div className="border-t border-gray-200 p-2 space-y-0.5 flex-shrink-0">
           {/* ✅ Selector de modo (solo docente/admin): Docente ⇄ Estudiante */}
-          {puedeAlternar && (
+          {puedeAlternar && (expandido ? (
             <div className="px-0.5 pb-1">
               <div className="flex items-center bg-gray-100 rounded-lg p-0.5">
                 <button
@@ -394,7 +398,7 @@ const MainLayout = () => {
                   title="Modo gestión"
                 >
                   <LayoutDashboard className="w-3.5 h-3.5" />
-                  {sidebarAbierto && <span>{rol === 'admin' ? 'Admin' : 'Docente'}</span>}
+                  <span>{rol === 'admin' ? 'Admin' : 'Docente'}</span>
                 </button>
                 <button
                   onClick={() => setModo('estudiante')}
@@ -404,11 +408,27 @@ const MainLayout = () => {
                   title="Modo estudiante"
                 >
                   <GraduationCap className="w-3.5 h-3.5" />
-                  {sidebarAbierto && <span>Estudiante</span>}
+                  <span>Estudiante</span>
                 </button>
               </div>
             </div>
-          )}
+          ) : (
+            /* Sidebar colapsado: un solo botón que conmuta al modo contrario
+               (dos botones lado a lado no caben en w-14 y los iconos se salían) */
+            <div className="px-0.5 pb-1">
+              <button
+                onClick={() => setModo(esModoEstudiante ? 'docente' : 'estudiante')}
+                className="w-full flex items-center justify-center p-2 rounded-lg bg-gray-100 hover:bg-gray-200 text-[#0f766e] transition-colors min-h-[44px]"
+                title={esModoEstudiante
+                  ? `Cambiar a modo ${rol === 'admin' ? 'admin' : 'docente'}`
+                  : 'Cambiar a modo estudiante'}
+              >
+                {esModoEstudiante
+                  ? <LayoutDashboard className="w-4 h-4" />
+                  : <GraduationCap className="w-4 h-4" />}
+              </button>
+            </div>
+          ))}
 
           {/* Botón Ser Docente - solo para estudiantes */}
           {rol === 'estudiante' && (
@@ -418,11 +438,11 @@ const MainLayout = () => {
                 solicitudPendiente
                   ? 'text-amber-600 bg-amber-50 hover:bg-amber-100'
                   : 'text-[#0f766e] bg-[#e6f4f2] hover:bg-[#d1ece8]'
-              } ${!sidebarAbierto && 'lg:justify-center'}`}
-              title={!sidebarAbierto ? (solicitudPendiente ? 'Solicitud en proceso' : 'Ser Docente') : ''}
+              } ${!expandido && 'lg:justify-center'}`}
+              title={!expandido ? (solicitudPendiente ? 'Solicitud en proceso' : 'Ser Docente') : ''}
             >
               <GraduationCap className="w-5 h-5 flex-shrink-0" />
-              {sidebarAbierto && (
+              {expandido && (
                 <span className="text-sm font-medium whitespace-nowrap">
                   {solicitudPendiente ? 'Solicitud en proceso' : 'Ser Docente'}
                 </span>
@@ -433,12 +453,12 @@ const MainLayout = () => {
           <button
             onClick={handleLogout}
             className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-gray-400 hover:bg-red-50 hover:text-red-600 transition-colors min-h-[44px] ${
-              !sidebarAbierto && 'lg:justify-center'
+              !expandido && 'lg:justify-center'
             }`}
-            title={!sidebarAbierto ? 'Salir' : ''}
+            title={!expandido ? 'Salir' : ''}
           >
-            <LogOut className="w-5 h-5 flex-shrink-0" />
-            {sidebarAbierto && <span className="text-sm font-medium">Salir</span>}
+            <LogOut className="w-5 h-5" />
+            {expandido && <span className="text-sm font-medium">Salir</span>}
           </button>
         </div>
 

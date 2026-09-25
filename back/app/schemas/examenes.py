@@ -289,6 +289,8 @@ class ResultadoPublicoRequest(BaseModel):
     password: Optional[str] = None
     respuestas: Dict[str, Any] = {}
     alumno_nombre: str = 'Participante'
+    # Ignorado por el backend: el flujo público guarda 'publico' (o None si es
+    # anónimo) — no se aceptan ids de usuarios reales (ALTA 3).
     alumno_id: Optional[str] = 'publico'
     alumno_grado: str = ''
     alumno_dni: str = ''

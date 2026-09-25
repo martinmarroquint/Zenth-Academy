@@ -16,6 +16,7 @@ from datetime import datetime, timezone, timedelta
 logger = logging.getLogger(__name__)
 
 from app.database import get_db
+from app.core.ratelimit import rate_limit
 from app.core.dependencies import (
     get_current_active_user,
     require_docente,
@@ -48,7 +49,9 @@ router = APIRouter()
 
 QR_EXPIRATION_SECONDS = 30
 # Margen de gracia tras expirar el intento (red/procesamiento). Pasado este
-# margen, la entrega se marca como entregada_por_tiempo (no se rechaza).
+# margen la entrega se conserva con el flag entregado_por_tiempo pero se
+# puntúa 0: el tiempo lo valida el servidor (antes se aceptaba con puntaje
+# completo aunque el alumno apagara el cronómetro).
 GRACIA_ENTREGA_SEGUNDOS = 30
 
 
@@ -398,6 +401,15 @@ def _resolver_tiempo_desde_intento(db: Session, examen: Examen, intento_id, *,
     else:
         if intento.es_publico or (intento.usuario_id and str(intento.usuario_id) != str(usuario_id)):
             raise HTTPException(status_code=403, detail="El intento no te pertenece")
+
+    # ✅ SEGURIDAD: un intento ya entregado (COMPLETADO/TRAMPA/EXPIRADO) no se
+    # puede reutilizar: un envío = un intento. Cierra el reenvío con el mismo
+    # intento aunque cambien las respuestas.
+    if intento.estado != 'EN_CURSO':
+        raise HTTPException(
+            status_code=400,
+            detail="El intento ya fue entregado o no está activo",
+        )
 
     ahora = datetime.now(timezone.utc)
     limite_seg = (examen.tiempo_limite or 60) * 60
@@ -1426,6 +1438,13 @@ def guardar_resultado(
         calificacion = 0
         puntos_obtenidos = 0
         correctas = 0
+    # ✅ SEGURIDAD: pasada la ventana de gracia el intento vale 0 (el tiempo lo
+    # decide el servidor; antes una entrega tardía se aceptaba con puntaje
+    # completo). El registro se conserva con el flag entregado_por_tiempo.
+    if entregado_tarde:
+        calificacion = 0
+        puntos_obtenidos = 0
+        correctas = 0
     resultado = ResultadoExamen(
         id=str(uuid.uuid4()),
         examen_id=data.examen_id,
@@ -2133,7 +2152,8 @@ def obtener_examen_publico(
 def verificar_password_examen_publico(
     codigo: str,
     data: VerificarPasswordRequest,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    _rate_limited = Depends(rate_limit(20, 60)),
 ):
     """Verificar password de examen publico (sin login)."""
     examen = db.query(Examen).filter(
@@ -2158,7 +2178,8 @@ def verificar_password_examen_publico(
 def iniciar_intento_publico(
     codigo: str,
     data: VerificarPasswordRequest,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    _rate_limited = Depends(rate_limit(20, 60)),
 ):
     """Inicia (o reanuda) un intento público con expiración en el servidor."""
     examen = db.query(Examen).filter(
@@ -2184,7 +2205,8 @@ def iniciar_intento_publico(
 def guardar_resultado_publico(
     codigo: str,
     data: ResultadoPublicoRequest,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    _rate_limited = Depends(rate_limit(20, 60)),
 ):
     """Guardar resultado de examen publico/anonimo (sin login)."""
     examen = db.query(Examen).filter(
@@ -2235,8 +2257,37 @@ def guardar_resultado_publico(
 
     es_anonimo = config.get('anonimo', False)
     alumno_nombre = "Anonimo" if es_anonimo else data.alumno_nombre
+
+    # ✅ SEGURIDAD (ALTA 3): el flujo público NO acepta ids de usuarios reales.
+    # Antes se guardaba data.alumno_id tal cual: con el id de una víctima se
+    # agotaban sus intentos en el conteo autenticado y se le inflaba la nota
+    # de curso (_nota_confiable_desde_examen matchea por alumno_id).
+    alumno_id_final = None if es_anonimo else 'publico'
+
+    # ✅ SEGURIDAD (ALTA 3): los exámenes públicos con límite de intentos lo
+    # respetan (antes no había NINGÚN conteo), contados por nombre de
+    # participante (la identidad del flujo público). En modo anónimo no hay
+    # identidad con qué contar, así que no se aplica (evita un pozo común
+    # donde cualquiera agota a todos).
+    if (
+        not es_anonimo
+        and examen.intentos_permitidos
+        and examen.intentos_permitidos > 0
+    ):
+        intentos_previos = db.query(ResultadoExamen).filter(
+            ResultadoExamen.examen_id == str(examen.id),
+            ResultadoExamen.alumno_nombre == alumno_nombre,
+        ).count()
+        if intentos_previos >= examen.intentos_permitidos:
+            raise HTTPException(status_code=400, detail="Límite de intentos alcanzado")
+
     estado_final = 'TRAMPA' if (data.violaciones or 0) >= config.get('limite_violaciones', 3) else 'COMPLETADO'
     if estado_final == 'TRAMPA':
+        resultado_calculado['calificacion'] = 0
+        resultado_calculado['puntos_obtenidos'] = 0
+        resultado_calculado['correctas'] = 0
+    # ✅ SEGURIDAD: pasada la ventana de gracia el intento público vale 0.
+    if entregado_tarde:
         resultado_calculado['calificacion'] = 0
         resultado_calculado['puntos_obtenidos'] = 0
         resultado_calculado['correctas'] = 0
@@ -2244,7 +2295,7 @@ def guardar_resultado_publico(
     resultado = ResultadoExamen(
         id=str(uuid.uuid4()),
         examen_id=examen.id,
-        alumno_id=None if es_anonimo else data.alumno_id,
+        alumno_id=alumno_id_final,
         alumno_id_unificado=None,
         alumno_nombre=alumno_nombre,
         alumno_grado=data.alumno_grado,

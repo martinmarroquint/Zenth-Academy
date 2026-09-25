@@ -14,7 +14,7 @@ import pytest
 from app.models.examen import Examen, Pregunta
 
 
-def _crear_examen(db, docente, *, titulo="Examen seguridad", estado="PUBLICADO", configuracion=None, preguntas=None, grupo_id=None):
+def _crear_examen(db, docente, *, titulo="Examen seguridad", estado="PUBLICADO", configuracion=None, preguntas=None, grupo_id=None, intentos_permitidos=5):
     examen = Examen(
         id=str(uuid.uuid4()),
         codigo=f"EXA-SEC-{uuid.uuid4().hex[:8]}",
@@ -24,7 +24,7 @@ def _crear_examen(db, docente, *, titulo="Examen seguridad", estado="PUBLICADO",
         puntaje_aprobacion=60.0,
         estado=estado,
         configuracion=configuracion if configuracion is not None else {},
-        intentos_permitidos=5,
+        intentos_permitidos=intentos_permitidos,
         grupo_id=grupo_id,
         docente_id=str(docente.id) if docente else None,
     )
@@ -393,9 +393,13 @@ def test_entrega_tardia_se_marca_entregado_por_tiempo(client, db, docente_user, 
     )
     assert resp.status_code == 201, resp.text
     assert resp.json()["entregado_por_tiempo"] is True, resp.text
+    # ✅ El tiempo lo valida el servidor: fuera de la ventana de gracia la
+    # entrega se conserva pero vale 0 aunque la respuesta sea correcta.
+    assert resp.json()["calificacion"] == 0, resp.json()
 
     resultado = db.query(ResultadoExamen).filter(ResultadoExamen.examen_id == str(examen.id)).first()
     assert resultado.entregado_por_tiempo is True
+    assert resultado.calificacion == 0
 
 
 @pytest.mark.integration
@@ -612,3 +616,86 @@ def test_asegurar_mappings_preserva_y_regenera_si_cambia_contenido(db, docente_u
     m2 = examen.configuracion["mappings_shuffle"]
     assert m2["0"] != m1["0"]
     assert len(m2["0"]["_orden_columna_b"]) == 4
+
+
+# =====================================================
+# 8. ALTA 3 — INTENTOS: reutilización, límite público y alumno_id
+# =====================================================
+
+@pytest.mark.integration
+def test_intento_entregado_no_se_puede_reutilizar(
+    client, db, docente_user, estudiante_user, estudiante_headers
+):
+    examen = _crear_examen(db, docente_user, estado="PUBLICADO", preguntas=[_pregunta_om()])
+    intento = client.post(
+        f"/api/v1/examenes/{examen.id}/intentos", headers=estudiante_headers
+    ).json()
+
+    primero = client.post(
+        "/api/v1/examenes/resultados",
+        json=_payload_resultado(examen, estudiante_user.id, {"0": 1}, intento_id=intento["intento_id"]),
+        headers=estudiante_headers,
+    )
+    assert primero.status_code == 201, primero.text
+
+    # Mismo intento (aunque cambien las respuestas) → 400: un envío = un intento.
+    segundo = client.post(
+        "/api/v1/examenes/resultados",
+        json=_payload_resultado(examen, estudiante_user.id, {"0": 0}, intento_id=intento["intento_id"]),
+        headers=estudiante_headers,
+    )
+    assert segundo.status_code == 400, segundo.text
+    assert "intento" in segundo.json()["detail"].lower(), segundo.text
+
+
+@pytest.mark.integration
+def test_publico_respeta_limite_de_intentos_por_nombre(client, db, docente_user):
+    examen = _crear_examen(
+        db, docente_user, estado="PUBLICADO",
+        configuracion={"acceso_publico": True},
+        intentos_permitidos=1,
+        preguntas=[_pregunta_om()],
+    )
+
+    it1 = client.post(f"/api/v1/examenes/publico/{examen.codigo}/intentos", json={})
+    r1 = client.post(
+        f"/api/v1/examenes/publico/{examen.codigo}/resultado",
+        json={"alumno_nombre": "Ana", "respuestas": {"0": 1}, "intento_id": it1.json()["intento_id"]},
+    )
+    assert r1.status_code == 201, r1.text
+
+    it2 = client.post(f"/api/v1/examenes/publico/{examen.codigo}/intentos", json={})
+    r2 = client.post(
+        f"/api/v1/examenes/publico/{examen.codigo}/resultado",
+        json={"alumno_nombre": "Ana", "respuestas": {"0": 1}, "intento_id": it2.json()["intento_id"]},
+    )
+    assert r2.status_code == 400, r2.text
+    assert r2.json()["detail"] == "Límite de intentos alcanzado", r2.text
+
+
+@pytest.mark.integration
+def test_publico_no_atribuye_ids_de_usuarios_reales(client, db, docente_user):
+    from app.models.resultado_examen import ResultadoExamen
+
+    examen = _crear_examen(
+        db, docente_user, estado="PUBLICADO",
+        configuracion={"acceso_publico": True},
+        preguntas=[_pregunta_om()],
+    )
+    it = client.post(f"/api/v1/examenes/publico/{examen.codigo}/intentos", json={})
+    victima = "a1b2c3d4-5678-90ab-cdef-1234567890ab"
+    resp = client.post(
+        f"/api/v1/examenes/publico/{examen.codigo}/resultado",
+        json={
+            "alumno_nombre": "Estafador",
+            "alumno_id": victima,
+            "respuestas": {"0": 1},
+            "intento_id": it.json()["intento_id"],
+        },
+    )
+    assert resp.status_code == 201, resp.text
+
+    db.expire_all()
+    fila = db.query(ResultadoExamen).filter(ResultadoExamen.examen_id == str(examen.id)).first()
+    assert fila is not None
+    assert fila.alumno_id == "publico", fila.alumno_id

@@ -1367,6 +1367,29 @@ def _actualizar_progreso_por_examen(db, examen_id, alumno_id, calificacion):
                     if not inscripcion:
                         return
 
+                    # ✅ SEGURIDAD (MEDIA 7): respetar los gates de bloqueo del
+                    # curso. Antes, rendir el examen de una lección bloqueada
+                    # (por fecha/secuencia/desempeño) la marcaba completada
+                    # igual, saltándose el bloqueo. Si está bloqueada NO se
+                    # avanza el progreso (el resultado queda registrado y, al
+                    # desbloquearse, la lección se completa con esa nota).
+                    try:
+                        from app.api.cursos import _verificar_bloqueo_leccion_internal
+                        bloqueo = _verificar_bloqueo_leccion_internal(
+                            db, curso, str(leccion_id), str(alumno_id), "estudiante"
+                        )
+                        if bloqueo.get("bloqueada"):
+                            logger.info(
+                                f"Lección {leccion_id} bloqueada para {alumno_id}: no se "
+                                f"avanza el progreso por el examen {examen_id} "
+                                f"({bloqueo.get('razon')})"
+                            )
+                            continue
+                    except Exception as e:
+                        logger.warning(
+                            f"No se pudo verificar el bloqueo de la lección {leccion_id}: {e}"
+                        )
+
                     # ✅ FIX: usar el puntaje de aprobación real del examen (no hardcodeado).
                     puntaje_aprobacion = examen.puntaje_aprobacion or 60
                     aprobado = (calificacion or 0) >= puntaje_aprobacion

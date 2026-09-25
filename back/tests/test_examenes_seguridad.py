@@ -924,3 +924,154 @@ def test_estudiante_lista_solo_examenes_de_sus_cursos(
     titulos = {e["titulo"] for e in resp.json()}
     assert "De mi curso" in titulos
     assert "Suelto ajeno" not in titulos
+
+
+# =====================================================
+# 11. SEGURIDAD: GATES DE BLOQUEO AL RENDIR (MEDIA 7)
+# =====================================================
+
+def _crear_curso_custom(db, docente, estudiante, modulos, *, tipo_bloqueo="ninguno"):
+    """Crea un curso PUBLICADO con módulos arbitrarios y matricula al estudiante."""
+    from app.models.curso import Curso, InscripcionCurso
+
+    curso = Curso(
+        id=str(uuid.uuid4()),
+        titulo="Curso con bloqueo",
+        descripcion="",
+        categoria="general",
+        nivel="principiante",
+        docente_id=str(docente.id),
+        docente_nombre=docente.nombre_completo,
+        precio_tipo="gratis",
+        estado="PUBLICADO",
+        modulos=modulos,
+        tipo_bloqueo=tipo_bloqueo,
+        bloqueo_config={},
+        etiquetas=[],
+        requisitos=[],
+        objetivos=[],
+        certificado_habilitado=True,
+        certificado_nota_minima=None,
+    )
+    db.add(curso)
+    db.add(InscripcionCurso(
+        id=str(uuid.uuid4()),
+        curso_id=str(curso.id),
+        estudiante_id=str(estudiante.id),
+        estudiante_nombre=estudiante.nombre_completo,
+        progreso=0,
+        completado=False,
+        lecciones_completadas=[],
+    ))
+    db.commit()
+    return curso
+
+
+def _modulos_con_examen(examen_id):
+    return [{
+        "id": "m1",
+        "titulo": "Módulo 1",
+        "lecciones": [
+            {"id": "l1", "titulo": "Introducción", "tipo": "texto"},
+            {"id": "l2", "titulo": "Examen", "tipo": "examen",
+             "contenido": {"examen_id": str(examen_id)}},
+        ],
+    }]
+
+
+def _rendir_examen(client, examen, estudiante_user, estudiante_headers, respuestas=None):
+    """Inicia intento y entrega por el flujo real del estudiante."""
+    intento = client.post(
+        f"/api/v1/examenes/{examen.id}/intentos", headers=estudiante_headers
+    ).json()
+    return client.post(
+        "/api/v1/examenes/resultados",
+        json=_payload_resultado(
+            examen, estudiante_user.id, respuestas or {"0": 1},
+            intento_id=intento["intento_id"],
+        ),
+        headers=estudiante_headers,
+    )
+
+
+@pytest.mark.security
+@pytest.mark.integration
+def test_examen_de_leccion_bloqueada_no_avanza_progreso(
+    client, db, docente_user, estudiante_user, estudiante_headers
+):
+    """✅ MEDIA 7: rendir el examen de una lección bloqueada NO la completa."""
+    from app.models.curso import InscripcionCurso, ProgresoLeccion
+
+    examen = _crear_examen(db, docente_user, estado="PUBLICADO", preguntas=[_pregunta_om()])
+    curso = _crear_curso_custom(
+        db, docente_user, estudiante_user,
+        _modulos_con_examen(examen.id), tipo_bloqueo="secuencial",
+    )
+
+    resp = _rendir_examen(client, examen, estudiante_user, estudiante_headers)
+    assert resp.status_code == 201, resp.text
+    assert resp.json()["calificacion"] == pytest.approx(100.0)
+
+    db.expire_all()
+    prog_l2 = db.query(ProgresoLeccion).filter(
+        ProgresoLeccion.curso_id == str(curso.id),
+        ProgresoLeccion.estudiante_id == str(estudiante_user.id),
+        ProgresoLeccion.leccion_id == "l2",
+    ).first()
+    assert prog_l2 is None or prog_l2.completado is False, (
+        "La lección bloqueada no debe completarse al rendir el examen"
+    )
+    insc = db.query(InscripcionCurso).filter(
+        InscripcionCurso.curso_id == str(curso.id),
+        InscripcionCurso.estudiante_id == str(estudiante_user.id),
+    ).first()
+    assert (insc.progreso or 0) < 100
+
+    # Al desbloquear (completar l1), l2 se completa usando la nota ya registrada.
+    r_l1 = client.post(
+        f"/api/v1/cursos/{curso.id}/lecciones/l1/completar",
+        json={"usuario_id": str(estudiante_user.id)},
+        headers=estudiante_headers,
+    )
+    assert r_l1.status_code == 200, r_l1.text
+
+    r_l2 = client.post(
+        f"/api/v1/cursos/{curso.id}/lecciones/l2/completar",
+        json={"usuario_id": str(estudiante_user.id)},
+        headers=estudiante_headers,
+    )
+    assert r_l2.status_code == 200, r_l2.text
+
+    db.expire_all()
+    prog_l2 = db.query(ProgresoLeccion).filter(
+        ProgresoLeccion.curso_id == str(curso.id),
+        ProgresoLeccion.estudiante_id == str(estudiante_user.id),
+        ProgresoLeccion.leccion_id == "l2",
+    ).first()
+    assert prog_l2 is not None and prog_l2.completado is True
+    assert prog_l2.nota == pytest.approx(100.0)
+
+
+@pytest.mark.integration
+def test_examen_de_leccion_desbloqueada_completa_la_leccion(
+    client, db, docente_user, estudiante_user, estudiante_headers
+):
+    """Control: sin bloqueo, rendir el examen de la lección sí la completa."""
+    from app.models.curso import ProgresoLeccion
+
+    examen = _crear_examen(db, docente_user, estado="PUBLICADO", preguntas=[_pregunta_om()])
+    curso = _crear_curso_custom(
+        db, docente_user, estudiante_user,
+        _modulos_con_examen(examen.id), tipo_bloqueo="ninguno",
+    )
+
+    resp = _rendir_examen(client, examen, estudiante_user, estudiante_headers)
+    assert resp.status_code == 201, resp.text
+
+    db.expire_all()
+    prog_l2 = db.query(ProgresoLeccion).filter(
+        ProgresoLeccion.curso_id == str(curso.id),
+        ProgresoLeccion.estudiante_id == str(estudiante_user.id),
+        ProgresoLeccion.leccion_id == "l2",
+    ).first()
+    assert prog_l2 is not None and prog_l2.completado is True

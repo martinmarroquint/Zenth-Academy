@@ -11,7 +11,9 @@ class PizarraBase(BaseModel):
     descripcion: Optional[str] = None
     tipo: str = 'blanca'
     configuracion: Optional[Dict] = {}
-    creado_por: str
+    # ✅ SEGURIDAD (ALTA 2): se conserva por compatibilidad, pero el servidor lo
+    # IGNORA y usa el usuario autenticado (admin puede asignar otro explícitamente).
+    creado_por: Optional[str] = None
     grupo_id: Optional[str] = None
     empresa_id: Optional[str] = None
     es_publica: bool = False
@@ -26,6 +28,8 @@ class PizarraUpdate(BaseModel):
     descripcion: Optional[str] = None
     tipo: Optional[str] = None
     configuracion: Optional[Dict] = None
+    # ✅ SEGURIDAD (ALTA 2): validado contra lista blanca en el endpoint
+    # (ACTIVA/CERRADA/ARCHIVADA).
     estado: Optional[str] = None
     elementos: Optional[List] = None
     es_publica: Optional[bool] = None
@@ -54,7 +58,11 @@ class PizarraResponse(BaseModel):
 
 
 class SesionPizarraCreate(BaseModel):
-    usuario_id: str
+    """✅ SEGURIDAD (ALTA 2): `usuario_id`, `rol`, `ip` y `user_agent` se
+    conservan por compatibilidad, pero el servidor los IGNORA: la sesión usa el
+    usuario autenticado, el rol se normaliza a EDITOR/LECTOR y la IP/user-agent
+    se derivan del request."""
+    usuario_id: Optional[str] = None
     rol: Optional[str] = 'EDITOR'
     ip: Optional[str] = None
     user_agent: Optional[str] = None

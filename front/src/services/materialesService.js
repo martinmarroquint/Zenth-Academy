@@ -78,27 +78,6 @@ class MaterialesService {
       method: 'PATCH'
     });
   }
-
-  // =============================================
-  // OBTENER MATERIAL PÚBLICO (sin login)
-  // =============================================
-  async obtenerPublico(token) {
-    try {
-      return await apiClient.request(`/materiales/publico/${token}`, {
-        method: 'GET'
-      });
-    } catch (error) {
-      console.error('Error obteniendo material público:', error);
-      throw error;
-    }
-  }
-
-  // =============================================
-  // MATERIALES POR GRUPO
-  // =============================================
-  async listarPorGrupo(grupoId) {
-    return this.request(`/grupo/${grupoId}`);
-  }
 }
 
 export default new MaterialesService();

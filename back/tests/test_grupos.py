@@ -603,3 +603,34 @@ def test_docente_ajeno_no_obtiene_alumnos_de_su_grupo(client, db, docente_user, 
         f"/api/v1/examenes/alumnos/grupo/{grupo.id}", headers=otro_docente_headers
     )
     assert resp.status_code == 403, resp.text
+
+
+@pytest.mark.security
+@pytest.mark.integration
+def test_docente_ajeno_no_lista_recursos_de_grupo(
+    client, db, docente_user, docente_headers, otro_docente_headers
+):
+    """✅ MEDIA 7: los recursos del grupo (con URL pública/token) son solo del dueño."""
+    grupo = _crear_grupo(db, docente_user)
+    client.post(
+        f"/api/v1/examenes/grupos/{grupo.id}/recursos",
+        json={"tipo": "link", "nombre": "recurso", "url": "https://example.com/r"},
+        headers=docente_headers,
+    )
+
+    resp = client.get(
+        f"/api/v1/examenes/grupos/{grupo.id}/recursos", headers=otro_docente_headers
+    )
+    assert resp.status_code == 403, resp.text
+
+
+@pytest.mark.security
+@pytest.mark.integration
+def test_estudiante_no_lista_recursos_de_grupo(client, db, docente_user, estudiante_headers):
+    """✅ MEDIA 7: un estudiante tampoco puede enumerar recursos de grupos."""
+    grupo = _crear_grupo(db, docente_user)
+
+    resp = client.get(
+        f"/api/v1/examenes/grupos/{grupo.id}/recursos", headers=estudiante_headers
+    )
+    assert resp.status_code == 403, resp.text

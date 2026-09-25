@@ -45,6 +45,16 @@ def _material_to_dict(m: MaterialCompartido) -> dict:
     }
 
 
+def _materiales_visibles(db: Session, current_user: Usuario):
+    """✅ SEGURIDAD (BAJA 14): el admin puede ver/gestionar materiales de
+    cualquier docente (consistente con el resto de helpers de ownership); el
+    resto solo los propios."""
+    query = db.query(MaterialCompartido)
+    if current_user.rol != "admin":
+        query = query.filter(MaterialCompartido.docente_id == str(current_user.id))
+    return query
+
+
 @router.get("/", response_model=List[MaterialResponse])
 async def listar_materiales(
     activo: Optional[bool] = Query(None),
@@ -55,9 +65,7 @@ async def listar_materiales(
     current_user: Usuario = Depends(require_docente)
 ):
     try:
-        query = db.query(MaterialCompartido).filter(
-            MaterialCompartido.docente_id == str(current_user.id)
-        )
+        query = _materiales_visibles(db, current_user)
         
         if activo is not None:
             query = query.filter(MaterialCompartido.activo == activo)
@@ -81,9 +89,8 @@ async def obtener_material(
     current_user: Usuario = Depends(require_docente)
 ):
     try:
-        material = db.query(MaterialCompartido).filter(
-            MaterialCompartido.id == id,
-            MaterialCompartido.docente_id == str(current_user.id)
+        material = _materiales_visibles(db, current_user).filter(
+            MaterialCompartido.id == id
         ).first()
         if not material:
             raise HTTPException(status_code=404, detail="Material no encontrado")
@@ -135,9 +142,8 @@ async def actualizar_material(
     current_user: Usuario = Depends(require_docente)
 ):
     try:
-        material = db.query(MaterialCompartido).filter(
-            MaterialCompartido.id == id,
-            MaterialCompartido.docente_id == str(current_user.id)
+        material = _materiales_visibles(db, current_user).filter(
+            MaterialCompartido.id == id
         ).first()
         if not material:
             raise HTTPException(status_code=404, detail="Material no encontrado")
@@ -165,9 +171,8 @@ async def eliminar_material(
     current_user: Usuario = Depends(require_docente)
 ):
     try:
-        material = db.query(MaterialCompartido).filter(
-            MaterialCompartido.id == id,
-            MaterialCompartido.docente_id == str(current_user.id)
+        material = _materiales_visibles(db, current_user).filter(
+            MaterialCompartido.id == id
         ).first()
         if not material:
             raise HTTPException(status_code=404, detail="Material no encontrado")
@@ -190,9 +195,8 @@ async def toggle_material(
     current_user: Usuario = Depends(require_docente)
 ):
     try:
-        material = db.query(MaterialCompartido).filter(
-            MaterialCompartido.id == id,
-            MaterialCompartido.docente_id == str(current_user.id)
+        material = _materiales_visibles(db, current_user).filter(
+            MaterialCompartido.id == id
         ).first()
         if not material:
             raise HTTPException(status_code=404, detail="Material no encontrado")

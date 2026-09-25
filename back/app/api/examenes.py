@@ -891,11 +891,14 @@ def agregar_recurso_grupo(
 def listar_recursos_grupo(
     grupo_id: str,
     db: Session = Depends(get_db),
-    current_user: Usuario = Depends(get_current_active_user)
+    current_user: Usuario = Depends(require_docente)
 ):
     grupo = db.query(Grupo).filter(Grupo.id == grupo_id).first()
     if not grupo:
         raise HTTPException(status_code=404, detail="Grupo no encontrado")
+    # ✅ SEGURIDAD (MEDIA 7): solo el dueño del grupo (o admin) ve sus recursos;
+    # antes cualquier autenticado los enumeraba con su URL pública (token).
+    _verificar_ownership_grupo(grupo, current_user)
     materiales = db.query(MaterialCompartido).filter(
         MaterialCompartido.grupo_id == grupo_id
     ).order_by(MaterialCompartido.created_at.desc()).all()

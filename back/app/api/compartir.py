@@ -13,6 +13,7 @@ from datetime import datetime, timezone, timedelta
 from app.database import get_db
 from app.core.dependencies import require_docente, get_current_user_optional
 from app.core.errors import error_interno
+from app.core.ratelimit import rate_limit
 from app.models.usuario import Usuario
 from app.models.material_compartido import MaterialCompartido
 from app.models.historial_comparticion import HistorialComparticion
@@ -237,7 +238,11 @@ def sala_activa_docente(
 @router.get("/{codigo}", response_model=SalaEstadoResponse)
 def estado_sala(
     codigo: str,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    # ✅ SEGURIDAD (MEDIA 5): endpoint público sin auth → rate limit. La página
+    # del aula hace polling cada 2s (30/min), así que 60/min deja margen y
+    # sigue bloqueando la enumeración de códigos de 8 caracteres.
+    _rate_limited = Depends(rate_limit(60, 60)),
 ):
     """Estado publico de la sala. Si el QR expiro, lo renueva automaticamente."""
     try:
@@ -300,11 +305,14 @@ def vincular_sala(
             db.commit()
             logger.info(f"Sala {codigo} vinculada por docente {current_user.id}")
 
+        # ✅ SEGURIDAD (MEDIA 6): el estado de la sala (con `qr_token` y el
+        # material activo) solo se devuelve al dueño/admin. Antes cualquier
+        # autenticado que conociera el código recibía el objeto completo.
         return VincularResponse(
             ok=es_dueño,
             es_docente=es_docente,
             es_dueño=es_dueño,
-            sala=_estado_sala(sala, ahora),
+            sala=_estado_sala(sala, ahora) if es_dueño else None,
             mensaje="Vinculacion exitosa" if es_dueño else "No tienes permiso para vincular esta sala"
         )
     except HTTPException:

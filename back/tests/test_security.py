@@ -241,6 +241,13 @@ def test_estudiante_no_puede_auto_calificarse(
     """La nota/aprobado enviados por un estudiante NO deben persistirse."""
     leccion_id = "leccion-auto-nota"
     curso = _crear_curso(db, docente_user.id, leccion_id=leccion_id)
+    # ✅ El endpoint ahora exige acceso al curso: el estudiante se inscribe
+    # (camino legítimo) y aun así no debe poder auto-calificarse.
+    r_insc = client.post(
+        f"/api/v1/cursos/{curso.id}/inscribirse",
+        headers=estudiante_headers,
+    )
+    assert r_insc.status_code == 200, r_insc.text
 
     resp = client.post(
         f"/api/v1/cursos/{curso.id}/lecciones/{leccion_id}/progreso",

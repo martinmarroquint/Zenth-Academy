@@ -490,9 +490,13 @@ const DetalleCurso = ({
     const bloquesLeccion = getBloquesDeLeccion(leccionActual);
     const tieneVideo = bloquesLeccion.some(b => b.tipo === 'video');
     const tieneTexto = bloquesLeccion.some(b => b.tipo === 'texto');
-    const esLeccionExamen = bloquesLeccion.length === 0 &&
+    // Examen puro (sin bloques) o bloque-examen embebido en lección mixta:
+    // en ambos casos, solo se completa al rendir el examen.
+    const esLeccionExamen = bloquesLeccion.some(
+      b => b.tipo === 'examen' && !!(b.contenido || {}).examen_id
+    ) || (bloquesLeccion.length === 0 &&
       (getTipoLeccion(leccionActual) === 'examen' ||
-       !!(leccionActual.contenido || {}).examen_id);
+       !!(leccionActual.contenido || {}).examen_id));
 
     // ✅ Lección-examen: NO se puede completar a mano; solo al rendir el examen
     if (esLeccionExamen) {
@@ -1155,12 +1159,16 @@ const DetalleCurso = ({
     const estaCompletada = esLeccionCompletada(leccionActual.id);
     const bloques = getBloquesDeLeccion(leccionActual);
     // ✅ Comportamiento del botón según tipo de lección:
-    //  - examen (sin bloques): solo se completa al rendir el examen → chip de aviso
+    //  - examen (puro o embebido como bloque): solo se completa al rendirlo → chip de aviso
     //  - video: bloqueado hasta terminar el video (luego auto-completa)
     //  - texto/material: botón "Completar" libre
-    const esLeccionExamen = bloques.length === 0 &&
-      (getTipoLeccion(leccionActual) === 'examen' ||
-       !!(leccionActual.contenido || {}).examen_id);
+    const tieneBloqueExamen = bloques.some(
+      b => b.tipo === 'examen' && !!(b.contenido || {}).examen_id
+    );
+    const esLeccionExamen = tieneBloqueExamen ||
+      (bloques.length === 0 &&
+        (getTipoLeccion(leccionActual) === 'examen' ||
+         !!(leccionActual.contenido || {}).examen_id));
     const tieneVideoLeccion = bloques.some(b => b.tipo === 'video');
     const videoPendiente = tieneVideoLeccion && !videoCompletado && !videoNoDisponible;
     const esBloqueadaPorPago = !esDocente && !estaInscrito && !tieneAcceso;

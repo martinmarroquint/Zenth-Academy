@@ -1593,16 +1593,23 @@ async def obtener_progreso_detallado(
 # COMPLETAR LECCIÓN, PROGRESO, EVALUACIONES Y BLOQUEOS
 # =============================================
 
-def _nota_confiable_desde_examen(db: Session, leccion: dict, estudiante_id: str) -> Optional[float]:
+def _nota_confiable_desde_examen(
+    db: Session,
+    leccion: dict,
+    estudiante_id: str,
+    examen_id: Optional[str] = None,
+) -> Optional[float]:
     """
     ✅ SEGURIDAD: Deriva la nota de una lección-examen desde el ResultadoExamen
     almacenado en el servidor (fuente confiable), en lugar de confiar en el
-    valor que envía el cliente. Devuelve None si la lección no es un examen,
-    o si el estudiante aún no tiene un resultado válido.
+    valor que envía el cliente. `examen_id` permite consultar un examen
+    concreto (bloque-examen embebido); si no se pasa, usa el examen a nivel
+    de lección (contenido.examen_id). Devuelve None si no hay resultado válido.
     """
     try:
-        contenido = (leccion or {}).get("contenido") or {}
-        examen_id = contenido.get("examen_id")
+        if examen_id is None:
+            contenido = (leccion or {}).get("contenido") or {}
+            examen_id = contenido.get("examen_id")
         if not examen_id:
             return None
         resultados = db.query(ResultadoExamen).filter(
@@ -1693,21 +1700,38 @@ async def completar_leccion(
                     detail=f"Lección bloqueada: {bloqueo.get('razon', 'Sin permiso para completar esta lección aún')}"
                 )
 
-        # ✅ SEGURIDAD: una lección-examen (sin bloques, con examen_id) solo se
-        # completa cuando el estudiante YA rindió el examen. El botón "Completar"
-        # no debe poder saltarse la evaluación.
+        # ✅ SEGURIDAD: una lección con evaluación solo se completa cuando el
+        # estudiante YA rindió TODOS sus exámenes. Cubre AMBAS formas:
+        #   • lección-examen pura: contenido.examen_id y sin bloques
+        #   • bloque-examen embebido: bloques con tipo "examen" (lección mixta)
+        # El botón "Completar" (y cualquier POST artesanal) no debe poder
+        # saltarse la evaluación.
         contenido_leccion = leccion.get("contenido") or {}
-        es_leccion_examen = bool(contenido_leccion.get("examen_id")) and not (
-            leccion.get("bloques") or []
+        bloques_leccion = leccion.get("bloques") or []
+        leccion_examen_pura = bool(contenido_leccion.get("examen_id")) and not bloques_leccion
+        ids_examen_leccion = (
+            [str(contenido_leccion.get("examen_id"))]
+            if leccion_examen_pura
+            else [
+                str((b.get("contenido") or {}).get("examen_id"))
+                for b in bloques_leccion
+                if b.get("tipo") == "examen" and (b.get("contenido") or {}).get("examen_id")
+            ]
         )
         nota_examen = None
-        if es_leccion_examen and current_user.rol == "estudiante":
-            nota_examen = _nota_confiable_desde_examen(db, leccion, estudiante_id)
-            if nota_examen is None:
-                raise HTTPException(
-                    status_code=status.HTTP_400_BAD_REQUEST,
-                    detail="Debes rendir el examen antes de completar esta lección",
-                )
+        if ids_examen_leccion and current_user.rol == "estudiante":
+            # Todos los exámenes de la lección deben tener resultado válido;
+            # con varios, la nota de la lección es la más baja (hay que cubrirlos).
+            notas_examen = []
+            for eid in ids_examen_leccion:
+                n = _nota_confiable_desde_examen(db, leccion, estudiante_id, examen_id=eid)
+                if n is None:
+                    raise HTTPException(
+                        status_code=status.HTTP_400_BAD_REQUEST,
+                        detail="Debes rendir el examen antes de completar esta lección",
+                    )
+                notas_examen.append(n)
+            nota_examen = min(notas_examen) if len(notas_examen) > 1 else notas_examen[0]
 
         # Obtener o crear el progreso de la lección
         progreso = _get_progreso_leccion(db, curso_id, estudiante_id, leccion_id)
@@ -1792,20 +1816,43 @@ async def actualizar_progreso_leccion(
     db: Session = Depends(get_db),
     current_user: Usuario = Depends(get_current_active_user)
 ):
-    """Actualiza el progreso de una lección (nota, aprobado, tiempo, completado)"""
+    """Actualiza el progreso de una lección (tiempo; nota/aprobado/completado solo staff)"""
     try:
         curso = db.query(Curso).filter(Curso.id == curso_id).first()
         if not curso:
             raise HTTPException(status_code=404, detail="Curso no encontrado")
         
         estudiante_id = str(current_user.id)
-        
+
+        # ✅ SEGURIDAD: la lección debe existir en el curso (evita filas de
+        # progreso huérfanas para ids inventados).
+        leccion_existe, _, _ = _encontrar_leccion_y_anterior(curso, leccion_id)
+        if leccion_existe is None:
+            raise HTTPException(status_code=404, detail="Lección no encontrada en el curso")
+
+        # ✅ SEGURIDAD: el estudiante solo registra progreso en cursos a los que
+        # tiene acceso (acceso de pago activo, o inscripción en curso gratuito).
+        if current_user.rol not in ["admin", "docente"]:
+            tiene_acceso = _verificar_acceso(db, curso_id, estudiante_id) or (
+                curso.precio_tipo != "pago"
+                and _esta_inscrito(db, curso_id, estudiante_id)
+            )
+            if not tiene_acceso:
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    detail="No tienes acceso a este curso",
+                )
+
         progreso = _get_progreso_leccion(db, curso_id, estudiante_id, leccion_id)
         progreso.curso_id = curso_id
         progreso.estudiante_id = estudiante_id
         progreso.leccion_id = leccion_id
         
-        if data.completado is not None:
+        # ✅ SEGURIDAD: solo docentes/admins marcan completado (igual que
+        # nota/aprobado). Un estudiante NO puede auto-completar lecciones ni el
+        # curso por esta vía — la completación pasa por POST /completar, que
+        # exige rendir los exámenes. El frontend solo envía tiempo_invertido.
+        if current_user.rol in ["admin", "docente"] and data.completado is not None:
             progreso.completado = data.completado
             if data.completado and not progreso.fecha_completado:
                 progreso.fecha_completado = datetime.now(timezone.utc)

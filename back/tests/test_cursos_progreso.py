@@ -16,6 +16,7 @@ from app.models.curso import (
     InscripcionCurso,
     ProgresoLeccion,
 )
+from app.models.resultado_examen import ResultadoExamen
 
 
 # =============================================
@@ -56,6 +57,29 @@ MODULOS_2_MODULOS = [
         "titulo": "Módulo 2",
         "lecciones": [{"id": "l2", "titulo": "Lección 2", "tipo": "texto"}],
     },
+]
+
+
+MODULOS_CON_BLOQUE_EXAMEN = [
+    {
+        "id": "m1",
+        "titulo": "M\u00f3dulo 1",
+        "lecciones": [
+            {
+                "id": "l1",
+                "titulo": "Lecci\u00f3n mixta con examen",
+                "tipo": "texto",
+                "bloques": [
+                    {"id": "b1", "tipo": "texto", "contenido": {"html": "<p>Intro</p>"}},
+                    {
+                        "id": "b2",
+                        "tipo": "examen",
+                        "contenido": {"examen_id": "examen-bloque-test"},
+                    },
+                ],
+            },
+        ],
+    }
 ]
 
 
@@ -172,6 +196,109 @@ def test_completar_leccion_es_idempotente(
         ProgresoLeccion.leccion_id == "l1",
     ).all()
     assert len(registros) == 1
+
+
+@pytest.mark.integration
+@pytest.mark.security
+def test_leccion_con_bloque_examen_exige_haber_lo_rendido(
+    client, db, docente_user, estudiante_user, estudiante_headers
+):
+    """Una lección mixta con bloque-examen NO se completa sin resultado previo."""
+    curso = _crear_curso(db, docente_user, modulos=MODULOS_CON_BLOQUE_EXAMEN)
+    _inscribir(client, curso.id, estudiante_headers)
+
+    resp = _completar(client, curso.id, "l1", estudiante_user.id, estudiante_headers)
+
+    assert resp.status_code == 400, resp.text
+    assert "rendir el examen" in resp.json()["detail"]
+
+
+@pytest.mark.integration
+@pytest.mark.security
+def test_leccion_con_bloque_examen_completa_con_resultado_y_nota_del_servidor(
+    client, db, docente_user, estudiante_user, estudiante_headers
+):
+    """Con ResultadoExamen válido la lección mixta se completa y persiste la
+    nota derivada en el servidor (fuente confiable), no la del cliente."""
+    curso = _crear_curso(db, docente_user, modulos=MODULOS_CON_BLOQUE_EXAMEN)
+    _inscribir(client, curso.id, estudiante_headers)
+
+    db.add(
+        ResultadoExamen(
+            id=str(uuid.uuid4()),
+            examen_id="examen-bloque-test",
+            alumno_id=str(estudiante_user.id),
+            alumno_id_unificado=str(estudiante_user.id),
+            alumno_nombre="Alumno Test",
+            respuestas={},
+            calificacion=15.0,
+            correctas=3,
+            total_preguntas=4,
+            puntos_obtenidos=15.0,
+            total_puntos=20.0,
+            estado="COMPLETADO",
+        )
+    )
+    db.commit()
+
+    resp = _completar(client, curso.id, "l1", estudiante_user.id, estudiante_headers)
+
+    assert resp.status_code == 200, resp.text
+    assert resp.json()["completado"] is True
+
+    db.expire_all()
+    prog = db.query(ProgresoLeccion).filter(
+        ProgresoLeccion.curso_id == str(curso.id),
+        ProgresoLeccion.estudiante_id == str(estudiante_user.id),
+        ProgresoLeccion.leccion_id == "l1",
+    ).first()
+    assert prog is not None and prog.completado is True
+    assert prog.nota == pytest.approx(15.0)
+    assert prog.aprobado is True
+
+
+@pytest.mark.integration
+@pytest.mark.security
+def test_progreso_no_acepta_completado_de_estudiante(
+    client, db, docente_user, estudiante_user, estudiante_headers
+):
+    """POST /progreso: el estudiante solo guarda tiempo; 'completado' se ignora
+    (no puede auto-completar lecciones ni el curso por esta vía)."""
+    curso = _crear_curso(db, docente_user, modulos=MODULOS_2_LECCIONES)
+    _inscribir(client, curso.id, estudiante_headers)
+
+    resp = client.post(
+        f"/api/v1/cursos/{curso.id}/lecciones/l1/progreso",
+        json={"completado": True, "tiempo_invertido": 42},
+        headers=estudiante_headers,
+    )
+    assert resp.status_code == 200, resp.text
+
+    db.expire_all()
+    prog = db.query(ProgresoLeccion).filter(
+        ProgresoLeccion.curso_id == str(curso.id),
+        ProgresoLeccion.estudiante_id == str(estudiante_user.id),
+        ProgresoLeccion.leccion_id == "l1",
+    ).first()
+    assert prog is not None
+    assert prog.completado is False, "El estudiante no puede auto-completar por /progreso"
+    assert prog.tiempo_invertido == 42
+
+
+@pytest.mark.integration
+@pytest.mark.security
+def test_progreso_sin_inscripcion_devuelve_403(
+    client, db, docente_user, estudiante_headers
+):
+    """POST /progreso exige acceso al curso: sin inscripción no se registran filas."""
+    curso = _crear_curso(db, docente_user, modulos=MODULOS_2_LECCIONES)
+
+    resp = client.post(
+        f"/api/v1/cursos/{curso.id}/lecciones/l1/progreso",
+        json={"tiempo_invertido": 10},
+        headers=estudiante_headers,
+    )
+    assert resp.status_code == 403, resp.text
 
 
 @pytest.mark.integration

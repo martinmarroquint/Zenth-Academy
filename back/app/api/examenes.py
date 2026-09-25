@@ -594,9 +594,19 @@ def calcular_resultado(examen, respuestas_alumno, preguntas_con_mapping=None):
 def listar_grupos(
     docente_id: Optional[str] = Query(None),
     db: Session = Depends(get_db),
-    current_user: Usuario = Depends(get_current_active_user)
+    current_user: Usuario = Depends(require_docente)
 ):
+    # ✅ SEGURIDAD (MEDIA 9): solo staff lista grupos. Antes cualquier
+    # estudiante veía el padrón y las asistencias de todos los docentes.
     query = db.query(Grupo)
+    if current_user.rol != 'admin':
+        query = query.filter(
+            or_(
+                Grupo.docente_id == str(current_user.id),
+                Grupo.docente_id.is_(None),
+                Grupo.docente_id == 'default',
+            )
+        )
     if docente_id:
         query = query.filter(Grupo.docente_id == docente_id)
     return query.order_by(Grupo.created_at.desc()).all()
@@ -653,11 +663,13 @@ def _verificar_ownership_grupo(grupo: Grupo, current_user: Usuario) -> None:
 def obtener_grupo(
     grupo_id: str,
     db: Session = Depends(get_db),
-    current_user: Usuario = Depends(get_current_active_user)
+    current_user: Usuario = Depends(require_docente)
 ):
     grupo = db.query(Grupo).filter(Grupo.id == grupo_id).first()
     if not grupo:
         raise HTTPException(status_code=404, detail="Grupo no encontrado")
+    # ✅ SEGURIDAD (MEDIA 9): el detalle expone padrón/asistencias/recursos.
+    _verificar_ownership_grupo(grupo, current_user)
     return grupo
 
 
@@ -717,7 +729,9 @@ def guardar_asistencia(
     grupo = db.query(Grupo).filter(Grupo.id == grupo_id).first()
     if not grupo:
         raise HTTPException(status_code=404, detail="Grupo no encontrado")
-    
+    # ✅ SEGURIDAD (MEDIA 8): verificar ownership
+    _verificar_ownership_grupo(grupo, current_user)
+
     fecha_actual = datetime.now(timezone.utc).strftime("%Y-%m-%d")
     asistencias_actuales = grupo.asistencias or []
     asistencias_actuales = [a for a in asistencias_actuales if a.get('fecha') != fecha_actual]
@@ -812,6 +826,8 @@ def agregar_recurso_grupo(
     grupo = db.query(Grupo).filter(Grupo.id == grupo_id).first()
     if not grupo:
         raise HTTPException(status_code=404, detail="Grupo no encontrado")
+    # ✅ SEGURIDAD (MEDIA 8): verificar ownership
+    _verificar_ownership_grupo(grupo, current_user)
 
     tipo_material, categoria = _tipo_recurso_a_material(data.tipo)
     material = MaterialCompartido(
@@ -856,8 +872,15 @@ def eliminar_recurso_grupo(
     db: Session = Depends(get_db),
     current_user: Usuario = Depends(require_docente)
 ):
+    # ✅ SEGURIDAD (MEDIA 8): antes ignoraba `grupo_id` y no verificaba
+    # ownership: cualquier docente podía borrar recursos de otros grupos.
+    grupo = db.query(Grupo).filter(Grupo.id == grupo_id).first()
+    if not grupo:
+        raise HTTPException(status_code=404, detail="Grupo no encontrado")
+    _verificar_ownership_grupo(grupo, current_user)
     material = db.query(MaterialCompartido).filter(
-        MaterialCompartido.id == recurso_id
+        MaterialCompartido.id == recurso_id,
+        MaterialCompartido.grupo_id == grupo_id,
     ).first()
     if not material:
         raise HTTPException(status_code=404, detail="Recurso no encontrado")
@@ -967,6 +990,8 @@ def vincular_grupo_carpeta(
     grupo = db.query(Grupo).filter(Grupo.id == grupo_id).first()
     if not grupo:
         raise HTTPException(status_code=404, detail="Grupo no encontrado")
+    # ✅ SEGURIDAD (MEDIA 8): verificar ownership
+    _verificar_ownership_grupo(grupo, current_user)
     db.query(Grupo).filter(Grupo.session_activo == session_id).update({"session_activo": None})
     grupo.session_activo = session_id
     db.commit()
@@ -1040,6 +1065,8 @@ def compartir_con_alumnos(
     grupo = db.query(Grupo).filter(Grupo.id == data.grupo_id).first()
     if not grupo:
         raise HTTPException(status_code=404, detail="Grupo no encontrado")
+    # ✅ SEGURIDAD (MEDIA 8): verificar ownership
+    _verificar_ownership_grupo(grupo, current_user)
     alumnos = _alumnos_por_ids(db, data.alumnos_ids)
     if len(alumnos) != len(data.alumnos_ids):
         raise HTTPException(status_code=404, detail="Algunos alumnos no existen")
@@ -1141,6 +1168,8 @@ def obtener_alumnos_por_grupo(
     grupo = db.query(Grupo).filter(Grupo.id == grupo_id).first()
     if not grupo:
         raise HTTPException(status_code=404, detail="Grupo no encontrado")
+    # ✅ SEGURIDAD (MEDIA 9): el padrón del grupo es solo del dueño.
+    _verificar_ownership_grupo(grupo, current_user)
     alumnos_ids = [a.get('id') for a in grupo.alumnos if a.get('id')]
     if not alumnos_ids:
         return []
@@ -1156,6 +1185,11 @@ def guardar_alumnos(
     if not data:
         raise HTTPException(status_code=400, detail="Lista de alumnos vacía")
     grupo_ids = {a.grupo_id for a in data if a.grupo_id}
+    # ✅ SEGURIDAD (MEDIA 8): verificar ownership de los grupos existentes
+    # ANTES de tocar el catálogo (ids inexistentes se toleran por compat).
+    if grupo_ids:
+        for g in db.query(Grupo).filter(Grupo.id.in_(grupo_ids)).all():
+            _verificar_ownership_grupo(g, current_user)
     # FASE E: los alumnos viven en `alumnos`; desvinculamos los que ya no
     # están en la lista del grupo (no se borran: el catálogo es único).
     # N+1 fix: un solo UPDATE para todos los grupos.
@@ -1211,8 +1245,24 @@ def eliminar_todos_alumnos(
     db: Session = Depends(get_db),
     current_user: Usuario = Depends(require_docente)  # ✅ Cambiado
 ):
-    # FASE E: desvinculamos todos los alumnos de sus grupos (catálogo único)
-    db.query(Alumno).filter(Alumno.grupo_id.isnot(None)).update({"grupo_id": None})
+    # ✅ SEGURIDAD (MEDIA 8): antes desvinculaba TODOS los grupos de TODOS
+    # los docentes. Ahora cada docente solo vacía sus propios grupos
+    # (el admin puede vaciar todos). Catálogo único: no se borran filas.
+    query = db.query(Alumno).filter(Alumno.grupo_id.isnot(None))
+    if current_user.rol != 'admin':
+        grupos_propios = [
+            gid for (gid,) in db.query(Grupo.id).filter(
+                or_(
+                    Grupo.docente_id == str(current_user.id),
+                    Grupo.docente_id.is_(None),
+                    Grupo.docente_id == 'default',
+                )
+            ).all()
+        ]
+        if not grupos_propios:
+            return {"mensaje": "Alumnos desvinculados de grupos", "ok": True}
+        query = query.filter(Alumno.grupo_id.in_(grupos_propios))
+    query.update({"grupo_id": None})
     db.commit()
     return {"mensaje": "Alumnos desvinculados de grupos", "ok": True}
 
@@ -1223,6 +1273,11 @@ def eliminar_alumnos_por_grupo(
     db: Session = Depends(get_db),
     current_user: Usuario = Depends(require_docente)  # ✅ Cambiado
 ):
+    # ✅ SEGURIDAD (MEDIA 8): ownership si el grupo existe (los ids legacy
+    # inexistentes se toleran por compatibilidad con datos antiguos).
+    grupo = db.query(Grupo).filter(Grupo.id == grupo_id).first()
+    if grupo:
+        _verificar_ownership_grupo(grupo, current_user)
     db.query(Alumno).filter(Alumno.grupo_id == grupo_id).update({"grupo_id": None})
     db.commit()
     return {"mensaje": f"Alumnos del grupo {grupo_id} desvinculados", "ok": True}
@@ -1529,7 +1584,8 @@ def listar_resultados_alumno(
     current_user: Usuario = Depends(get_current_active_user)
 ):
     # ✅ SEGURIDAD: Un estudiante solo puede ver sus propios resultados.
-    # Docentes/admins pueden ver los de cualquier alumno.
+    # ✅ MEDIA 4: un docente solo ve resultados de SUS exámenes (antes
+    # cualquier docente leía respuestas/DNI completos de alumnos ajenos).
     if current_user.rol not in ('admin', 'docente') and str(current_user.id) != str(alumno_id):
         logger.warning(
             f"Acceso denegado: usuario {current_user.id} intentó ver resultados de alumno_id={alumno_id}"
@@ -1538,9 +1594,15 @@ def listar_resultados_alumno(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="No tienes permiso para ver los resultados de otro estudiante"
         )
-    resultados = db.query(ResultadoExamen).filter(
+    query = db.query(ResultadoExamen).filter(
         ResultadoExamen.alumno_id == alumno_id
-    ).order_by(ResultadoExamen.entregado_en.desc()).all()
+    )
+    if current_user.rol == 'docente':
+        examenes_propios = db.query(Examen.id).filter(
+            or_(Examen.docente_id == str(current_user.id), Examen.docente_id.is_(None))
+        )
+        query = query.filter(ResultadoExamen.examen_id.in_(examenes_propios))
+    resultados = query.order_by(ResultadoExamen.entregado_en.desc()).all()
     # ✅ Enriquecer con campos calculados (agrupar por examen)
     examenes_ids = set(str(r.examen_id) for r in resultados)
     for eid in examenes_ids:
@@ -1778,30 +1840,46 @@ def obtener_revision(
             item["detalle"]["nota"] = "Pregunta de encuesta (no calificada)"
         detalle.append(item)
     
-    # ✅ SEGURIDAD: si mostrar_resultados=False, ocultar respuestas correctas para estudiantes.
-    if not es_staff and not mostrar_resultados:
+    # ✅ SEGURIDAD (MEDIA 5): ocultar las RESPUESTAS CORRECTAS a los
+    # estudiantes salvo que mostrar_respuestas=True. Antes `mostrar_respuestas`
+    # se leía pero nunca se aplicaba: las claves siempre se filtraban.
+    # - mostrar_resultados=False → no revela nada (ni siquiera qué fue correcto).
+    # - mostrar_resultados=True, mostrar_respuestas=False → sí muestra qué
+    #   respondió bien/mal, pero no cuál era la respuesta correcta.
+    if not es_staff:
+        ocultar_claves = not mostrar_respuestas or not mostrar_resultados
+        ocultar_todo = not mostrar_resultados
         for item in detalle:
-            # Ocultar respuestas correctas en todos los tipos
-            item.pop("respuesta_correcta", None)
-            if "afirmaciones" in item:
-                for af in item["afirmaciones"]:
-                    af.pop("respuesta_correcta", None)
-                    af.pop("correcta", None)
-            if "pares" in item:
-                for p in item["pares"]:
-                    p.pop("respuesta_correcta", None)
-                    p.pop("correcta", None)
-            if "espacios" in item:
-                for e in item["espacios"]:
-                    e.pop("respuesta_correcta", None)
-                    e.pop("correcta", None)
-            if "posiciones" in item:
-                for p in item["posiciones"]:
-                    p.pop("posicion_correcta", None)
-                    p.pop("correcta", None)
-            item.pop("respuestas_aceptadas", None)
-            item["correcta"] = None
-            item["puntos_obtenidos"] = 0
+            if ocultar_claves:
+                item.pop("respuesta_correcta", None)
+                item.pop("respuestas_aceptadas", None)
+                if "afirmaciones" in item:
+                    for af in item["afirmaciones"]:
+                        af.pop("respuesta_correcta", None)
+                if "pares" in item:
+                    for p in item["pares"]:
+                        p.pop("respuesta_correcta", None)
+                if "espacios" in item:
+                    for e in item["espacios"]:
+                        e.pop("respuesta_correcta", None)
+                if "posiciones" in item:
+                    for p in item["posiciones"]:
+                        p.pop("posicion_correcta", None)
+            if ocultar_todo:
+                if "afirmaciones" in item:
+                    for af in item["afirmaciones"]:
+                        af.pop("correcta", None)
+                if "pares" in item:
+                    for p in item["pares"]:
+                        p.pop("correcta", None)
+                if "espacios" in item:
+                    for e in item["espacios"]:
+                        e.pop("correcta", None)
+                if "posiciones" in item:
+                    for p in item["posiciones"]:
+                        p.pop("correcta", None)
+                item["correcta"] = None
+                item["puntos_obtenidos"] = 0
     
     return {
         "resultado_id": resultado.id,

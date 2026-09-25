@@ -412,3 +412,194 @@ def test_eliminar_alumnos_por_grupo(client, db, docente_user, docente_headers):
     actualizado = db.query(Alumno).filter(Alumno.id == alumno.id).first()
     assert actualizado is not None
     assert actualizado.grupo_id is None
+
+
+# =====================================================
+# 6. SEGURIDAD: PROPIEDAD DE GRUPOS (MEDIA 8 / MEDIA 9)
+# =====================================================
+
+@pytest.mark.security
+@pytest.mark.integration
+def test_estudiante_no_puede_listar_grupos(client, estudiante_headers):
+    resp = client.get("/api/v1/examenes/grupos", headers=estudiante_headers)
+    assert resp.status_code == 403, resp.text
+
+
+@pytest.mark.security
+@pytest.mark.integration
+def test_listar_grupos_docente_solo_los_suyos(
+    client, db, docente_user, docente_headers, otro_docente_headers
+):
+    _crear_grupo(db, docente_user, nombre="Grupo propio")
+
+    resp = client.get("/api/v1/examenes/grupos", headers=otro_docente_headers)
+    assert resp.status_code == 200, resp.text
+    assert "Grupo propio" not in [g["nombre"] for g in resp.json()]
+
+    resp_propio = client.get("/api/v1/examenes/grupos", headers=docente_headers)
+    assert resp_propio.status_code == 200, resp_propio.text
+    assert "Grupo propio" in [g["nombre"] for g in resp_propio.json()]
+
+
+@pytest.mark.security
+@pytest.mark.integration
+def test_estudiante_no_puede_obtener_grupo(client, db, docente_user, estudiante_headers):
+    grupo = _crear_grupo(db, docente_user)
+    resp = client.get(f"/api/v1/examenes/grupos/{grupo.id}", headers=estudiante_headers)
+    assert resp.status_code == 403, resp.text
+
+
+@pytest.mark.security
+@pytest.mark.integration
+def test_docente_ajeno_no_obtiene_grupo(client, db, docente_user, otro_docente_headers):
+    grupo = _crear_grupo(db, docente_user)
+    resp = client.get(f"/api/v1/examenes/grupos/{grupo.id}", headers=otro_docente_headers)
+    assert resp.status_code == 403, resp.text
+
+
+@pytest.mark.security
+@pytest.mark.integration
+def test_docente_ajeno_no_guarda_asistencia(client, db, docente_user, otro_docente_headers):
+    grupo = _crear_grupo(db, docente_user)
+    resp = client.post(
+        f"/api/v1/examenes/grupos/{grupo.id}/asistencia",
+        json=[{"alumno_id": "a1", "fecha": "2026-01-01", "presente": True}],
+        headers=otro_docente_headers,
+    )
+    assert resp.status_code == 403, resp.text
+    db.expire_all()
+    assert (db.query(Grupo).filter(Grupo.id == grupo.id).first().asistencias or []) == []
+
+
+@pytest.mark.security
+@pytest.mark.integration
+def test_docente_ajeno_no_agrega_recurso(client, db, docente_user, otro_docente_headers):
+    grupo = _crear_grupo(db, docente_user)
+    resp = client.post(
+        f"/api/v1/examenes/grupos/{grupo.id}/recursos",
+        json={"tipo": "link", "nombre": "intruso", "url": "https://example.com/x"},
+        headers=otro_docente_headers,
+    )
+    assert resp.status_code == 403, resp.text
+
+
+@pytest.mark.security
+@pytest.mark.integration
+def test_docente_ajeno_no_elimina_recurso(
+    client, db, docente_user, docente_headers, otro_docente_headers
+):
+    grupo = _crear_grupo(db, docente_user)
+    recurso_id = client.post(
+        f"/api/v1/examenes/grupos/{grupo.id}/recursos",
+        json={"tipo": "link", "nombre": "recurso propio", "url": "https://example.com/r"},
+        headers=docente_headers,
+    ).json()["recurso"]["id"]
+
+    resp = client.delete(
+        f"/api/v1/examenes/grupos/{grupo.id}/recursos/{recurso_id}",
+        headers=otro_docente_headers,
+    )
+    assert resp.status_code == 403, resp.text
+    db.expire_all()
+    assert db.query(MaterialCompartido).filter(MaterialCompartido.id == recurso_id).first() is not None
+
+
+@pytest.mark.security
+@pytest.mark.integration
+def test_eliminar_recurso_con_grupo_equivocado_404(client, db, docente_user, docente_headers):
+    # El recurso pertenece al grupo A pero se invoca bajo el grupo B → 404
+    grupo_a = _crear_grupo(db, docente_user, nombre="Grupo A")
+    grupo_b = _crear_grupo(db, docente_user, nombre="Grupo B")
+    recurso_id = client.post(
+        f"/api/v1/examenes/grupos/{grupo_a.id}/recursos",
+        json={"tipo": "link", "nombre": "recurso A", "url": "https://example.com/a"},
+        headers=docente_headers,
+    ).json()["recurso"]["id"]
+
+    resp = client.delete(
+        f"/api/v1/examenes/grupos/{grupo_b.id}/recursos/{recurso_id}",
+        headers=docente_headers,
+    )
+    assert resp.status_code == 404, resp.text
+    db.expire_all()
+    assert db.query(MaterialCompartido).filter(MaterialCompartido.id == recurso_id).first() is not None
+
+
+@pytest.mark.security
+@pytest.mark.integration
+def test_docente_ajeno_no_vincula_carpeta(client, db, docente_user, otro_docente_headers):
+    grupo = _crear_grupo(db, docente_user)
+    resp = client.post(
+        "/api/v1/examenes/sincronizar/vincular",
+        json={"session_id": "s-hack", "grupo_id": str(grupo.id)},
+        headers=otro_docente_headers,
+    )
+    assert resp.status_code == 403, resp.text
+    db.expire_all()
+    assert db.query(Grupo).filter(Grupo.id == grupo.id).first().session_activo is None
+
+
+@pytest.mark.security
+@pytest.mark.integration
+def test_docente_ajeno_no_compartir_alumnos(client, db, docente_user, otro_docente_headers):
+    grupo = _crear_grupo(db, docente_user)
+    resp = client.post(
+        "/api/v1/examenes/compartir/alumnos",
+        json={"grupo_id": str(grupo.id), "alumnos_ids": ["x1"], "session_id": "s1"},
+        headers=otro_docente_headers,
+    )
+    assert resp.status_code == 403, resp.text
+
+
+@pytest.mark.security
+@pytest.mark.integration
+def test_docente_ajeno_no_guarda_alumnos_en_su_grupo(client, db, docente_user, otro_docente_headers):
+    grupo = _crear_grupo(db, docente_user)
+    resp = client.post(
+        "/api/v1/examenes/alumnos",
+        json=[{"nombres": "Intruso", "apellidos": "Hack", "grupo_id": str(grupo.id)}],
+        headers=otro_docente_headers,
+    )
+    assert resp.status_code == 403, resp.text
+
+
+@pytest.mark.security
+@pytest.mark.integration
+def test_eliminar_todos_alumnos_solo_afecta_grupos_propios(
+    client, db, docente_user, otro_docente_user, otro_docente_headers
+):
+    grupo_ajeno = _crear_grupo(db, docente_user, nombre="Grupo ajeno")
+    alumno_ajeno = _crear_alumno(db, nombres="No", apellidos="Borrar", grupo_id=str(grupo_ajeno.id))
+    grupo_propio = _crear_grupo(db, otro_docente_user, nombre="Grupo propio B")
+    alumno_propio = _crear_alumno(db, nombres="Si", apellidos="Borrar", grupo_id=str(grupo_propio.id))
+
+    resp = client.delete("/api/v1/examenes/alumnos", headers=otro_docente_headers)
+    assert resp.status_code == 200, resp.text
+
+    db.expire_all()
+    assert db.query(Alumno).filter(Alumno.id == alumno_ajeno.id).first().grupo_id == str(grupo_ajeno.id)
+    assert db.query(Alumno).filter(Alumno.id == alumno_propio.id).first().grupo_id is None
+
+
+@pytest.mark.security
+@pytest.mark.integration
+def test_docente_ajeno_no_elimina_alumnos_de_su_grupo(client, db, docente_user, otro_docente_headers):
+    grupo = _crear_grupo(db, docente_user)
+    alumno = _crear_alumno(db, nombres="Intacto", apellidos="Alumno", grupo_id=str(grupo.id))
+
+    resp = client.delete(
+        f"/api/v1/examenes/alumnos/grupo/{grupo.id}", headers=otro_docente_headers
+    )
+    assert resp.status_code == 403, resp.text
+    db.expire_all()
+    assert db.query(Alumno).filter(Alumno.id == alumno.id).first().grupo_id == str(grupo.id)
+
+
+@pytest.mark.security
+@pytest.mark.integration
+def test_docente_ajeno_no_obtiene_alumnos_de_su_grupo(client, db, docente_user, otro_docente_headers):
+    grupo = _crear_grupo(db, docente_user, alumnos=[{"id": "a1", "nombres": "Ana", "apellidos": "Perez"}])
+    resp = client.get(
+        f"/api/v1/examenes/alumnos/grupo/{grupo.id}", headers=otro_docente_headers
+    )
+    assert resp.status_code == 403, resp.text

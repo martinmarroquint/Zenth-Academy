@@ -699,3 +699,116 @@ def test_publico_no_atribuye_ids_de_usuarios_reales(client, db, docente_user):
     fila = db.query(ResultadoExamen).filter(ResultadoExamen.examen_id == str(examen.id)).first()
     assert fila is not None
     assert fila.alumno_id == "publico", fila.alumno_id
+
+
+# =====================================================
+# 9. SEGURIDAD: RESULTADOS Y REVISIÓN (MEDIA 4 / MEDIA 5)
+# =====================================================
+
+def _crear_resultado_propio(client, examen, estudiante_user, estudiante_headers, respuestas=None):
+    """Crea un intento y entrega un resultado a nombre del estudiante dueño."""
+    intento = client.post(
+        f"/api/v1/examenes/{examen.id}/intentos", headers=estudiante_headers
+    ).json()
+    resp = client.post(
+        "/api/v1/examenes/resultados",
+        json=_payload_resultado(
+            examen, estudiante_user.id, respuestas or {"0": 1},
+            intento_id=intento["intento_id"],
+        ),
+        headers=estudiante_headers,
+    )
+    assert resp.status_code == 201, resp.text
+    return resp.json()
+
+
+@pytest.mark.security
+@pytest.mark.integration
+def test_docente_no_ve_resultados_de_alumno_en_examen_ajeno(
+    client, db, docente_user, docente_headers, otro_docente_headers,
+    estudiante_user, estudiante_headers,
+):
+    examen = _crear_examen(db, docente_user, preguntas=[_pregunta_om()])
+    _crear_resultado_propio(client, examen, estudiante_user, estudiante_headers)
+
+    # El docente dueño del examen sí ve los resultados del alumno
+    resp_propio = client.get(
+        f"/api/v1/examenes/resultados/alumno/{estudiante_user.id}",
+        headers=docente_headers,
+    )
+    assert resp_propio.status_code == 200, resp_propio.text
+    assert len(resp_propio.json()) == 1
+
+    # ✅ MEDIA 4: un docente ajeno NO ve resultados de exámenes ajenos
+    resp_ajeno = client.get(
+        f"/api/v1/examenes/resultados/alumno/{estudiante_user.id}",
+        headers=otro_docente_headers,
+    )
+    assert resp_ajeno.status_code == 200, resp_ajeno.text
+    assert resp_ajeno.json() == [], resp_ajeno.text
+
+
+@pytest.mark.security
+@pytest.mark.integration
+def test_revision_estudiante_oculta_clave_por_defecto(
+    client, db, docente_user, estudiante_user, estudiante_headers
+):
+    examen = _crear_examen(db, docente_user, preguntas=[_pregunta_om()])
+    creado = _crear_resultado_propio(client, examen, estudiante_user, estudiante_headers)
+
+    resp = client.get(
+        f"/api/v1/examenes/resultados/{examen.id}/revision/{creado['id']}",
+        headers=estudiante_headers,
+    )
+    assert resp.status_code == 200, resp.text
+    detalle = resp.json()["detalle"]
+    assert len(detalle) == 1
+    item = detalle[0]
+    # ✅ MEDIA 5: por defecto (mostrar_respuestas=False) NO se revela la clave,
+    # pero sí se ve el resultado (correcto/incorrecto y puntos).
+    assert "respuesta_correcta" not in item, resp.text
+    assert "respuestas_aceptadas" not in item, resp.text
+    assert item["correcta"] is True
+    assert item["puntos_obtenidos"] == pytest.approx(10.0)
+
+
+@pytest.mark.security
+@pytest.mark.integration
+def test_revision_estudiante_expone_clave_si_mostrar_respuestas(
+    client, db, docente_user, estudiante_user, estudiante_headers
+):
+    examen = _crear_examen(
+        db, docente_user, preguntas=[_pregunta_om()],
+        configuracion={"mostrar_resultados": True, "mostrar_respuestas": True},
+    )
+    creado = _crear_resultado_propio(client, examen, estudiante_user, estudiante_headers)
+
+    resp = client.get(
+        f"/api/v1/examenes/resultados/{examen.id}/revision/{creado['id']}",
+        headers=estudiante_headers,
+    )
+    assert resp.status_code == 200, resp.text
+    item = resp.json()["detalle"][0]
+    assert item["respuesta_correcta"] in (1, "1"), item
+
+
+@pytest.mark.security
+@pytest.mark.integration
+def test_revision_oculta_todo_si_mostrar_resultados_false(
+    client, db, docente_user, estudiante_user, estudiante_headers
+):
+    examen = _crear_examen(
+        db, docente_user, preguntas=[_pregunta_om()],
+        configuracion={"mostrar_resultados": False, "mostrar_respuestas": True},
+    )
+    creado = _crear_resultado_propio(client, examen, estudiante_user, estudiante_headers)
+
+    resp = client.get(
+        f"/api/v1/examenes/resultados/{examen.id}/revision/{creado['id']}",
+        headers=estudiante_headers,
+    )
+    assert resp.status_code == 200, resp.text
+    item = resp.json()["detalle"][0]
+    assert item["correcta"] is None
+    assert item["puntos_obtenidos"] == 0
+    assert "respuesta_correcta" not in item, resp.text

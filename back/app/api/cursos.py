@@ -1692,7 +1692,23 @@ async def completar_leccion(
                     status_code=status.HTTP_403_FORBIDDEN,
                     detail=f"Lección bloqueada: {bloqueo.get('razon', 'Sin permiso para completar esta lección aún')}"
                 )
-        
+
+        # ✅ SEGURIDAD: una lección-examen (sin bloques, con examen_id) solo se
+        # completa cuando el estudiante YA rindió el examen. El botón "Completar"
+        # no debe poder saltarse la evaluación.
+        contenido_leccion = leccion.get("contenido") or {}
+        es_leccion_examen = bool(contenido_leccion.get("examen_id")) and not (
+            leccion.get("bloques") or []
+        )
+        nota_examen = None
+        if es_leccion_examen and current_user.rol == "estudiante":
+            nota_examen = _nota_confiable_desde_examen(db, leccion, estudiante_id)
+            if nota_examen is None:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="Debes rendir el examen antes de completar esta lección",
+                )
+
         # Obtener o crear el progreso de la lección
         progreso = _get_progreso_leccion(db, curso_id, estudiante_id, leccion_id)
         progreso.curso_id = curso_id
@@ -1709,7 +1725,8 @@ async def completar_leccion(
             progreso.fecha_liberacion = datetime.now(timezone.utc)
         # ✅ SEGURIDAD: para lecciones tipo examen, la nota se deriva del resultado
         # almacenado en el servidor. NO se confía en el valor enviado por el cliente.
-        nota_examen = _nota_confiable_desde_examen(db, leccion, estudiante_id)
+        if nota_examen is None:
+            nota_examen = _nota_confiable_desde_examen(db, leccion, estudiante_id)
         if nota_examen is not None:
             progreso.nota = nota_examen
             progreso.aprobado = nota_examen >= 10
@@ -1718,9 +1735,8 @@ async def completar_leccion(
             progreso.nota = data.nota
             progreso.aprobado = bool(data.aprobado) if data.aprobado is not None else (data.nota >= 10)
         
-        db.commit()
-        
         # Actualizar lista de lecciones completadas en la inscripción
+        # (sin commits intermedios: un solo round-trip al final → botón más rápido)
         inscripcion = db.query(InscripcionCurso).filter(
             cast(InscripcionCurso.curso_id, String) == curso_id,
             cast(InscripcionCurso.estudiante_id, String) == estudiante_id
@@ -1742,9 +1758,9 @@ async def completar_leccion(
         if leccion_id not in lecciones_lista:
             lecciones_lista.append(leccion_id)
         inscripcion.lecciones_completadas = lecciones_lista
-        db.commit()
+        db.flush()
         
-        # Recalcular progreso global
+        # Recalcular progreso global (commitea al final: un solo round-trip)
         _actualizar_progreso_curso(db, curso_id, estudiante_id)
         db.refresh(inscripcion)
         

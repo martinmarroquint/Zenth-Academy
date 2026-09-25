@@ -41,7 +41,7 @@ const extractVideoId = (url) => {
   return null;
 };
 
-const VideoPlayer = ({ videoId, onComplete, isBlocked = false }) => {
+const VideoPlayer = ({ videoId, onComplete, isBlocked = false, onNoDisponible, onDisponible }) => {
   const [cargando, setCargando] = useState(true);
   const [error, setError] = useState(false);
   const [progress, setProgress] = useState(0);
@@ -55,8 +55,22 @@ const VideoPlayer = ({ videoId, onComplete, isBlocked = false }) => {
 
   const cleanVideoId = extractVideoId(videoId);
 
+  // ✅ URL inválida: avisar al padre para que no bloquee "Completar" para siempre
+  useEffect(() => {
+    if (!isBlocked && !cleanVideoId) {
+      onNoDisponible?.();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [cleanVideoId, isBlocked]);
+
   useEffect(() => {
     if (isBlocked || !cleanVideoId) return undefined;
+
+    // ✅ Reset por video: si React reutiliza la instancia para otro video,
+    // sin esto `completadoRef` queda en true y el segundo video jamás
+    // dispara onComplete (lección intracompletable).
+    completadoRef.current = false;
+    setProgress(0);
 
     let cancelado = false;
     const targetId = idRef.current;
@@ -129,6 +143,7 @@ const VideoPlayer = ({ videoId, onComplete, isBlocked = false }) => {
             if (cancelado) return;
             setCargando(false);
             setError(false);
+            onDisponible?.();
             if (timeoutRef.current) clearTimeout(timeoutRef.current);
           },
           onStateChange: (event) => {
@@ -176,6 +191,8 @@ const VideoPlayer = ({ videoId, onComplete, isBlocked = false }) => {
             if (cancelado) return;
             setCargando(false);
             setError(true);
+            // El video no puede reproducirse → permitir completar manualmente
+            onNoDisponible?.();
           },
         },
       });
@@ -186,6 +203,7 @@ const VideoPlayer = ({ videoId, onComplete, isBlocked = false }) => {
       if (!cancelado && !playerRef.current) {
         setCargando(false);
         setError(true);
+        onNoDisponible?.();
       }
     }, 15000);
 
@@ -207,7 +225,7 @@ const VideoPlayer = ({ videoId, onComplete, isBlocked = false }) => {
         try { contenedor.innerHTML = ''; } catch { /* ignorar */ }
       }
     };
-  }, [cleanVideoId, onComplete, isBlocked]);
+  }, [cleanVideoId, onComplete, isBlocked, onNoDisponible, onDisponible]);
 
   if (isBlocked) {
     return (

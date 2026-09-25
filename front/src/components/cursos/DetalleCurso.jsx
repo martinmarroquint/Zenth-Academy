@@ -79,6 +79,9 @@ const DetalleCurso = ({
   const [moduloActual, setModuloActual] = useState(null);
   const [mostrandoLeccion, setMostrandoLeccion] = useState(false);
   const [videoCompletado, setVideoCompletado] = useState(false);
+  // ✅ true si el video no se pudo cargar (URL rota / error de YouTube):
+  // en ese caso "Completar" queda habilitado para no dejar la lección atrapada.
+  const [videoNoDisponible, setVideoNoDisponible] = useState(false);
   const [marcando, setMarcando] = useState(false);
   // ✅ RENDIMIENTO: tiempo en lección en un ref (no dispara re-render cada segundo).
   // Solo se lee al intentar completar la lección.
@@ -96,6 +99,9 @@ const DetalleCurso = ({
 
   // ✅ ESTADOS PARA EXAMEN
   const [examenActivo, setExamenActivo] = useState(null);
+  // ✅ El examen SOLO arranca al pulsar "Comenzar examen": la precarga de
+  // datos no debe montar ExamenActivo (encendía el cronómetro al abrir la lección).
+  const [examenIniciado, setExamenIniciado] = useState(false);
   const [cargandoExamen, setCargandoExamen] = useState(false);
   const [errorExamen, setErrorExamen] = useState('');
   const [resultadoExamen, setResultadoExamen] = useState(null);
@@ -317,8 +323,10 @@ const DetalleCurso = ({
     setLeccionActual(leccion);
     setMostrandoLeccion(true);
     setVideoCompletado(false);
+    setVideoNoDisponible(false);
     // ✅ Resetear estado de examen al cambiar de lección
     setExamenActivo(null);
+    setExamenIniciado(false);
     setResultadoExamen(null);
     setErrorExamen('');
     tiempoEnLeccionRef.current = 0;
@@ -351,6 +359,8 @@ const DetalleCurso = ({
   }, [planLecciones, indiceLeccionActual]);
 
   // ✅ PRE-CARGAR datos del examen cuando se selecciona una lección tipo examen
+  // (no fatal: si falla — p. ej. 403 transitorio — se muestra la pantalla de
+  // información con "Comenzar examen", que reintenta con feedback de error)
   useEffect(() => {
     if (!leccionActual || leccionActual.tipo !== 'examen') return;
     const contenido = leccionActual.contenido || {};
@@ -359,7 +369,11 @@ const DetalleCurso = ({
     setCargandoExamen(true);
     examenesService.obtenerExamen(contenido.examen_id)
       .then(datos => { if (!cancelado) setExamenActivo(datos); })
-      .catch(() => { if (!cancelado) setErrorExamen('No se pudo cargar el examen.'); })
+      .catch(e => {
+        if (!cancelado) {
+          console.warn('No se pudo precargar el examen (se cargará al iniciar):', e);
+        }
+      })
       .finally(() => { if (!cancelado) setCargandoExamen(false); });
     return () => { cancelado = true; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -386,6 +400,7 @@ const DetalleCurso = ({
     setLeccionActual(null);
     setModuloActual(null);
     setExamenActivo(null);
+    setExamenIniciado(false);
     setResultadoExamen(null);
     setErrorExamen('');
     tiempoEnLeccionRef.current = 0;
@@ -393,6 +408,14 @@ const DetalleCurso = ({
 
   const handleVideoComplete = useCallback(() => {
     setVideoCompletado(true);
+  }, []);
+
+  const handleVideoNoDisponible = useCallback(() => {
+    setVideoNoDisponible(true);
+  }, []);
+
+  const handleVideoDisponible = useCallback(() => {
+    setVideoNoDisponible(false);
   }, []);
 
   // ✅ Cuando el video termina, marcar la lección en el backend automáticamente.
@@ -431,20 +454,31 @@ const DetalleCurso = ({
     }
   }, [usuarioId, cursoId]);
 
+  // ✅ La respuesta de POST /completar ya trae el progreso completo:
+  // aplicarla directo elimina el GET /progreso extra (la mitad de la latencia).
+  const aplicarProgresoCompletado = useCallback((resp) => {
+    if (!resp || typeof resp.progreso !== 'number') return false;
+    setProgreso(resp.progreso || 0);
+    setLeccionesCompletadas((resp.lecciones_completadas || []).map(String));
+    setCursoCompletado(!!resp.completado_curso);
+    return true;
+  }, []);
+
   // ✅ Completar lección desde examen (nota) y refrescar el progreso en la UI
   const completarDesdeExamen = useCallback(async (calificacion, aprobado) => {
     if (!curso?.id || !leccionActual?.id || !usuarioId) return;
     try {
-      await cursosService.completarLeccion(
+      const resp = await cursosService.completarLeccion(
         curso.id, leccionActual.id, usuarioId,
         Math.round((tiempoEnLeccionRef.current || 0) / 1000),
         calificacion, aprobado
       );
+      if (!aplicarProgresoCompletado(resp)) await refrescarProgreso();
     } catch (e) {
       console.warn('Error guardando resultado de examen:', e);
+      await refrescarProgreso();
     }
-    await refrescarProgreso();
-  }, [curso?.id, leccionActual?.id, usuarioId, refrescarProgreso]);
+  }, [curso?.id, leccionActual?.id, usuarioId, refrescarProgreso, aplicarProgresoCompletado]);
 
   const handleMarcarCompletada = async (opts = {}) => {
     const silencioso = !!opts.silencioso;
@@ -456,9 +490,19 @@ const DetalleCurso = ({
     const bloquesLeccion = getBloquesDeLeccion(leccionActual);
     const tieneVideo = bloquesLeccion.some(b => b.tipo === 'video');
     const tieneTexto = bloquesLeccion.some(b => b.tipo === 'texto');
-    
+    const esLeccionExamen = bloquesLeccion.length === 0 &&
+      (getTipoLeccion(leccionActual) === 'examen' ||
+       !!(leccionActual.contenido || {}).examen_id);
+
+    // ✅ Lección-examen: NO se puede completar a mano; solo al rendir el examen
+    if (esLeccionExamen) {
+      if (!silencioso) toast.warning('Rinde el examen para completar esta lección.');
+      return;
+    }
+
     // Si tiene video, exigir que este marcado como completado
-    if (tieneVideo && !videoCompletado) {
+    // (salvo que el video no esté disponible: no se debe dejar la lección atrapada)
+    if (tieneVideo && !videoCompletado && !videoNoDisponible) {
       if (!silencioso) toast.warning('Debes ver el video completo antes de marcar la leccion como completada.');
       return;
     }
@@ -477,14 +521,23 @@ const DetalleCurso = ({
     }
 
     setMarcando(true);
+    // ✅ Optimista: la UI se marca completada al instante y se reconcilia con
+    // la respuesta del servidor (en error se revierte).
+    const idLeccion = String(leccionActual.id);
+    const leccionesPrevias = leccionesCompletadas;
+    setLeccionesCompletadas(prev =>
+      prev.includes(idLeccion) ? prev : [...prev, idLeccion]
+    );
     try {
-      await cursosService.completarLeccion(
+      const resp = await cursosService.completarLeccion(
         curso.id,
         leccionActual.id,
         usuarioId,
         Math.round((tiempoEnLeccionRef.current || 0) / 1000)
       );
-      const prog = await refrescarProgreso();
+      if (!aplicarProgresoCompletado(resp)) {
+        await refrescarProgreso();
+      }
       setVideoCompletado(true);
       // Solo toast en clic manual: el auto-disparo del video no debe spamear
       if (!silencioso) {
@@ -492,7 +545,7 @@ const DetalleCurso = ({
       }
       
       // Si el curso se completo, cargar el certificado
-      if (prog?.completado) {
+      if (resp?.completado_curso) {
         setTimeout(async () => {
           try {
             const certs = await certificadosService.listar({ curso_id: cursoId, estudiante_id: usuarioId });
@@ -504,6 +557,8 @@ const DetalleCurso = ({
         }, 1000);
       }
     } catch (error) {
+      // Revertir el marcado optimista (el backend no lo aceptó)
+      setLeccionesCompletadas(leccionesPrevias);
       const mensaje = error?.response?.data?.detail || error?.message || 'Error al completar la leccion';
       // En auto-completado silencioso: no spamear toasts de error
       // (403 "No tienes acceso" / red / 5xx no deben reintentar en loop)
@@ -614,8 +669,8 @@ const DetalleCurso = ({
 
     // ✅ CORREGIDO: Lecciones tipo examen o quiz no tienen bloques — manejar directamente
     if (bloques.length === 0) {
-      // Si hay examen activo cargado, mostrar ExamenActivo
-      if (tipoLeccion === 'examen' && examenActivo) {
+      // Si el examen ya fue iniciado por el usuario, mostrar ExamenActivo
+      if (tipoLeccion === 'examen' && examenActivo && examenIniciado) {
         return (
           <div className="bg-white rounded-xl border border-gray-200 overflow-hidden" style={{ minHeight: '600px' }}>
             <ExamenActivo
@@ -630,6 +685,7 @@ const DetalleCurso = ({
               }}
               onFinalizar={(resultado) => {
                 setExamenActivo(null);
+                setExamenIniciado(false);
                 const calificacion = resultado?.calificacion || 0;
                 const puntajeAprobacion = examenActivo?.puntaje_aprobacion || 60;
                 const aprobado = calificacion >= puntajeAprobacion;
@@ -656,7 +712,7 @@ const DetalleCurso = ({
                 }
               }}
               onAbandonar={() => {
-                setExamenActivo(null);
+                setExamenIniciado(false);
               }}
             />
           </div>
@@ -704,7 +760,10 @@ const DetalleCurso = ({
                     if (contenidoLeccion.examen_id) {
                       setCargandoExamen(true);
                       examenesService.obtenerExamen(contenidoLeccion.examen_id)
-                        .then(datos => setExamenActivo(datos))
+                        .then(datos => {
+                          setExamenActivo(datos);
+                          setExamenIniciado(true);
+                        })
                         .catch(() => setErrorExamen('No se pudo cargar el examen'))
                         .finally(() => setCargandoExamen(false));
                     }
@@ -807,13 +866,17 @@ const DetalleCurso = ({
               <button
                 onClick={async () => {
                   if (!contenidoLeccion.examen_id) return;
-                  // Si ya tenemos los datos, ir directo al examen
-                  if (examenActivo) return;
+                  // Si ya tenemos los datos, iniciar directo al examen
+                  if (examenActivo) {
+                    setExamenIniciado(true);
+                    return;
+                  }
                   setCargandoExamen(true);
                   setErrorExamen('');
                   try {
                     const datos = await examenesService.obtenerExamen(contenidoLeccion.examen_id);
                     setExamenActivo(datos);
+                    setExamenIniciado(true);
                   } catch {
                     setErrorExamen('No se pudo cargar el examen. Intenta de nuevo.');
                   } finally {
@@ -855,6 +918,8 @@ const DetalleCurso = ({
           videoId={contenido.video_url}
           isBlocked={estaBloqueado}
           onComplete={handleVideoComplete}
+          onNoDisponible={handleVideoNoDisponible}
+          onDisponible={handleVideoDisponible}
         />;
 
       case 'texto':
@@ -882,8 +947,8 @@ const DetalleCurso = ({
           );
         }
 
-        // ✅ Examen de ESTE bloque activo — renderizar el reproductor real
-        const examenEsDeEsteBloque = examenActivo &&
+        // ✅ Examen de ESTE bloque activo e iniciado por el usuario
+        const examenEsDeEsteBloque = examenActivo && examenIniciado &&
           (!contenido.examen_id || String(examenActivo.id) === String(contenido.examen_id));
 
         if (examenEsDeEsteBloque) {
@@ -901,6 +966,7 @@ const DetalleCurso = ({
                 }}
                 onFinalizar={(resultado) => {
                   setExamenActivo(null);
+                  setExamenIniciado(false);
                   // ✅ Enviar nota y refrescar progreso en la UI
                   if (curso?.id && leccionActual?.id && usuarioId) {
                     const calificacion = resultado?.calificacion || 0;
@@ -908,7 +974,7 @@ const DetalleCurso = ({
                     completarDesdeExamen(calificacion, aprobado);
                   }
                 }}
-                onAbandonar={() => setExamenActivo(null)}
+                onAbandonar={() => setExamenIniciado(false)}
               />
             </div>
           );
@@ -951,6 +1017,7 @@ const DetalleCurso = ({
                   try {
                     const datos = await examenesService.obtenerExamen(contenido.examen_id);
                     setExamenActivo(datos);
+                    setExamenIniciado(true);
                   } catch {
                     setErrorExamen('No se pudo cargar el examen. Intenta de nuevo.');
                   } finally {
@@ -1087,6 +1154,15 @@ const DetalleCurso = ({
     // marcaba "Completada" sin llamar a completarLeccion → el % se quedaba en 0.
     const estaCompletada = esLeccionCompletada(leccionActual.id);
     const bloques = getBloquesDeLeccion(leccionActual);
+    // ✅ Comportamiento del botón según tipo de lección:
+    //  - examen (sin bloques): solo se completa al rendir el examen → chip de aviso
+    //  - video: bloqueado hasta terminar el video (luego auto-completa)
+    //  - texto/material: botón "Completar" libre
+    const esLeccionExamen = bloques.length === 0 &&
+      (getTipoLeccion(leccionActual) === 'examen' ||
+       !!(leccionActual.contenido || {}).examen_id);
+    const tieneVideoLeccion = bloques.some(b => b.tipo === 'video');
+    const videoPendiente = tieneVideoLeccion && !videoCompletado && !videoNoDisponible;
     const esBloqueadaPorPago = !esDocente && !estaInscrito && !tieneAcceso;
     const esBloqueadaSecuencial = leccionBloqueadaInfo?.bloqueada || false;
     const esBloqueada = esBloqueadaPorPago || esBloqueadaSecuencial;
@@ -1138,7 +1214,24 @@ const DetalleCurso = ({
               <span className="text-xs text-gray-400 hidden sm:block">
                 {progreso}% completado
               </span>
-              {!esBloqueada && (
+              {!esBloqueada && esLeccionExamen && !estaCompletada && (
+                <span
+                  className="px-3 py-1.5 text-xs font-medium rounded-lg bg-amber-50 text-amber-600 border border-amber-200 flex items-center gap-1.5"
+                  title="Esta lección se completa automáticamente al rendir el examen"
+                >
+                  <Award className="w-3.5 h-3.5" /> Rinde el examen
+                </span>
+              )}
+              {!esBloqueada && !esLeccionExamen && videoPendiente && !estaCompletada && (
+                <button
+                  disabled
+                  className="px-3 py-1.5 text-xs font-medium rounded-lg bg-gray-100 text-gray-500 border border-gray-200 flex items-center gap-1.5 cursor-not-allowed"
+                  title="El video debe terminar para habilitar la lección"
+                >
+                  <Play className="w-3.5 h-3.5" /> Termina el video
+                </button>
+              )}
+              {!esBloqueada && (!esLeccionExamen) && (!videoPendiente || estaCompletada) && (
                 <button
                   onClick={handleMarcarCompletada}
                   disabled={marcando || estaCompletada}
@@ -1146,10 +1239,10 @@ const DetalleCurso = ({
                     estaCompletada ? 'bg-emerald-50 text-emerald-600' : 'bg-[#0f766e] text-white hover:bg-[#0d5e57]'
                   } disabled:opacity-50`}
                 >
-                  {marcando ? (
-                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                  ) : estaCompletada ? (
+                  {estaCompletada ? (
                     <><Check className="w-3.5 h-3.5" /> Completada</>
+                  ) : marcando ? (
+                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
                   ) : (
                     <><Check className="w-3.5 h-3.5" /> Completar</>
                   )}

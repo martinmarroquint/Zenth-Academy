@@ -2227,6 +2227,20 @@ def obtener_examen(
             raise HTTPException(status_code=403, detail="Examen no disponible")
         return _serializar_examen(examen, incluir_respuestas=False)
 
-    # ✅ SEGURIDAD: los docentes solo gestionan sus propios exámenes.
-    _verificar_ownership_examen(examen, current_user)
-    return _serializar_examen(examen, incluir_respuestas=True)
+    # ✅ SEGURIDAD: los docentes solo GESTIONAN (con clave) sus propios exámenes.
+    # Si el examen es ajeno pero está PUBLICADO, se devuelve la misma versión
+    # saneada que ve un estudiante (la vista de lección del curso permite al
+    # docente ver el curso como alumno). Sin clave de respuestas en ningún caso.
+    es_dueno = (
+        current_user.rol == 'admin'
+        or not examen.docente_id
+        or str(examen.docente_id) == str(current_user.id)
+    )
+    if es_dueno:
+        return _serializar_examen(examen, incluir_respuestas=True)
+    if examen.estado != 'PUBLICADO':
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="No tienes permiso para gestionar este examen",
+        )
+    return _serializar_examen(examen, incluir_respuestas=False)

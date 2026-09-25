@@ -238,8 +238,24 @@ def test_docente_no_puede_limpiar_resultados_de_otro(
 
 
 @pytest.mark.integration
-def test_docente_no_puede_obtener_examen_de_otro(client, db, docente_user, otro_docente_headers):
+def test_docente_ajeno_no_obtiene_clave_de_examen_publicado(
+    client, db, docente_user, otro_docente_headers
+):
+    """Un docente sin ownership ve un examen PUBLICADO en modo estudiante
+    (la vista de lección del curso lo permite), pero NUNCA la clave de respuestas."""
     examen = _crear_examen(db, docente_user, estado="PUBLICADO", preguntas=[_pregunta_om()])
+
+    resp = client.get(f"/api/v1/examenes/{examen.id}", headers=otro_docente_headers)
+    assert resp.status_code == 200, resp.text
+    assert resp.json()["preguntas"][0]["respuesta_correcta"] is None
+
+
+@pytest.mark.integration
+def test_docente_ajeno_no_obtiene_examen_borrador_de_otro(
+    client, db, docente_user, otro_docente_headers
+):
+    """Un examen BORRADOR ajeno sigue siendo 403 para otro docente."""
+    examen = _crear_examen(db, docente_user, estado="BORRADOR", preguntas=[_pregunta_om()])
 
     resp = client.get(f"/api/v1/examenes/{examen.id}", headers=otro_docente_headers)
     assert resp.status_code == 403, resp.text

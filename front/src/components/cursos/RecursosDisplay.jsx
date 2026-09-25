@@ -14,6 +14,8 @@ const RecursosDisplay = ({ recursos, isBlocked = false }) => {
   const [previewUrl, setPreviewUrl] = useState(null);
   const [previewTitle, setPreviewTitle] = useState('');
   const [previewType, setPreviewType] = useState('');
+  const [previewEsImagen, setPreviewEsImagen] = useState(false);
+  const [previewSoloLink, setPreviewSoloLink] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState(null);
   const [isFullscreen, setIsFullscreen] = useState(false);
@@ -110,6 +112,25 @@ const RecursosDisplay = ({ recursos, isBlocked = false }) => {
     return null;
   };
 
+  // ✅ YouTube: extraer el ID y embeber /embed/ para poder previsualizar
+  // en el modal en lugar de sacar al usuario de la plataforma.
+  const getYouTubePreviewUrl = (url) => {
+    if (!url) return null;
+    const limpio = String(url).trim();
+    if (/^[a-zA-Z0-9_-]{11}$/.test(limpio)) return `https://www.youtube.com/embed/${limpio}`;
+    const patterns = [
+      /(?:youtube\.com\/watch\?v=)([^&#?]+)/,
+      /(?:youtu\.be\/)([^&#?]+)/,
+      /(?:youtube\.com\/embed\/)([^&#?]+)/,
+      /(?:youtube\.com\/shorts\/)([^&#?]+)/,
+    ];
+    for (const pattern of patterns) {
+      const match = limpio.match(pattern);
+      if (match) return `https://www.youtube.com/embed/${match[1]}`;
+    }
+    return null;
+  };
+
   const getFileIcon = (url, nombre) => {
     const type = detectFileType(url, nombre);
     const icons = {
@@ -179,15 +200,24 @@ const RecursosDisplay = ({ recursos, isBlocked = false }) => {
     setError(null);
     setIsLoading(true);
     setIsFullscreen(false);
-    
-    const preview = getDrivePreviewUrl(recurso.url);
-    
+
+    const tipo = detectFileType(recurso.url, recurso.nombre);
+    // ✅ Jerarquía de vista previa (nada de window.open silencioso):
+    //   Drive → YouTube → cualquier http(s) se muestra en el modal;
+    //   el usuario puede saltar a pestaña nueva con el botón del modal.
+    const preview =
+      getDrivePreviewUrl(recurso.url) ||
+      getYouTubePreviewUrl(recurso.url) ||
+      (esUrlHttpSegura(recurso.url) ? recurso.url : null);
+
     if (preview) {
       setPreviewUrl(preview);
-      setPreviewTitle(recurso.nombre || 'Documento');
-      setPreviewType(detectFileType(recurso.url, recurso.nombre));
-    } else if (esUrlHttpSegura(recurso.url)) {
-      window.open(recurso.url, '_blank', 'noopener,noreferrer');
+      setPreviewTitle(recurso.nombre || 'Recurso');
+      setPreviewType(tipo);
+      setPreviewEsImagen(tipo === 'image');
+      setPreviewSoloLink(tipo === 'link' && !getYouTubePreviewUrl(recurso.url));
+    } else {
+      toast.warning('Este enlace no es válido para previsualizar.');
     }
   };
 
@@ -204,6 +234,8 @@ const RecursosDisplay = ({ recursos, isBlocked = false }) => {
     setPreviewUrl(null);
     setPreviewTitle('');
     setPreviewType('');
+    setPreviewEsImagen(false);
+    setPreviewSoloLink(false);
     setError(null);
     setIsLoading(true);
     setIsFullscreen(false);
@@ -428,23 +460,38 @@ const RecursosDisplay = ({ recursos, isBlocked = false }) => {
                 </div>
               ) : (
                 <div className="w-full h-full" style={{ minHeight: '500px' }}>
-                  <iframe
-                    ref={iframeRef}
-                    src={previewUrl}
-                    className="w-full h-full border-0"
-                    allowFullScreen
-                    title={`Vista previa de ${previewTitle}`}
-                    onLoad={handleIframeLoad}
-                    onError={handleIframeError}
-                    sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-presentation"
-                    loading="lazy"
-                    style={{
-                      width: '100%',
-                      height: '100%',
-                      minHeight: '500px',
-                      display: 'block'
-                    }}
-                  />
+                  {previewEsImagen ? (
+                    <img
+                      src={previewUrl}
+                      alt={previewTitle}
+                      className="w-full h-full object-contain bg-white"
+                      onLoad={handleIframeLoad}
+                      onError={handleIframeError}
+                      style={{ minHeight: '500px' }}
+                    />
+                  ) : (
+                    <iframe
+                      ref={iframeRef}
+                      src={previewUrl}
+                      className="w-full h-full border-0"
+                      allowFullScreen
+                      title={`Vista previa de ${previewTitle}`}
+                      onLoad={handleIframeLoad}
+                      onError={handleIframeError}
+                      // Sandbox solo para Google: YouTube/generales necesitan
+                      // su propio marco para renderizar correctamente.
+                      sandbox={esUrlGoogleSegura(previewUrl)
+                        ? 'allow-scripts allow-same-origin allow-forms allow-popups allow-presentation'
+                        : undefined}
+                      loading="lazy"
+                      style={{
+                        width: '100%',
+                        height: '100%',
+                        minHeight: '500px',
+                        display: 'block'
+                      }}
+                    />
+                  )}
                 </div>
               )}
             </div>
@@ -458,11 +505,16 @@ const RecursosDisplay = ({ recursos, isBlocked = false }) => {
                   {previewType === 'google-slide' ? 'Google Slides' :
                    previewType === 'google-doc' ? 'Google Docs' :
                    previewType === 'google-sheet' ? 'Google Sheets' :
-                   'Google Drive'}
+                   esUrlGoogleSegura(previewUrl) ? 'Google Drive' :
+                   String(previewUrl || '').includes('youtube.com/embed') ? 'YouTube' :
+                   previewSoloLink ? 'Sitio web' :
+                   getFileTypeLabel(previewUrl, previewTitle)}
                 </span>
                 <span className="hidden sm:block w-px h-3 bg-gray-200" />
                 <span className="text-xs text-gray-400 hidden sm:inline">
-                  {isFullscreen ? 'Pantalla completa' : 'Vista previa'}
+                  {previewSoloLink && !isLoading
+                    ? 'Si la vista previa no carga, pulsa "Abrir en pestaña"'
+                    : isFullscreen ? 'Pantalla completa' : 'Vista previa'}
                 </span>
               </div>
               <div className="flex items-center gap-2 w-full sm:w-auto justify-end">
@@ -478,7 +530,7 @@ const RecursosDisplay = ({ recursos, isBlocked = false }) => {
                   rel="noopener noreferrer"
                   className="text-xs font-medium text-white bg-[#0f766e] hover:bg-[#0d5e57] transition-colors px-3 py-1 rounded-lg whitespace-nowrap"
                 >
-                  Abrir en Drive
+                  {esUrlGoogleSegura(previewUrl) ? 'Abrir en Drive' : 'Abrir en pestaña'}
                 </a>
               </div>
             </div>

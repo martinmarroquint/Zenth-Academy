@@ -996,38 +996,21 @@ def _rendir_examen(client, examen, estudiante_user, estudiante_headers, respuest
 
 @pytest.mark.security
 @pytest.mark.integration
-def test_examen_de_leccion_bloqueada_no_avanza_progreso(
+def test_examen_de_leccion_bloqueada_no_permite_rendir(
     client, db, docente_user, estudiante_user, estudiante_headers
 ):
-    """✅ MEDIA 7: rendir el examen de una lección bloqueada NO la completa."""
-    from app.models.curso import InscripcionCurso, ProgresoLeccion
-
+    """✅ MEDIA 7: no se puede rendir el examen de una lección bloqueada."""
     examen = _crear_examen(db, docente_user, estado="PUBLICADO", preguntas=[_pregunta_om()])
     curso = _crear_curso_custom(
         db, docente_user, estudiante_user,
         _modulos_con_examen(examen.id), tipo_bloqueo="secuencial",
     )
 
-    resp = _rendir_examen(client, examen, estudiante_user, estudiante_headers)
-    assert resp.status_code == 201, resp.text
-    assert resp.json()["calificacion"] == pytest.approx(100.0)
+    resp = client.post(f"/api/v1/examenes/{examen.id}/intentos", headers=estudiante_headers)
+    assert resp.status_code == 403, resp.text
+    assert "bloqueada" in resp.json()["detail"].lower()
 
-    db.expire_all()
-    prog_l2 = db.query(ProgresoLeccion).filter(
-        ProgresoLeccion.curso_id == str(curso.id),
-        ProgresoLeccion.estudiante_id == str(estudiante_user.id),
-        ProgresoLeccion.leccion_id == "l2",
-    ).first()
-    assert prog_l2 is None or prog_l2.completado is False, (
-        "La lección bloqueada no debe completarse al rendir el examen"
-    )
-    insc = db.query(InscripcionCurso).filter(
-        InscripcionCurso.curso_id == str(curso.id),
-        InscripcionCurso.estudiante_id == str(estudiante_user.id),
-    ).first()
-    assert (insc.progreso or 0) < 100
-
-    # Al desbloquear (completar l1), l2 se completa usando la nota ya registrada.
+    # Al desbloquear (completar l1) ya puede iniciar el intento
     r_l1 = client.post(
         f"/api/v1/cursos/{curso.id}/lecciones/l1/completar",
         json={"usuario_id": str(estudiante_user.id)},
@@ -1035,21 +1018,58 @@ def test_examen_de_leccion_bloqueada_no_avanza_progreso(
     )
     assert r_l1.status_code == 200, r_l1.text
 
-    r_l2 = client.post(
-        f"/api/v1/cursos/{curso.id}/lecciones/l2/completar",
-        json={"usuario_id": str(estudiante_user.id)},
-        headers=estudiante_headers,
+    intento = client.post(f"/api/v1/examenes/{examen.id}/intentos", headers=estudiante_headers)
+    assert intento.status_code == 200, intento.text
+
+
+@pytest.mark.security
+@pytest.mark.integration
+def test_examen_reusado_no_completa_la_leccion_bloqueada(
+    client, db, docente_user, estudiante_user, estudiante_headers
+):
+    """✅ MEDIA 7 (defensa en profundidad): si el examen se reutiliza en dos
+    cursos, rendirlo completa la lección desbloqueada pero NUNCA la bloqueada."""
+    from app.models.curso import ProgresoLeccion
+
+    examen = _crear_examen(db, docente_user, estado="PUBLICADO", preguntas=[_pregunta_om()])
+    # Curso A: el examen es la primera lección → desbloqueada
+    curso_a = _crear_curso_custom(
+        db, docente_user, estudiante_user,
+        [{
+            "id": "ma",
+            "titulo": "Módulo A",
+            "lecciones": [{
+                "id": "la", "titulo": "Examen", "tipo": "examen",
+                "contenido": {"examen_id": str(examen.id)},
+            }],
+        }],
+        tipo_bloqueo="ninguno",
     )
-    assert r_l2.status_code == 200, r_l2.text
+    # Curso B: el examen está precedido por una lección de texto → bloqueado
+    curso_b = _crear_curso_custom(
+        db, docente_user, estudiante_user,
+        _modulos_con_examen(examen.id), tipo_bloqueo="secuencial",
+    )
+
+    resp = _rendir_examen(client, examen, estudiante_user, estudiante_headers)
+    assert resp.status_code == 201, resp.text
 
     db.expire_all()
-    prog_l2 = db.query(ProgresoLeccion).filter(
-        ProgresoLeccion.curso_id == str(curso.id),
+    prog_a = db.query(ProgresoLeccion).filter(
+        ProgresoLeccion.curso_id == str(curso_a.id),
+        ProgresoLeccion.estudiante_id == str(estudiante_user.id),
+        ProgresoLeccion.leccion_id == "la",
+    ).first()
+    assert prog_a is not None and prog_a.completado is True
+
+    prog_b = db.query(ProgresoLeccion).filter(
+        ProgresoLeccion.curso_id == str(curso_b.id),
         ProgresoLeccion.estudiante_id == str(estudiante_user.id),
         ProgresoLeccion.leccion_id == "l2",
     ).first()
-    assert prog_l2 is not None and prog_l2.completado is True
-    assert prog_l2.nota == pytest.approx(100.0)
+    assert prog_b is None or prog_b.completado is False, (
+        "La lección bloqueada del curso B no debe completarse"
+    )
 
 
 @pytest.mark.integration

@@ -1320,6 +1320,64 @@ def eliminar_alumnos_por_grupo(
     return {"mensaje": f"Alumnos del grupo {grupo_id} desvinculados", "ok": True}
 
 
+def _leccion_usa_examen(leccion: dict, examen_id) -> bool:
+    """True si la lección referencia el examen: lección-examen pura
+    (contenido.examen_id) o bloque-examen embebido."""
+    contenido = leccion.get("contenido") or {}
+    if str(contenido.get("examen_id") or "") == str(examen_id):
+        return True
+    for bloque in leccion.get("bloques") or []:
+        if bloque.get("tipo") == "examen":
+            eid = (bloque.get("contenido") or {}).get("examen_id")
+            if str(eid or "") == str(examen_id):
+                return True
+    return False
+
+
+def _bloqueo_examen_en_cursos(db, examen_id, alumno_id):
+    """✅ SEGURIDAD (MEDIA 7): un examen usado en lecciones de cursos donde el
+    alumno está INSCRITO no se puede rendir si TODAS esas lecciones están
+    bloqueadas (fecha/secuencia/desempeño). Si hay al menos una ruta abierta,
+    o el alumno no está inscrito en ningún curso que use el examen (examen
+    suelto / compartido por link), no se bloquea.
+
+    Devuelve (bloqueado: bool, razon: str|None).
+    """
+    from app.models.curso import Curso, InscripcionCurso
+    from app.api.cursos import _verificar_bloqueo_leccion_internal
+
+    examen = db.query(Examen).filter(Examen.id == str(examen_id)).first()
+    if not examen:
+        return False, None
+
+    query = db.query(Curso)
+    if examen.docente_id:
+        query = query.filter(cast(Curso.docente_id, String) == str(examen.docente_id))
+
+    razon_bloqueo = None
+    for curso in query.all():
+        inscripcion = db.query(InscripcionCurso).filter(
+            cast(InscripcionCurso.curso_id, String) == str(curso.id),
+            cast(InscripcionCurso.estudiante_id, String) == str(alumno_id),
+        ).first()
+        if not inscripcion:
+            continue
+        for modulo in curso.modulos or []:
+            for leccion in modulo.get("lecciones") or []:
+                if not _leccion_usa_examen(leccion, examen_id):
+                    continue
+                bloqueo = _verificar_bloqueo_leccion_internal(
+                    db, curso, str(leccion.get("id")), str(alumno_id), "estudiante"
+                )
+                if not bloqueo.get("bloqueada"):
+                    # Hay una ruta abierta (otro curso/lección): se permite rendir
+                    return False, None
+                razon_bloqueo = razon_bloqueo or bloqueo.get("razon")
+    if razon_bloqueo:
+        return True, razon_bloqueo
+    return False, None
+
+
 def _actualizar_progreso_por_examen(db, examen_id, alumno_id, calificacion):
     """
     Cuando un alumno rinde un examen asociado a una lección de curso,
@@ -1462,6 +1520,16 @@ def iniciar_intento(
     if current_user.rol not in ('admin', 'docente'):
         if examen.estado != 'PUBLICADO':
             raise HTTPException(status_code=403, detail="Examen no disponible")
+        # ✅ SEGURIDAD (MEDIA 7): respetar los gates de bloqueo del curso: no se
+        # puede rendir el examen de una lección bloqueada (fecha/secuencia/
+        # desempeño). Los exámenes sueltos o compartidos por link no se ven
+        # afectados (el alumno no está inscrito en ningún curso que los use).
+        bloqueado, razon = _bloqueo_examen_en_cursos(db, examen.id, str(current_user.id))
+        if bloqueado:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail=f"Lección bloqueada: {razon or 'Aún no puedes rendir este examen'}",
+            )
         if examen.intentos_permitidos and examen.intentos_permitidos > 0 and usados >= examen.intentos_permitidos:
             raise HTTPException(status_code=400, detail="Límite de intentos alcanzado")
 

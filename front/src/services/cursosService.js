@@ -143,10 +143,16 @@ const cursosService = {
         usuario_id: usuarioId,
         tiempo_invertido: tiempoInvertido
       };
-      // ✅ Enviar nota y aprobado si existen (ej: resultado de examen)
+      // ✅ Enviar nota y aprobado si existen (ej: resultado de examen).
+      // `aprobado` solo se envía si el caller lo conoce: el servidor es la
+      // autoridad (escala 0-100 en exámenes, 0-20 en notas manuales). Antes el
+      // front adivinaba con `nota >= 10`, que en exámenes (escala 0-100) era
+      // incorrecto y aprobaba con 10/100.
       if (nota !== null && nota !== undefined) {
         body.nota = nota;
-        body.aprobado = aprobado !== null ? aprobado : nota >= 10;
+        if (aprobado !== null && aprobado !== undefined) {
+          body.aprobado = aprobado;
+        }
       }
       return await api.post(`/cursos/${cursoId}/lecciones/${leccionId}/completar`, body);
     } catch (error) {

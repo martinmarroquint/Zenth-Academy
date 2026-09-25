@@ -53,14 +53,14 @@ describe('cursosService', () => {
       });
     });
 
-    it('envía nota y aprobado cuando se pasa nota', async () => {
+    it('envía nota sin aprobado si el caller no lo conoce (decide el servidor)', async () => {
       api.post.mockResolvedValue({ ok: true });
 
       await cursosService.completarLeccion(1, 2, 3, 120, 15);
 
       const [, body] = api.post.mock.calls[0];
       expect(body.nota).toBe(15);
-      expect(body.aprobado).toBe(true);
+      expect(body.aprobado).toBeUndefined();
     });
 
     it('usa aprobado explícito cuando se proporciona', async () => {

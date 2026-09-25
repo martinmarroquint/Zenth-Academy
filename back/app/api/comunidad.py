@@ -2,6 +2,7 @@
 # ROUTER DE FORO / COMUNIDAD
 
 from fastapi import APIRouter, Depends, HTTPException, Query
+from sqlalchemy import or_, and_, cast, String
 from sqlalchemy.orm import Session
 from typing import List, Optional
 import uuid
@@ -19,6 +20,52 @@ from app.schemas.post import (
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
+
+# ✅ SEGURIDAD (BAJA 11): lista blanca de estados de publicación
+ESTADOS_POST_VALIDOS = {"publicado", "archivado", "borrador"}
+
+
+def _docente_puede_gestionar_curso(db: Session, curso_id, current_user) -> bool:
+    """✅ SEGURIDAD (MEDIA 9 / BAJA 11): un docente solo publica/edita foros de
+    cursos que le pertenecen (admin: cualquiera). El foro global siempre se permite."""
+    if current_user.rol == "admin":
+        return True
+    if not curso_id:
+        return True
+    from app.models.curso import Curso
+
+    curso = db.query(Curso).filter(Curso.id == str(curso_id)).first()
+    if not curso:
+        return False
+    if not curso.docente_id:
+        return True  # curso legacy sin dueño
+    return str(curso.docente_id) == str(current_user.id)
+
+
+def _puede_ver_post(db: Session, post: Post, current_user) -> bool:
+    """✅ SEGURIDAD (MEDIA 3/4/8): visibilidad de una publicación.
+    - admin: todo.
+    - docente: lo propio (cualquier estado) + lo PUBLICADO global o de sus cursos.
+    - estudiante: solo PUBLICADO del foro global o de cursos donde está inscrito.
+    """
+    if current_user.rol == "admin":
+        return True
+    publicado = (post.estado or "publicado") == "publicado"
+    if current_user.rol == "docente":
+        if str(post.docente_id) == str(current_user.id):
+            return True
+        if not publicado:
+            return False
+        return _docente_puede_gestionar_curso(db, post.curso_id, current_user)
+    # estudiante
+    if not publicado:
+        return False
+    if not post.curso_id:
+        return True
+    from app.api.cursos import _esta_inscrito
+
+    return _esta_inscrito(db, str(post.curso_id), str(current_user.id))
+
 
 def _post_to_dict(db: Session, post: Post) -> dict:
     return {
@@ -66,6 +113,37 @@ async def listar_posts(
 ):
     try:
         query = db.query(Post)
+        # ✅ SEGURIDAD (MEDIA 3): visibilidad por rol. Antes cualquier autenticado
+        # podía leer foros de cursos ajenos y publicaciones archivadas.
+        if current_user.rol == "estudiante":
+            query = query.filter(or_(Post.estado == "publicado", Post.estado.is_(None)))
+            if curso_id and curso_id.lower() != "global":
+                from app.api.cursos import _esta_inscrito
+                if not _esta_inscrito(db, str(curso_id), str(current_user.id)):
+                    logger.warning(
+                        f"Acceso denegado: estudiante {current_user.id} intentó leer "
+                        f"el foro del curso {curso_id}"
+                    )
+                    raise HTTPException(status_code=403, detail="No tienes acceso a este foro")
+        elif current_user.rol == "docente":
+            from app.models.curso import Curso
+            cursos_propios = [
+                str(c[0]) for c in db.query(Curso.id).filter(
+                    cast(Curso.docente_id, String) == str(current_user.id)
+                ).all()
+            ]
+            visibles_curso = (
+                Post.curso_id.in_(cursos_propios) if cursos_propios else Post.curso_id.is_(None)
+            )
+            query = query.filter(
+                or_(
+                    Post.docente_id == str(current_user.id),
+                    and_(
+                        or_(Post.estado == "publicado", Post.estado.is_(None)),
+                        or_(Post.curso_id.is_(None), visibles_curso),
+                    ),
+                )
+            )
         if categoria:
             query = query.filter(Post.categoria == categoria)
         if estado:
@@ -82,6 +160,8 @@ async def listar_posts(
             query = query.filter(Post.curso_id.is_(None))
         posts = query.order_by(Post.created_at.desc()).offset(offset).limit(limit).all()
         return [_post_to_dict(db, p) for p in posts]
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=error_interno(e, "Error listando posts"))
 
@@ -96,6 +176,14 @@ async def obtener_post(
         post = db.query(Post).filter(Post.id == id).first()
         if not post:
             raise HTTPException(status_code=404, detail="Publicacion no encontrada")
+        # ✅ SEGURIDAD (MEDIA 4): antes cualquier autenticado leía cualquier post
+        # (incluso archivado o de cursos ajenos) e inflaba las vistas.
+        if not _puede_ver_post(db, post, current_user):
+            logger.warning(
+                f"Acceso denegado: usuario {current_user.id} intentó ver la "
+                f"publicación {post.id}"
+            )
+            raise HTTPException(status_code=403, detail="No tienes permiso para ver esta publicación")
         post.vistas_count = (post.vistas_count or 0) + 1
         db.commit()
         comentarios = db.query(Comentario).filter(Comentario.post_id == id).order_by(Comentario.created_at.asc()).all()
@@ -125,6 +213,14 @@ async def crear_post(
     current_user=Depends(require_roles(["admin", "docente"]))
 ):
     try:
+        # ✅ SEGURIDAD (MEDIA 9): si publica en el foro de un curso, debe poder
+        # gestionarlo (dueño o admin). Antes se podía publicar en cursos ajenos.
+        if data.curso_id and not _docente_puede_gestionar_curso(db, data.curso_id, current_user):
+            logger.warning(
+                f"Acceso denegado: docente {current_user.id} intentó publicar en "
+                f"el curso {data.curso_id}"
+            )
+            raise HTTPException(status_code=403, detail="No tienes permiso sobre este curso")
         post = Post(
             id=str(uuid.uuid4()),
             titulo=data.titulo,
@@ -145,6 +241,8 @@ async def crear_post(
         db.refresh(post)
         logger.info(f"Post creado: {post.id} - {post.titulo[:50]}")
         return _post_to_dict(db, post)
+    except HTTPException:
+        raise
     except Exception as e:
         db.rollback()
         raise HTTPException(status_code=500, detail=error_interno(e, "Error creando post"))
@@ -163,6 +261,17 @@ async def actualizar_post(
             raise HTTPException(status_code=404, detail="Publicacion no encontrada")
         _verificar_ownership_post(post, current_user)
         update_data = data.model_dump(exclude_unset=True)
+        # ✅ SEGURIDAD (BAJA 11): `estado` con lista blanca y `curso_id` validado
+        # (antes el autor podía reabrir un post archivado o moverlo a un curso ajeno).
+        if update_data.get("estado") is not None:
+            estado_nuevo = str(update_data["estado"]).lower()
+            if estado_nuevo not in ESTADOS_POST_VALIDOS:
+                raise HTTPException(status_code=400, detail="Estado de publicación inválido")
+            update_data["estado"] = estado_nuevo
+        if update_data.get("curso_id") and not _docente_puede_gestionar_curso(
+            db, update_data["curso_id"], current_user
+        ):
+            raise HTTPException(status_code=403, detail="No tienes permiso sobre este curso")
         for field, value in update_data.items():
             setattr(post, field, value)
         db.commit()
@@ -207,6 +316,13 @@ async def crear_comentario(
         post = db.query(Post).filter(Post.id == id).first()
         if not post:
             raise HTTPException(status_code=404, detail="Publicacion no encontrada")
+        # ✅ SEGURIDAD (MEDIA 8): solo se comenta lo que se puede ver
+        if not _puede_ver_post(db, post, current_user):
+            logger.warning(
+                f"Acceso denegado: usuario {current_user.id} intentó comentar la "
+                f"publicación {post.id}"
+            )
+            raise HTTPException(status_code=403, detail="No tienes permiso para comentar esta publicación")
         comentario = Comentario(
             id=str(uuid.uuid4()),
             post_id=id,
@@ -246,6 +362,9 @@ async def dar_like(
         post = db.query(Post).filter(Post.id == id).first()
         if not post:
             raise HTTPException(status_code=404, detail="Publicacion no encontrada")
+        # ✅ SEGURIDAD (MEDIA 4): no se puede reaccionar a lo que no se puede ver
+        if not _puede_ver_post(db, post, current_user):
+            raise HTTPException(status_code=403, detail="No tienes permiso sobre esta publicación")
         usuario_id = str(current_user.id)
         like_existente = db.query(LikePost).filter(
             LikePost.post_id == id,

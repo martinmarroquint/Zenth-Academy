@@ -77,8 +77,8 @@ const ExamenActivo = ({
         ...p, 
         _indiceOriginal: idx,
         _ordenOriginal: p.orden ?? idx,
-        // ✅ SEGURIDAD: el backend ya envía columna_b/elementos shuffled.
-        // Usamos el mapping del backend para des-shuffle al enviar.
+        // ✅ SEGURIDAD: el backend envía columna_b/elementos ya barajados; el
+        // mapping de des-barajado vive SOLO en el servidor (nunca viaja aquí).
         _columnaBOriginal: p._orden_columna_b ? [...(p.columna_b || [])] : [...(p.columna_b || [])],
         _elementosOriginales: p._orden_elementos ? [...(p.elementos || [])] : [...(p.elementos || [])],
         _ordenColumnaB: p._orden_columna_b || null,
@@ -378,7 +378,8 @@ const ExamenActivo = ({
       calificacion: 0, correctas: 0, total_preguntas: 0,
       puntos_obtenidos: 0, total_puntos: 0,
       intento_id: intentoId,
-      // ✅ SEGURIDAD: mappings de shuffle para que el backend des-shuffle antes de calificar.
+      // ✅ Legacy: el backend IGNORA mappings_shuffle (su mapping de barajado
+      // es autoritativo). Se conserva el envío solo por compatibilidad.
       mappings_shuffle: preguntasExamen.reduce((acc, p, idx) => {
         const key = String(p._indiceOriginal ?? idx);
         const mapping = {};

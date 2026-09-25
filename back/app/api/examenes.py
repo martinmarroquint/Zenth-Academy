@@ -7,6 +7,7 @@ from sqlalchemy.orm import Session, selectinload
 from typing import List, Optional
 import uuid
 import secrets
+import hashlib
 import random
 import traceback
 import logging
@@ -84,14 +85,17 @@ def _verificar_ownership_examen(examen: Examen, current_user: Usuario) -> None:
         )
 
 
-def _serializar_pregunta(pregunta: Pregunta, incluir_respuestas: bool) -> dict:
+def _serializar_pregunta(
+    pregunta: Pregunta, incluir_respuestas: bool, mapping: Optional[dict] = None
+) -> dict:
     """Serializa una pregunta. Si `incluir_respuestas` es False (estudiantes /
     acceso público), se oculta la clave de respuestas para evitar trampas.
 
-    Para `relacionar` y `ordenamiento`, se aplica shuffle server-side para
-    que el orden canónico (que codifica la respuesta) no se envíe al cliente.
-    Se incluye un mapping `_orden_*` para que el frontend pueda des-shuffle
-    al enviar las respuestas.
+    Para `relacionar` y `ordenamiento`, el orden mostrado se deriva del mapping
+    de barajado que vive SOLO en la config del examen (_asegurar_mappings_examen).
+    Al cliente llegan las listas ya barajadas y nada más: el mapping nunca sale
+    del servidor, y al calificar el backend des-baraja con esa misma copia
+    autoritativa.
     """
     data = {
         "id": str(pregunta.id),
@@ -134,24 +138,31 @@ def _serializar_pregunta(pregunta: Pregunta, incluir_respuestas: bool) -> dict:
     afirmaciones = pregunta.afirmaciones or []
     frases = pregunta.frases or []
 
-    # ✅ SEGURIDAD: para relacionar y ordenamiento, shuffle del orden canónico.
-    # El frontend usa _orden_* para des-shuffle al enviar respuestas.
+    # ✅ SEGURIDAD: barajado server-side de relacionar/ordenamiento a partir del
+    # mapping autoritativo de la config del examen. Sin mapping (o con uno
+    # inválido) se muestra el orden canónico: no hay barajado que adivinar.
     columna_b_shuffled = pregunta.columna_b
-    orden_columna_b = None
     elementos_shuffled = pregunta.elementos
-    orden_elementos = None
+    entrada_mapping = mapping or {}
 
     if pregunta.tipo == 'relacionar' and pregunta.columna_b:
-        indices = list(range(len(pregunta.columna_b)))
-        random.shuffle(indices)
-        columna_b_shuffled = [pregunta.columna_b[i] for i in indices]
-        orden_columna_b = indices  # indices[i] = posición original del elemento i-ésimo mostrado
+        orden_b = entrada_mapping.get('_orden_columna_b')
+        if (
+            isinstance(orden_b, list)
+            and len(orden_b) == len(pregunta.columna_b)
+            and all(isinstance(x, int) and 0 <= x < len(pregunta.columna_b) for x in orden_b)
+        ):
+            # orden_b[pos_mostrada] = índice canónico mostrado en esa posición
+            columna_b_shuffled = [pregunta.columna_b[i] for i in orden_b]
 
     if pregunta.tipo == 'ordenamiento' and pregunta.elementos:
-        indices = list(range(len(pregunta.elementos)))
-        random.shuffle(indices)
-        elementos_shuffled = [pregunta.elementos[i] for i in indices]
-        orden_elementos = indices
+        orden_el = entrada_mapping.get('_orden_elementos')
+        if (
+            isinstance(orden_el, list)
+            and len(orden_el) == len(pregunta.elementos)
+            and all(isinstance(x, int) and 0 <= x < len(pregunta.elementos) for x in orden_el)
+        ):
+            elementos_shuffled = [pregunta.elementos[i] for i in orden_el]
 
     data.update({
         "respuesta_correcta": None,
@@ -173,22 +184,75 @@ def _serializar_pregunta(pregunta: Pregunta, incluir_respuestas: bool) -> dict:
             }
             for f in frases
         ] if frases else None,
-        # ✅ Datos de shuffle para que el frontend des-shuffle al enviar
+        # ✅ Solo las listas barajadas: sin `_orden_*` (el mapping es privado
+        # del servidor; antes se enviaba y el cliente lo devolvía al calificar,
+        # con lo que una respuesta de identidad valía 100%).
         "columna_b": columna_b_shuffled,
         "elementos": elementos_shuffled,
-        "_orden_columna_b": orden_columna_b,
-        "_orden_elementos": orden_elementos,
     })
     return data
 
 
-def _serializar_examen(examen: Examen, incluir_respuestas: bool) -> dict:
+def _firma_orden(elementos: List[str]) -> str:
+    """Huella del contenido/orden de una lista de elementos. Si cambia (edición
+    del docente), el mapping de barajado de esa pregunta se regenera."""
+    return hashlib.md5("\x1f".join(str(e) for e in elementos).encode("utf-8")).hexdigest()[:12]
+
+
+def _asegurar_mappings_examen(examen: Examen, db: Session) -> Examen:
+    """Garantiza que el examen tenga en su config el mapping de barajado de
+    relacionar/ordenamiento.
+
+    ✅ SEGURIDAD: el mapping se genera y persiste EN EL SERVIDOR y nunca se
+    envía al cliente. Se usa para barajar la vista del estudiante y para
+    des-baraja al calificar, así el cliente ya no puede elegir el orden (antes
+    los mappings venían del cliente y una respuesta de identidad obtenía 100%).
+    Solo se agregan entradas faltantes o con contenido alterado: los exámenes
+    en curso no se rebarajan."""
+    preguntas = examen.preguntas or []
     config = dict(examen.configuracion or {})
+    mappings = dict(config.get("mappings_shuffle") or {})
+    cambiado = False
+    for i, p in enumerate(preguntas):
+        if p.tipo not in ("relacionar", "ordenamiento"):
+            continue
+        clave = "_orden_columna_b" if p.tipo == "relacionar" else "_orden_elementos"
+        elementos = p.columna_b if p.tipo == "relacionar" else p.elementos
+        if not elementos or len(elementos) < 2:
+            # 0-1 elementos: no hay nada que barajar.
+            continue
+        entrada = mappings.get(str(i))
+        if (
+            isinstance(entrada, dict)
+            and isinstance(entrada.get(clave), list)
+            and entrada.get("f") == _firma_orden(elementos)
+        ):
+            continue
+        indices = list(range(len(elementos)))
+        random.shuffle(indices)
+        if indices == list(range(len(elementos))):
+            # Un barajado identidad revela el orden canónico (= la respuesta).
+            indices = indices[1:] + indices[:1]
+        mappings[str(i)] = {clave: indices, "f": _firma_orden(elementos)}
+        cambiado = True
+    if cambiado:
+        config["mappings_shuffle"] = mappings
+        examen.configuracion = config
+        db.commit()
+    return examen
+
+
+def _serializar_examen(examen: Examen, incluir_respuestas: bool, db: Session = None) -> dict:
+    if db is not None and not incluir_respuestas:
+        examen = _asegurar_mappings_examen(examen, db)
+    config = dict(examen.configuracion or {})
+    mappings = config.get("mappings_shuffle") or {}
     requiere_password = bool(config.get("password_examen"))
     if not incluir_respuestas:
-        # ✅ SEGURIDAD: no exponer la contraseña del examen a estudiantes/público.
-        # Se envía solo el flag `requiere_password`.
+        # ✅ SEGURIDAD: ni la clave de respuestas ni el mapping de barajado
+        # salen del servidor. Se envía solo el flag `requiere_password`.
         config.pop("password_examen", None)
+        config.pop("mappings_shuffle", None)
     return {
         "id": str(examen.id),
         "codigo": examen.codigo,
@@ -204,7 +268,10 @@ def _serializar_examen(examen: Examen, incluir_respuestas: bool) -> dict:
         "grupo_id": examen.grupo_id,
         "created_at": examen.created_at.isoformat() if examen.created_at else None,
         "updated_at": examen.updated_at.isoformat() if examen.updated_at else None,
-        "preguntas": [_serializar_pregunta(p, incluir_respuestas) for p in (examen.preguntas or [])],
+        "preguntas": [
+            _serializar_pregunta(p, incluir_respuestas, mappings.get(str(i)))
+            for i, p in enumerate(examen.preguntas or [])
+        ],
     }
 
 
@@ -359,7 +426,15 @@ def calcular_resultado(examen, respuestas_alumno, preguntas_con_mapping=None):
                                para des-shuffle en relacionar/ordenamiento
     """
     preguntas = examen.preguntas if hasattr(examen, 'preguntas') else []
-    mappings = preguntas_con_mapping or {}
+    # ✅ Normaliza claves a int: la config JSON usa claves "0","1"... y los
+    # tests legacy pasan claves int. Antes mappings.get(i) con i int sobre
+    # claves str nunca matcheaba (el des-barajado jamás se aplicaba).
+    mappings = {}
+    for k, v in (preguntas_con_mapping or {}).items():
+        try:
+            mappings[int(k)] = v
+        except (TypeError, ValueError):
+            continue
     
     total_puntos = 0
     puntos_obtenidos = 0
@@ -1334,7 +1409,11 @@ def guardar_resultado(
         db, examen, data.intento_id, usuario_id=alumno_id_final
     )
 
-    resultado_calculado = calcular_resultado(examen, data.respuestas or {}, data.mappings_shuffle)
+    # ✅ SEGURIDAD: el mapping de barajado vive en la config del examen (solo
+    # servidor); lo que el cliente mande en `mappings_shuffle` se ignora.
+    examen = _asegurar_mappings_examen(examen, db)
+    mappings_servidor = (examen.configuracion or {}).get("mappings_shuffle")
+    resultado_calculado = calcular_resultado(examen, data.respuestas or {}, mappings_servidor)
     estado_final = data.estado or 'COMPLETADO'
     calificacion = resultado_calculado["calificacion"]
     puntos_obtenidos = resultado_calculado["puntos_obtenidos"]
@@ -2043,7 +2122,7 @@ def obtener_examen_publico(
     if not config.get('acceso_publico', False):
         raise HTTPException(status_code=403, detail="Este examen no tiene acceso publico habilitado")
 
-    data = _serializar_examen(examen, incluir_respuestas=False)
+    data = _serializar_examen(examen, incluir_respuestas=False, db=db)
     if config.get('password_examen'):
         data["preguntas"] = []
         data["requiere_password"] = True
@@ -2071,7 +2150,7 @@ def verificar_password_examen_publico(
     return {
         "ok": True,
         "mensaje": "Password verificado",
-        "examen": _serializar_examen(examen, incluir_respuestas=False),
+        "examen": _serializar_examen(examen, incluir_respuestas=False, db=db),
     }
 
 
@@ -2149,7 +2228,10 @@ def guardar_resultado_publico(
     )
 
     respuestas_alumno = data.respuestas
-    resultado_calculado = calcular_resultado(examen, respuestas_alumno, data.mappings_shuffle)
+    # ✅ SEGURIDAD: mapping de barajado solo del servidor (ver arriba).
+    examen = _asegurar_mappings_examen(examen, db)
+    mappings_servidor = (examen.configuracion or {}).get("mappings_shuffle")
+    resultado_calculado = calcular_resultado(examen, respuestas_alumno, mappings_servidor)
 
     es_anonimo = config.get('anonimo', False)
     alumno_nombre = "Anonimo" if es_anonimo else data.alumno_nombre
@@ -2225,7 +2307,7 @@ def obtener_examen(
     if not es_docente_o_admin:
         if examen.estado != 'PUBLICADO':
             raise HTTPException(status_code=403, detail="Examen no disponible")
-        return _serializar_examen(examen, incluir_respuestas=False)
+        return _serializar_examen(examen, incluir_respuestas=False, db=db)
 
     # ✅ SEGURIDAD: los docentes solo GESTIONAN (con clave) sus propios exámenes.
     # Si el examen es ajeno pero está PUBLICADO, se devuelve la misma versión
@@ -2241,6 +2323,6 @@ def obtener_examen(
     if examen.estado != 'PUBLICADO':
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="No tienes permiso para gestionar este examen",
+            detail="No tienes permiso para gestionar el examen",
         )
-    return _serializar_examen(examen, incluir_respuestas=False)
+    return _serializar_examen(examen, incluir_respuestas=False, db=db)

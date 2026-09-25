@@ -245,7 +245,8 @@ class ResultadoCreate(BaseModel):
     estado: str = 'COMPLETADO'
     # ✅ Autoridad de tiempo: id del intento iniciado en el servidor.
     intento_id: Optional[str] = None
-    # ✅ SEGURIDAD: mappings de shuffle para des-shuffle en calificación server-side.
+    # Legacy: el backend IGNORA este campo. El mapping de barajado vive en la
+    # config del examen (solo servidor); se acepta por compatibilidad de API.
     mappings_shuffle: Optional[Dict[str, Any]] = None
 
 class ResultadoResponse(BaseModel):
@@ -294,6 +295,7 @@ class ResultadoPublicoRequest(BaseModel):
     tiempo_usado: int = 0
     violaciones: int = 0
     intento_id: Optional[str] = None
+    # Legacy: IGNORADO por el backend (el mapping de barajado es solo del servidor).
     mappings_shuffle: Optional[Dict[str, Any]] = None
 
 

@@ -47,6 +47,9 @@ def _crear_examen(db, docente, *, titulo="Examen seguridad", estado="PUBLICADO",
             respuesta_corta=p.get("respuesta_corta"),
             respuestas_alternativas=p.get("respuestas_alternativas"),
             frases=p.get("frases"),
+            columna_a=p.get("columna_a"),
+            columna_b=p.get("columna_b"),
+            elementos=p.get("elementos"),
         ))
     db.commit()
     db.refresh(examen)
@@ -83,6 +86,25 @@ def _pregunta_corta():
         "puntos": 5.0,
         "respuesta_corta": "Lima",
         "respuestas_alternativas": ["Ciudad de los Reyes"],
+    }
+
+
+def _pregunta_relacionar():
+    return {
+        "tipo": "relacionar",
+        "enunciado": "Empareja cada concepto",
+        "puntos": 10.0,
+        "columna_a": ["A1", "A2", "A3"],
+        "columna_b": ["B1", "B2", "B3"],
+    }
+
+
+def _pregunta_ordenamiento():
+    return {
+        "tipo": "ordenamiento",
+        "enunciado": "Ordena los pasos",
+        "puntos": 10.0,
+        "elementos": ["E1", "E2", "E3"],
     }
 
 
@@ -464,3 +486,129 @@ def test_404_de_ruta_inexistente_devuelve_mensaje_generico(client):
     resp = client.get("/api/v1/ruta/que/no/existe")
     assert resp.status_code == 404, resp.text
     assert resp.json().get("message") == "El endpoint solicitado no existe", resp.text
+
+
+# =====================================================
+# 7. SHUFFLE AUTORITATIVO SERVER-SIDE (relacionar / ordenamiento)
+#    El mapping de barajado vive SOLO en la config del examen: nunca viaja
+#    al cliente ni se acepta de vuelta. Antes llegaba por el cliente y una
+#    respuesta de identidad (sin barajar) valía 100%.
+# =====================================================
+
+@pytest.mark.integration
+def test_fetch_estudiante_no_expone_mapping_ni_orden_y_baraja_estable(
+    client, db, docente_user, estudiante_headers
+):
+    examen = _crear_examen(
+        db, docente_user, estado="PUBLICADO",
+        preguntas=[_pregunta_relacionar(), _pregunta_ordenamiento()],
+    )
+
+    resp = client.get(f"/api/v1/examenes/{examen.id}", headers=estudiante_headers)
+    assert resp.status_code == 200, resp.text
+    data = resp.json()
+
+    # Ni el mapping ni las claves `_orden_*` salen del servidor.
+    for p in data["preguntas"]:
+        assert "_orden_columna_b" not in p, p
+        assert "_orden_elementos" not in p, p
+    assert "mappings_shuffle" not in (data.get("configuracion") or {})
+
+    # Barajado real y jamás identidad (la identidad revela el orden canónico).
+    rel = data["preguntas"][0]
+    ordn = data["preguntas"][1]
+    assert rel["columna_b"] != ["B1", "B2", "B3"]
+    assert ordn["elementos"] != ["E1", "E2", "E3"]
+
+    # Estable: una segunda lectura devuelve el MISMO orden (mapping persistido).
+    resp2 = client.get(f"/api/v1/examenes/{examen.id}", headers=estudiante_headers)
+    assert resp2.status_code == 200, resp2.text
+    assert resp2.json()["preguntas"][0]["columna_b"] == rel["columna_b"]
+    assert resp2.json()["preguntas"][1]["elementos"] == ordn["elementos"]
+
+
+@pytest.mark.integration
+def test_exploit_identidad_y_mapping_del_cliente_no_obtienen_100(
+    client, db, docente_user
+):
+    examen = _crear_examen(
+        db, docente_user, estado="PUBLICADO",
+        configuracion={"acceso_publico": True},
+        preguntas=[_pregunta_relacionar(), _pregunta_ordenamiento()],
+    )
+
+    # 1ª lectura: el servidor baraja y persiste su mapping en la config.
+    r = client.get(f"/api/v1/examenes/publico/{examen.codigo}")
+    assert r.status_code == 200, r.text
+
+    db.expire_all()
+    examen_db = db.query(Examen).filter(Examen.id == str(examen.id)).first()
+    mappings = (examen_db.configuracion or {}).get("mappings_shuffle")
+    assert mappings and "0" in mappings and "1" in mappings, mappings
+    orden_b = mappings["0"]["_orden_columna_b"]
+    orden_el = mappings["1"]["_orden_elementos"]
+
+    # TRAMPA: respuestas de identidad + mapping falso mandado por el cliente.
+    # Si el servidor usara el mapping del cliente, esto sacaría 100.
+    it1 = client.post(f"/api/v1/examenes/publico/{examen.codigo}/intentos", json={})
+    assert it1.status_code == 200, it1.text
+    tramposo = client.post(
+        f"/api/v1/examenes/publico/{examen.codigo}/resultado",
+        json={
+            "alumno_nombre": "Tramposo",
+            "respuestas": {
+                "0": {"0": 0, "1": 1, "2": 2},
+                "1": [1, 2, 3],
+            },
+            "intento_id": it1.json()["intento_id"],
+            "mappings_shuffle": {
+                "0": {"_orden_columna_b": [0, 1, 2]},
+                "1": {"_orden_elementos": [0, 1, 2]},
+            },
+        },
+    )
+    assert tramposo.status_code == 201, tramposo.text
+    assert tramposo.json()["calificacion"] < 100.0, tramposo.json()
+
+    # LEGÍTIMO: respuestas en el espacio mostrado (igual que las arma el
+    # frontend) y sin mandar mapping → el servidor des-baraja el suyo → 100.
+    it2 = client.post(f"/api/v1/examenes/publico/{examen.codigo}/intentos", json={})
+    assert it2.status_code == 200, it2.text
+    legit = client.post(
+        f"/api/v1/examenes/publico/{examen.codigo}/resultado",
+        json={
+            "alumno_nombre": "Legit",
+            "respuestas": {
+                "0": {str(j): orden_b.index(j) for j in range(3)},
+                "1": [orden_el[p] + 1 for p in range(3)],
+            },
+            "intento_id": it2.json()["intento_id"],
+        },
+    )
+    assert legit.status_code == 201, legit.text
+    assert legit.json()["calificacion"] == 100.0, legit.json()
+
+
+@pytest.mark.integration
+def test_asegurar_mappings_preserva_y_regenera_si_cambia_contenido(db, docente_user):
+    from app.api.examenes import _asegurar_mappings_examen
+
+    examen = _crear_examen(
+        db, docente_user, estado="PUBLICADO",
+        preguntas=[_pregunta_relacionar()],
+    )
+    _asegurar_mappings_examen(examen, db)
+    m1 = dict(examen.configuracion["mappings_shuffle"])
+    assert m1["0"]["_orden_columna_b"] != [0, 1, 2]
+
+    # Idempotente: una 2ª llamada NO rebaraja (exámenes en curso intactos).
+    _asegurar_mappings_examen(examen, db)
+    assert examen.configuracion["mappings_shuffle"] == m1
+
+    # Edición del docente (cambia el contenido) → se regenera esa entrada.
+    examen.preguntas[0].columna_b = ["B1", "B2", "B3", "B4"]
+    db.commit()
+    _asegurar_mappings_examen(examen, db)
+    m2 = examen.configuracion["mappings_shuffle"]
+    assert m2["0"] != m1["0"]
+    assert len(m2["0"]["_orden_columna_b"]) == 4

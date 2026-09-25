@@ -27,6 +27,7 @@ const Registro = lazy(() => import('./pages/Registro'));
 const UiDemo = lazy(() => import('./pages/UiDemo'));
 const ExamenPublicoPage = lazy(() => import('./pages/ExamenPublicoPage'));
 const ValidarCertificado = lazy(() => import('./pages/ValidarCertificado'));
+const ManualPage = lazy(() => import('./pages/ManualPage'));
 const SolicitarDocente = lazy(() => import('./pages/SolicitarDocente'));
 const AdminSolicitudesDocente = lazy(() => import('./pages/AdminSolicitudesDocente'));
 
@@ -107,6 +108,9 @@ function App() {
               /login se conserva solo como redirección por compatibilidad. */}
           <Route path="/login" element={<Navigate to="/" replace />} />
           <Route path="/registro" element={<Registro />} />
+
+          {/* MANUAL DEL SISTEMA — PÚBLICO (con botones de descarga) */}
+          <Route path="/manual" element={<ManualPage />} />
           <Route
             path="/solicitar-docente"
             element={

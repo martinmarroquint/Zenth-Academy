@@ -1,0 +1,1537 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Zenth Academy — Manual del Sistema</title>
+<style>
+:root {
+  --teal: #0f766e; --teal-dark: #115e59; --ink: #1e293b; --muted: #64748b;
+  --bg: #f8fafc; --card: #ffffff; --line: #e2e8f0; --code-bg: #0f172a;
+}
+* { box-sizing: border-box; }
+html { scroll-behavior: smooth; }
+body {
+  margin: 0; font-family: "Segoe UI", system-ui, -apple-system, sans-serif;
+  color: var(--ink); background: var(--bg); line-height: 1.65; font-size: 16px;
+}
+header.manual-top {
+  position: sticky; top: 0; z-index: 20; background: var(--teal-dark);
+  color: #fff; padding: 0.7rem 1.2rem; display: flex; align-items: center;
+  gap: 1rem; flex-wrap: wrap; box-shadow: 0 2px 8px rgba(0,0,0,.18);
+}
+header.manual-top h1 { font-size: 1rem; margin: 0; font-weight: 600; }
+header.manual-top .spacer { flex: 1; }
+header.manual-top a.btn {
+  background: #fff; color: var(--teal-dark); text-decoration: none;
+  padding: 0.4rem 0.85rem; border-radius: 6px; font-size: .85rem; font-weight: 600;
+}
+header.manual-top a.btn.ghost { background: transparent; color: #fff; border: 1px solid rgba(255,255,255,.6); }
+.layout { display: flex; max-width: 1200px; margin: 0 auto; gap: 1.5rem; padding: 1.5rem 1rem 4rem; }
+nav.toc {
+  width: 250px; flex-shrink: 0; position: sticky; top: 64px; align-self: flex-start;
+  max-height: calc(100vh - 80px); overflow-y: auto; background: var(--card);
+  border: 1px solid var(--line); border-radius: 10px; padding: 1rem; font-size: .85rem;
+}
+nav.toc .toc-title { font-weight: 700; color: var(--teal); margin-bottom: .5rem; text-transform: uppercase; font-size: .72rem; letter-spacing: .06em; }
+nav.toc ol { list-style: none; margin: 0; padding: 0; }
+nav.toc ol ol { padding-left: 0.9rem; }
+nav.toc a { display: block; color: var(--muted); text-decoration: none; padding: .22rem 0; }
+nav.toc a:hover { color: var(--teal); }
+main { flex: 1; min-width: 0; background: var(--card); border: 1px solid var(--line); border-radius: 10px; padding: 1.8rem 2.2rem; }
+main h1 { color: var(--teal-dark); font-size: 1.9rem; margin-top: 0; }
+main h2 { color: var(--teal-dark); font-size: 1.4rem; border-bottom: 2px solid var(--line); padding-bottom: .35rem; margin-top: 2.4rem; }
+main h3 { color: var(--teal); font-size: 1.12rem; margin-top: 1.8rem; }
+main a { color: var(--teal); }
+main code { background: #eef2f5; padding: .1rem .35rem; border-radius: 4px; font-size: .87em; font-family: Consolas, "Courier New", monospace; }
+main pre { background: var(--code-bg); color: #e2e8f0; padding: 1rem; border-radius: 8px; overflow-x: auto; }
+main pre code { background: none; color: inherit; padding: 0; }
+main blockquote { margin: 1rem 0; padding: .6rem 1rem; border-left: 4px solid var(--teal); background: #f0fdfa; color: var(--teal-dark); border-radius: 0 8px 8px 0; }
+main table { border-collapse: collapse; width: 100%; margin: 1rem 0; font-size: .9rem; display: block; overflow-x: auto; }
+main th, main td { border: 1px solid var(--line); padding: .5rem .65rem; text-align: left; vertical-align: top; }
+main th { background: #f1f5f9; color: var(--teal-dark); }
+main tr:nth-child(even) td { background: #f8fafc; }
+main hr { border: 0; border-top: 1px solid var(--line); margin: 2rem 0; }
+main li { margin: .25rem 0; }
+footer.manual-bottom { text-align: center; color: var(--muted); font-size: .8rem; padding: 1.5rem; }
+@media (max-width: 900px) { nav.toc { display: none; } main { padding: 1.2rem; } }
+@media print {
+  header.manual-top, nav.toc, footer.manual-bottom, .no-print { display: none !important; }
+  body { background: #fff; font-size: 11pt; }
+  .layout { display: block; max-width: none; padding: 0; }
+  main { border: 0; border-radius: 0; padding: 0; }
+  main h2 { break-after: avoid; } main table, main pre { break-inside: avoid; }
+  main a { color: inherit; text-decoration: none; }
+}
+</style>
+</head>
+<body>
+<header class="manual-top no-print">
+  <h1>Zenth Academy — Manual del Sistema</h1>
+  <div class="spacer"></div>
+  <a class="btn ghost" href="/manual-sistema.md" download>Descargar Markdown</a>
+  <a class="btn ghost" href="#" data-print>Imprimir / Guardar PDF</a>
+  <a class="btn" href="/">Volver a la app</a>
+</header>
+<div class="layout">
+  <nav class="toc no-print">
+    <div class="toc-title">Contenido</div>
+    <ol><li><a href="#indice">Índice</a></li><li><a href="#1-vision-general-del-sistema">1. Visión general del sistema</a></li><ol><li><a href="#capacidades-principales">Capacidades principales</a></li><li><a href="#roles">Roles</a></li></ol><li><a href="#2-arquitectura-tecnica">2. Arquitectura técnica</a></li><ol><li><a href="#stack">Stack</a></li><li><a href="#estructura-del-repositorio">Estructura del repositorio</a></li><li><a href="#diagrama-de-flujo">Diagrama de flujo</a></li></ol><li><a href="#3-instalacion-y-replica-paso-a-paso">3. Instalación y réplica paso a paso</a></li><ol><li><a href="#31-requisitos">3.1 Requisitos</a></li><li><a href="#32-clonar-e-instalar-dependencias">3.2 Clonar e instalar dependencias</a></li><li><a href="#33-variables-de-entorno-del-backend">3.3 Variables de entorno del backend</a></li><li><a href="#34-base-de-datos">3.4 Base de datos</a></li><li><a href="#35-arrancar-el-sistema">3.5 Arrancar el sistema</a></li><li><a href="#36-primer-usuario-administrador">3.6 Primer usuario administrador</a></li><li><a href="#37-pruebas-y-calidad">3.7 Pruebas y calidad</a></li><li><a href="#38-despliegue">3.8 Despliegue</a></li></ol><li><a href="#4-modelo-de-datos">4. Modelo de datos</a></li><ol><li><a href="#entidades-principales">Entidades principales</a></li><li><a href="#tipos-de-leccion">Tipos de lección</a></li><li><a href="#escalas-cuidado-con-estas">Escalas (¡cuidado con estas!)</a></li></ol><li><a href="#5-autenticacion-roles-y-seguridad">5. Autenticación, roles y seguridad</a></li><ol><li><a href="#login-y-tokens">Login y tokens</a></li><li><a href="#guards-de-rol">Guards de rol</a></li><li><a href="#medidas-de-seguridad-implementadas">Medidas de seguridad implementadas</a></li><li><a href="#diagnostico-sin-credenciales-truco-operativo">Diagnóstico sin credenciales (truco operativo)</a></li></ol><li><a href="#6-mapa-de-rutas-frontend">6. Mapa de rutas (frontend)</a></li><ol><li><a href="#publicas-sin-sesion">Públicas (sin sesión)</a></li><li><a href="#admin-admin">Admin (/admin/*)</a></li><li><a href="#docente-panel-cursos-y-modulos-heredados">Docente (panel /cursos y módulos heredados)</a></li><li><a href="#estudiante-estudiante">Estudiante (/estudiante/*)</a></li></ol><li><a href="#7-referencia-de-la-api">7. Referencia de la API</a></li><ol><li><a href="#auth-autenticacion-14">/auth — Autenticación (14)</a></li><li><a href="#cursos-cursos-37">/cursos — Cursos (37)</a></li><li><a href="#examenes-examenes-44">/examenes — Exámenes (44)</a></li><li><a href="#otros-routers">Otros routers</a></li></ol><li><a href="#8-flujos-de-uso-por-rol">8. Flujos de uso por rol</a></li><ol><li><a href="#81-estudiante-curso-completo-paso-a-paso">8.1 Estudiante — curso completo (paso a paso)</a></li><li><a href="#82-docente-crear-y-dictar-un-curso-paso-a-paso">8.2 Docente — crear y dictar un curso (paso a paso)</a></li><li><a href="#83-admin-operacion-del-sistema">8.3 Admin — operación del sistema</a></li><li><a href="#84-flujo-publico-sin-sesion">8.4 Flujo público (sin sesión)</a></li></ol><li><a href="#9-particularidades-y-notas-tecnicas">9. Particularidades y notas técnicas</a></li><li><a href="#10-pruebas-despliegue-y-solucion-de-problemas">10. Pruebas, despliegue y solución de problemas</a></li><ol><li><a href="#101-suite-de-pruebas">10.1 Suite de pruebas</a></li><li><a href="#102-checklist-de-despliegue">10.2 Checklist de despliegue</a></li><li><a href="#103-troubleshooting">10.3 Troubleshooting</a></li><li><a href="#104-glosario">10.4 Glosario</a></li></ol></ol>
+  </nav>
+  <main><h1 id="zenth-academy-manual-tecnico-del-sistema">Zenth Academy — Manual Técnico del Sistema</h1>
+<blockquote>
+<p>Guía completa para instalar, replicar, operar y mantener la plataforma Zenth Academy.<br />
+Fuente canónica de este documento. Para regenerar las versiones descargables del sitio<br />
+(<code>front/public/manual.html</code> y <code>front/public/manual-sistema.md</code>) ejecuta:</p>
+</blockquote>
+<pre><code class="language-bash">python scripts/generar_manual.py
+</code></pre>
+<p><strong>Versión:</strong> 1.0.0 — Última actualización: septiembre 2026</p>
+<hr />
+<h2 id="indice">Índice</h2>
+<ol>
+<li><a href="#1-visión-general-del-sistema">Visión general del sistema</a></li>
+<li><a href="#2-arquitectura-técnica">Arquitectura técnica</a></li>
+<li><a href="#3-instalación-y-réplica-paso-a-paso">Instalación y réplica paso a paso</a></li>
+<li><a href="#4-modelo-de-datos">Modelo de datos</a></li>
+<li><a href="#5-autenticación-roles-y-seguridad">Autenticación, roles y seguridad</a></li>
+<li><a href="#6-mapa-de-rutas-frontend">Mapa de rutas (frontend)</a></li>
+<li><a href="#7-referencia-de-la-api">Referencia de la API</a></li>
+<li><a href="#8-flujos-de-uso-por-rol">Flujos de uso por rol</a></li>
+<li><a href="#9-particularidades-y-notas-técnicas">Particularidades y notas técnicas</a></li>
+<li><a href="#10-pruebas-despliegue-y-solución-de-problemas">Pruebas, despliegue y solución de problemas</a></li>
+</ol>
+<hr />
+<h2 id="1-vision-general-del-sistema">1. Visión general del sistema</h2>
+<p><strong>Zenth Academy</strong> es una plataforma LMS (Learning Management System) autohospedada para<br />
+vender y dictar cursos en línea, construida como monorepo con backend FastAPI y frontend<br />
+React.</p>
+<h3 id="capacidades-principales">Capacidades principales</h3>
+<table>
+<thead>
+<tr>
+<th>Módulo</th>
+<th>Descripción</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Cursos</td>
+<td>Catálogo público, inscripciones, estructura de módulos y lecciones, bloqueo secuencial (estilo Platzi)</td>
+</tr>
+<tr>
+<td>Lecciones</td>
+<td>Bloques de video (YouTube), texto enriquecido (HTML), material descargable y evaluación</td>
+</tr>
+<tr>
+<td>Exámenes</td>
+<td>Opción múltiple y verdadero/falso, límite de tiempo, intentos, detección de cambio de pestaña, puntuación configurable</td>
+</tr>
+<tr>
+<td>Certificados</td>
+<td>PDF con código de verificación HMAC, validación pública, nota mínima configurable</td>
+</tr>
+<tr>
+<td>Comunidad</td>
+<td>Foro por curso con respuestas anidadas, pizarra colaborativa en tiempo real</td>
+</tr>
+<tr>
+<td>Compartir</td>
+<td>Salas con QR/código para unir alumnos rápidamente</td>
+</tr>
+<tr>
+<td>Materiales</td>
+<td>Biblioteca de archivos del docente con enlaces de descarga</td>
+</tr>
+<tr>
+<td>EDM</td>
+<td>Sistema de educación a distancia con geo-localización de estudiantes y analítica geográfica</td>
+</tr>
+<tr>
+<td>Multiempresa</td>
+<td>Clave <code>empresa_id</code> en las tablas principales para aislar datos por instancia/empresa</td>
+</tr>
+</tbody>
+</table>
+<h3 id="roles">Roles</h3>
+<table>
+<thead>
+<tr>
+<th>Rol</th>
+<th>Capacidad principal</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>admin</code></td>
+<td>Gestiona usuarios, docentes, cursos, exámenes, solicitudes, configuración y analítica</td>
+</tr>
+<tr>
+<td><code>docente</code></td>
+<td>Crea y publica cursos, dicta, corrige, ve el avance de sus alumnos</td>
+</tr>
+<tr>
+<td><code>estudiante</code></td>
+<td>Se inscribe, estudia en orden, rinde exámenes, obtiene certificados</td>
+</tr>
+<tr>
+<td>público (sin sesión)</td>
+<td>Explora el catálogo, valida certificados, responde exámenes por enlace</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="2-arquitectura-tecnica">2. Arquitectura técnica</h2>
+<h3 id="stack">Stack</h3>
+<p><strong>Backend</strong></p>
+<table>
+<thead>
+<tr>
+<th>Componente</th>
+<th>Versión / tecnología</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Framework</td>
+<td>FastAPI 0.115.12</td>
+</tr>
+<tr>
+<td>Servidor</td>
+<td>Uvicorn 0.34.0 (<code>--reload</code> en desarrollo)</td>
+</tr>
+<tr>
+<td>ORM</td>
+<td>SQLAlchemy 2.0.38 (estilo 2.0, <code>Mapped[]</code> / <code>mapped_column</code>)</td>
+</tr>
+<tr>
+<td>Base de datos</td>
+<td>PostgreSQL (Supabase en producción; SQLite en pruebas)</td>
+</tr>
+<tr>
+<td>Autenticación</td>
+<td>JWT (OAuth2 password flow) + refresh tokens</td>
+</tr>
+<tr>
+<td>Python</td>
+<td>3.13 local (<code>.python-version</code>), CI corre en 3.11</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Frontend</strong></p>
+<table>
+<thead>
+<tr>
+<th>Componente</th>
+<th>Versión / tecnología</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Framework</td>
+<td>React ^19.2.0 (router <code>react-router-dom</code>)</td>
+</tr>
+<tr>
+<td>Build</td>
+<td>Vite 7</td>
+</tr>
+<tr>
+<td>Estilos</td>
+<td>Tailwind CSS</td>
+</tr>
+<tr>
+<td>Pruebas</td>
+<td>Vitest + Testing Library (60 pruebas)</td>
+</tr>
+<tr>
+<td>PDF (cliente)</td>
+<td><code>jspdf</code>, <code>jspdf-autotable</code>, <code>@react-pdf/renderer</code></td>
+</tr>
+</tbody>
+</table>
+<h3 id="estructura-del-repositorio">Estructura del repositorio</h3>
+<pre><code>D:\Zenth Academy\
+├── back\                       # Backend FastAPI
+│   ├── app\
+│   │   ├── main.py             # App, CORS, migración idempotente al arranque, COLUMNAS_ESPERADAS
+│   │   ├── config.py           # Settings (env vars) — prefijo /api/v1
+│   │   ├── database.py         # Engine, SessionLocal, Base
+│   │   ├── models\             # Modelos SQLAlchemy (usuarios, curso, examen, certificado, …)
+│   │   ├── schemas\            # Pydantic (request/response)
+│   │   ├── api\                # Routers: auth, cursos, examenes, certificados, foro, …
+│   │   ├── core\               # security.py (JWT), depends.py (guards por rol)
+│   │   └── utils\              # Utilidades (certificados PDF, HMAC, etc.)
+│   ├── tests\                  # 303 pruebas pytest (SQLite en memoria)
+│   ├── seed_curso_ia.py        # Semilla idempotente: curso de IA (10 módulos, 40 lecciones, 10 exámenes)
+│   ├── run.py                  # Uvicorn app.main:app
+│   ├── run_local_sqlite.ps1    # Arranque local sin PostgreSQL
+│   └── venv\                   # Entorno virtual Python
+├── front\                      # Frontend React + Vite
+│   ├── src\
+│   │   ├── App.jsx             # Rutas y guards por rol
+│   │   ├── components\         # UI (layout, cursos, examenes, …)
+│   │   └── pages\              # Pantallas por rol
+│   └── public\                 # Estáticos (favicon, manual descargable)
+├── docs\                       # Documentación (este manual)
+├── supabase\schema_completo.sql  # Esquema completo de la BD
+└── scripts\generar_manual.py   # Genera HTML + copia MD del manual
+</code></pre>
+<h3 id="diagrama-de-flujo">Diagrama de flujo</h3>
+<pre><code>Navegador (React SPA)
+   │  fetch con Authorization: Bearer &lt;JWT&gt;
+   ▼
+FastAPI  ── routers (/api/v1/…) ── guards de rol ── servicios
+   │                                              │
+   │                                              ▼
+   └──────── SQLAlchemy Session ◄──────── lógica de negocio
+                    │
+                    ▼
+        PostgreSQL (Supabase)  /  SQLite (pruebas)
+</code></pre>
+<hr />
+<h2 id="3-instalacion-y-replica-paso-a-paso">3. Instalación y réplica paso a paso</h2>
+<h3 id="31-requisitos">3.1 Requisitos</h3>
+<ul>
+<li>Python 3.11+ (recomendado 3.13)</li>
+<li>Node.js 20+ y npm</li>
+<li>PostgreSQL 15+ (o usar SQLite local con <code>run_local_sqlite.ps1</code>)</li>
+<li>Git</li>
+</ul>
+<h3 id="32-clonar-e-instalar-dependencias">3.2 Clonar e instalar dependencias</h3>
+<pre><code class="language-bash">git clone &lt;url-del-repositorio&gt;
+cd &quot;Zenth Academy&quot;
+
+# Backend
+cd back
+python -m venv venv
+.\venv\Scripts\Activate.ps1
+pip install -r requirements.txt
+
+# Frontend
+cd ..\front
+npm install
+</code></pre>
+<h3 id="33-variables-de-entorno-del-backend">3.3 Variables de entorno del backend</h3>
+<p>Crear <code>back\.env</code> (o exportarlas) con:</p>
+<table>
+<thead>
+<tr>
+<th>Variable</th>
+<th>Obligatoria</th>
+<th>Descripción / valor de ejemplo</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>SUPABASE_DATABASE_URL</code></td>
+<td>Sí*</td>
+<td><code>postgresql+psycopg://user:pass@host:5432/db</code></td>
+</tr>
+<tr>
+<td><code>SUPABASE_DB_HOST</code> / <code>PORT</code> / <code>NAME</code> / <code>USER</code> / <code>PASSWORD</code></td>
+<td>Sí*</td>
+<td>Alternativa a la URL anterior (se arma en <code>config.py</code>)</td>
+</tr>
+<tr>
+<td><code>JWT_SECRET_KEY</code></td>
+<td>Sí</td>
+<td>Firma de tokens; mínimo 16 caracteres. Generar con <code>openssl rand -hex 32</code></td>
+</tr>
+<tr>
+<td><code>BACKEND_CORS_ORIGINS</code></td>
+<td>No</td>
+<td>Lista JSON de orígenes permitidos (dev: <code>http://localhost:5173</code>)</td>
+</tr>
+<tr>
+<td><code>FRONTEND_URL</code></td>
+<td>No</td>
+<td><code>http://localhost:5173</code></td>
+</tr>
+<tr>
+<td><code>BACKEND_PUBLIC_URL</code></td>
+<td>No</td>
+<td><code>http://localhost:8000</code> (enlaces en PDFs/QR)</td>
+</tr>
+<tr>
+<td><code>MAX_UPLOAD_SIZE</code></td>
+<td>No</td>
+<td>Tamaño máximo de subida en bytes (default <code>5242880</code> = 5 MB)</td>
+</tr>
+<tr>
+<td><code>UPLOAD_PATH</code></td>
+<td>No</td>
+<td>Carpeta de archivos subidos (default <code>uploads</code>)</td>
+</tr>
+<tr>
+<td><code>ALLOWED_EXTENSIONS</code></td>
+<td>No</td>
+<td>Extensiones permitidas para uploads</td>
+</tr>
+<tr>
+<td><code>PASSWORD_MIN_LENGTH</code></td>
+<td>No</td>
+<td>Default <code>8</code></td>
+</tr>
+<tr>
+<td><code>MAX_LOGIN_ATTEMPTS</code> / <code>LOGIN_TIMEOUT_MINUTES</code></td>
+<td>No</td>
+<td>Default <code>5</code> / <code>15</code> (bloqueo por fuerza bruta)</td>
+</tr>
+<tr>
+<td><code>EMPRESA_ID_DEFAULT</code></td>
+<td>No</td>
+<td>Clave multiempresa por defecto</td>
+</tr>
+<tr>
+<td><code>REDIS_URL</code> / <code>REDIS_ENABLED</code></td>
+<td>No</td>
+<td>Cache opcional; default <code>REDIS_ENABLED=False</code></td>
+</tr>
+<tr>
+<td><code>GOOGLE_CLIENT_ID</code> / <code>MICROSOFT_*</code></td>
+<td>No</td>
+<td>Login social (si se usa)</td>
+</tr>
+<tr>
+<td><code>BOOTSTRAP_KEY</code> / <code>ADMIN_BOOTSTRAP_PASSWORD</code></td>
+<td>No</td>
+<td>Alta inicial del admin</td>
+</tr>
+<tr>
+<td><code>AWS_*</code></td>
+<td>No</td>
+<td>Storage S3 opcional</td>
+</tr>
+</tbody>
+</table>
+<p>* Con SQLite local no se requiere ninguna de las dos.</p>
+<h3 id="34-base-de-datos">3.4 Base de datos</h3>
+<ol>
+<li><strong>Producción:</strong> crear el esquema con <code>supabase/schema_completo.sql</code> en el SQL editor de Supabase.</li>
+<li><strong>Migraciones:</strong> no se usa Alembic. Al arrancar, <code>back/app/main.py</code> aplica de forma<br />
+   idempotente cambios puntuales (p. ej. <code>ninguno</code> → <code>secuencial</code> en <code>tipo_bloqueo</code>) y<br />
+   valida <code>COLUMNAS_ESPERADAS</code>. Si añades columnas nuevas al modelo, decláralas ahí y<br />
+   refleja el cambio en <code>schema_completo.sql</code>.</li>
+<li><strong>Datos de prueba:</strong> <code>python seed_curso_ia.py</code> crea (o re-crea) el curso "IA" con<br />
+   10 módulos, 40 lecciones, 10 exámenes y 50 preguntas. Es idempotente.</li>
+</ol>
+<h3 id="35-arrancar-el-sistema">3.5 Arrancar el sistema</h3>
+<pre><code class="language-bash"># Terminal 1 — backend (puerto 8000)
+cd back
+.\venv\Scripts\Activate.ps1
+uvicorn app.main:app --reload     # o: python run.py
+# Sin PostgreSQL:  .\run_local_sqlite.ps1
+
+# Terminal 2 — frontend (puerto 5173)
+cd front
+npm run dev
+</code></pre>
+<ul>
+<li>API: <code>http://localhost:8000</code> (docs interactivas en <code>/docs</code>)</li>
+<li>App: <code>http://localhost:5173</code></li>
+</ul>
+<h3 id="36-primer-usuario-administrador">3.6 Primer usuario administrador</h3>
+<pre><code class="language-bash">curl -X POST &quot;http://localhost:8000/api/v1/auth/seed/admin&quot; -H &quot;X-Bootstrap-Key: &lt;BOOTSTRAP_KEY&gt;&quot;
+</code></pre>
+<p>Crea <code>admin@zenthacademy.com</code> con <code>ADMIN_BOOTSTRAP_PASSWORD</code> si aún no existe.</p>
+<h3 id="37-pruebas-y-calidad">3.7 Pruebas y calidad</h3>
+<pre><code class="language-bash"># Backend — 303 pruebas (SQLite en memoria)
+cd back &amp;&amp; .\venv\Scripts\python.exe -m pytest tests/ -q
+
+# Frontend — lint + 60 pruebas + build
+cd front
+npx eslint
+npm run test -- --run
+npm run build
+</code></pre>
+<p>CI (GitHub Actions) ejecuta las mismas 3 verificaciones en Python 3.11 y Node 20.</p>
+<h3 id="38-despliegue">3.8 Despliegue</h3>
+<ul>
+<li><strong>Backend:</strong> cualquier host ASGI (Railway, Render, Fly.io, VPS con Uvicorn/Gunicorn<br />
+  tras proxy). Configura todas las env vars de la §3.3 y apunta <code>SUPABASE_DATABASE_URL</code><br />
+  a la BD managed.</li>
+<li><strong>Frontend:</strong> <code>npm run build</code> → estáticos en <code>front/dist</code> (Netlify, Vercel, nginx).<br />
+  Configura el origen del backend en <code>VITE_API_URL</code> (o proxy de Vite).</li>
+<li><strong>Dominio:</strong> actualiza <code>FRONTEND_URL</code> y <code>BACKEND_CORS_ORIGINS</code> para que los enlaces<br />
+  de certificados y QR apunten al dominio real.</li>
+</ul>
+<hr />
+<h2 id="4-modelo-de-datos">4. Modelo de datos</h2>
+<blockquote>
+<p>Esquema completo: <code>supabase/schema_completo.sql</code>.</p>
+</blockquote>
+<h3 id="entidades-principales">Entidades principales</h3>
+<table>
+<thead>
+<tr>
+<th>Tabla</th>
+<th>Relación clave</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>usuarios</code></td>
+<td><code>id</code>, <code>email</code>, <code>password_hash</code>, <code>rol</code> (<code>admin</code>/<code>docente</code>/<code>estudiante</code>), <code>empresa_id</code>, estado</td>
+</tr>
+<tr>
+<td><code>instructores</code> / perfil docente</td>
+<td>Datos públicos del docente</td>
+</tr>
+<tr>
+<td><code>cursos</code></td>
+<td><code>titulo</code>, <code>descripcion</code>, <code>categoria</code>, <code>nivel</code>, <code>precio</code>, <code>estado</code> (<code>BORRADOR</code>/<code>PUBLICADO</code>), <code>tipo_bloqueo</code> (<code>secuencial</code>/<code>libre</code>), <code>duracion_horas</code>, <code>instructor_id</code>, <code>certificado_nota_minima</code> (0–20)</td>
+</tr>
+<tr>
+<td><code>modulos</code> → JSON en <code>Curso.modulos</code></td>
+<td>Los módulos viven como JSON en la fila del curso (no hay tabla <code>modulos</code>): <code>[{titulo, lecciones:[{titulo, tipo, contenido}]}]</code></td>
+</tr>
+<tr>
+<td><code>inscripciones</code></td>
+<td><code>usuario_id</code> + <code>curso_id</code>, progreso, fecha</td>
+</tr>
+<tr>
+<td><code>progreso_lecciones</code></td>
+<td>Estado de lección (<code>completado</code>), <code>nota</code> 0–20</td>
+</tr>
+<tr>
+<td><code>examenes</code></td>
+<td><code>titulo</code>, <code>curso_id</code>, <code>umbral_aprobacion</code> (%), <code>max_intentos</code>, <code>tiempo_limite_min</code>, <code>estado</code> (<code>BORRADOR</code>/<code>PUBLICADO</code> en MAYÚSCULAS)</td>
+</tr>
+<tr>
+<td><code>preguntas</code></td>
+<td><code>tipo</code> (<code>opcion_multiple</code>/<code>verdadero_falso</code>), <code>respuesta_correcta</code> (índice 0-based: 0 = opción A), <code>puntos</code></td>
+</tr>
+<tr>
+<td><code>intentos_examen</code> / <code>resultados_examen</code></td>
+<td>Intento individual, nota final (0–20, aprobado ≥ 10)</td>
+</tr>
+<tr>
+<td><code>certificados</code></td>
+<td><code>codigo</code> público, <code>nota_final</code>, firma HMAC (<code>firmar_codigo</code>), PDF</td>
+</tr>
+<tr>
+<td><code>foro_hilos</code> / <code>foro_mensajes</code></td>
+<td>Hilo por curso, respuestas anidadas</td>
+</tr>
+<tr>
+<td><code>pizarras</code> / trazos</td>
+<td>Pizarra colaborativa en tiempo real</td>
+</tr>
+<tr>
+<td><code>salas_compartir</code></td>
+<td>Código/QR de unión rápida</td>
+</tr>
+<tr>
+<td><code>materiales</code></td>
+<td>Archivos del docente por curso</td>
+</tr>
+<tr>
+<td><code>solicitudes_docente</code></td>
+<td>Postulaciones de docentes (admin las aprueba)</td>
+</tr>
+<tr>
+<td><code>configuracion</code></td>
+<td>Ajustes globales (empresa)</td>
+</tr>
+</tbody>
+</table>
+<h3 id="tipos-de-leccion">Tipos de lección</h3>
+<p>Cada lección del JSON <code>contenido</code> es un objeto <code>{titulo, tipo, contenido}</code>:</p>
+<table>
+<thead>
+<tr>
+<th><code>tipo</code></th>
+<th><code>contenido</code></th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>video</code></td>
+<td><code>{video_url}</code> (YouTube)</td>
+</tr>
+<tr>
+<td><code>texto</code></td>
+<td><code>{texto: "&lt;p&gt;HTML…&lt;/p&gt;"}</code></td>
+</tr>
+<tr>
+<td><code>material</code></td>
+<td><code>{archivos: [{nombre, url}]}</code></td>
+</tr>
+<tr>
+<td><code>examen</code></td>
+<td><code>{examen_id}</code> — <strong>sin bloques</strong>; vincula la evaluación</td>
+</tr>
+</tbody>
+</table>
+<h3 id="escalas-cuidado-con-estas">Escalas (¡cuidado con estas!)</h3>
+<table>
+<thead>
+<tr>
+<th>Concepto</th>
+<th>Escala</th>
+<th>Aprobación</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>ProgresoLeccion.nota</code> / nota final de examen</td>
+<td><strong>0–20</strong></td>
+<td>≥ 10</td>
+</tr>
+<tr>
+<td><code>certificado_nota_minima</code> (curso)</td>
+<td><strong>0–20</strong></td>
+<td>—</td>
+</tr>
+<tr>
+<td><code>examenes.umbral_aprobacion</code></td>
+<td><strong>0–100 %</strong></td>
+<td>—</td>
+</tr>
+<tr>
+<td><code>respuesta_correcta</code> (pregunta)</td>
+<td>índice <strong>0-based</strong></td>
+<td>0 = opción A</td>
+</tr>
+<tr>
+<td>Estados de curso/examen</td>
+<td>MAYÚSCULAS</td>
+<td><code>PUBLICADO</code></td>
+</tr>
+</tbody>
+</table>
+<p>La nota del examen se deriva server-side en <code>_nota_confiable_desde_examen</code><br />
+(<code>back/app/api/cursos.py</code>): la nota de <code>ProgresoLeccion</code> se marca confiable solo si<br />
+existe un resultado de examen asociado.</p>
+<hr />
+<h2 id="5-autenticacion-roles-y-seguridad">5. Autenticación, roles y seguridad</h2>
+<h3 id="login-y-tokens">Login y tokens</h3>
+<pre><code class="language-bash"># OAuth2 password flow (form-encoded)
+POST /api/v1/auth/login
+Content-Type: application/x-www-form-urlencoded
+
+username=docente@zenth.com&amp;password=*****
+→ {&quot;access_token&quot;: &quot;...&quot;, &quot;refresh_token&quot;: &quot;...&quot;, &quot;token_type&quot;: &quot;bearer&quot;}
+</code></pre>
+<ul>
+<li><strong>Access token:</strong> JWT firmado con <code>JWT_SECRET_KEY</code>, claim <code>sub</code> = id de usuario,<br />
+<code>type=access</code>, corta vida.</li>
+<li><strong>Refresh token:</strong> endpoint de refresco en <code>/api/v1/auth/</code>.</li>
+<li>Todas las peticiones autenticadas llevan <code>Authorization: Bearer &lt;token&gt;</code>.</li>
+</ul>
+<h3 id="guards-de-rol">Guards de rol</h3>
+<p>Los endpoints están protegidos con dependencias de <code>back/app/core/depends.py</code><br />
+(<code>require_admin</code>, <code>require_docente</code>, …). Devuelven <code>403</code> si el rol no coincide.<br />
+En el frontend, <code>App.jsx</code> envuelve cada sección con un guard equivalente<br />
+(<code>/admin/*</code>, <code>/docente/*</code>, <code>/estudiante/*</code>); un usuario sin sesión que intente<br />
+acceder es redirigido a <code>/login</code>.</p>
+<h3 id="medidas-de-seguridad-implementadas">Medidas de seguridad implementadas</h3>
+<table>
+<thead>
+<tr>
+<th>Medida</th>
+<th>Detalle</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Passwords</td>
+<td>Hash con bcrypt/argon2 (<code>password_hash</code>)</td>
+</tr>
+<tr>
+<td>Fuerza bruta</td>
+<td><code>MAX_LOGIN_ATTEMPTS=5</code> / <code>LOGIN_TIMEOUT_MINUTES=15</code></td>
+</tr>
+<tr>
+<td>Rate limiting</td>
+<td>Límite de peticiones por IP en routers sensibles (login, seed)</td>
+</tr>
+<tr>
+<td>CORS</td>
+<td>Orígenes permitidos por env var <code>BACKEND_CORS_ORIGINS</code></td>
+</tr>
+<tr>
+<td>Headers</td>
+<td>Seguridad estándar (HSTS/CSP/X-Frame en producción)</td>
+</tr>
+<tr>
+<td>Certificados</td>
+<td>Código público firmado con <strong>HMAC</strong> — no se puede falsificar sin la clave</td>
+</tr>
+<tr>
+<td>Uploads</td>
+<td>Validación de extensión (<code>ALLOWED_EXTENSIONS</code>) y tamaño (<code>MAX_UPLOAD_SIZE</code>)</td>
+</tr>
+<tr>
+<td>Multiempresa</td>
+<td><code>empresa_id</code> en tablas principales; los queries lo filtran</td>
+</tr>
+<tr>
+<td>Seed admin</td>
+<td>Protegido por <code>X-Bootstrap-Key</code> (<code>BOOTSTRAP_KEY</code>)</td>
+</tr>
+</tbody>
+</table>
+<h3 id="diagnostico-sin-credenciales-truco-operativo">Diagnóstico sin credenciales (truco operativo)</h3>
+<p>Si necesitas consultar la API como un usuario pero no conoces su contraseña, genera un<br />
+JWT local válido con la misma clave del entorno:</p>
+<pre><code class="language-python"># guardar como back/_tmp_token.py y ejecutar con el venv
+from app.core.database import SessionLocal
+from app.core.security import create_access_token
+from app.models.usuario import Usuario
+db = SessionLocal()
+u = db.query(Usuario).filter(Usuario.email == &quot;docente@zenth.com&quot;).first()
+print(create_access_token({&quot;sub&quot;: str(u.id)}))
+</code></pre>
+<pre><code class="language-bash">curl -H &quot;Authorization: Bearer &lt;token&gt;&quot; http://localhost:8000/api/v1/cursos/
+</code></pre>
+<hr />
+<h2 id="6-mapa-de-rutas-frontend">6. Mapa de rutas (frontend)</h2>
+<p>Definidas en <code>front/src/App.jsx</code>. El guard de rol redirige a <code>/login</code> (o <code>/</code>) si la<br />
+sesión no corresponde.</p>
+<h3 id="publicas-sin-sesion">Públicas (sin sesión)</h3>
+<table>
+<thead>
+<tr>
+<th>Ruta</th>
+<th>Pantalla</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>/</code></td>
+<td>Home (landing)</td>
+</tr>
+<tr>
+<td><code>/login</code></td>
+<td>Inicio de sesión</td>
+</tr>
+<tr>
+<td><code>/registro</code></td>
+<td>Registro</td>
+</tr>
+<tr>
+<td><code>/compartir/:codigo</code></td>
+<td>Unión a sala con QR/código</td>
+</tr>
+<tr>
+<td><code>/examen/:codigo</code></td>
+<td>Examen público por enlace</td>
+</tr>
+<tr>
+<td><code>/validar</code>, <code>/validar/:codigo</code></td>
+<td>Validación pública de certificado</td>
+</tr>
+<tr>
+<td><code>/ui-demo</code></td>
+<td>Demostración de componentes UI</td>
+</tr>
+<tr>
+<td><code>/manual</code></td>
+<td>Este manual (con botones de descarga)</td>
+</tr>
+</tbody>
+</table>
+<h3 id="admin-admin">Admin (<code>/admin/*</code>)</h3>
+<table>
+<thead>
+<tr>
+<th>Ruta</th>
+<th>Pantalla</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>/admin/examenes</code></td>
+<td>Panel global de exámenes</td>
+</tr>
+<tr>
+<td><code>/admin/cursos</code></td>
+<td>Gestión de cursos</td>
+</tr>
+<tr>
+<td><code>/admin/alumnos</code></td>
+<td>Gestión de alumnos</td>
+</tr>
+<tr>
+<td><code>/admin/materiales</code></td>
+<td>Biblioteca de materiales</td>
+</tr>
+<tr>
+<td><code>/admin/pizarra</code></td>
+<td>Pizarras</td>
+</tr>
+<tr>
+<td><code>/admin/foro</code></td>
+<td>Foro</td>
+</tr>
+<tr>
+<td><code>/admin/certificados</code></td>
+<td>Certificados emitidos</td>
+</tr>
+<tr>
+<td><code>/admin/solicitudes</code></td>
+<td>Solicitudes generales</td>
+</tr>
+<tr>
+<td><code>/admin/configuracion</code></td>
+<td>Configuración</td>
+</tr>
+<tr>
+<td><code>/admin/solicitudes-docente</code></td>
+<td>Aprobación de docentes</td>
+</tr>
+<tr>
+<td><code>/admin/analytics-geografico</code></td>
+<td>Analítica geográfica</td>
+</tr>
+</tbody>
+</table>
+<h3 id="docente-panel-cursos-y-modulos-heredados">Docente (panel <code>/cursos</code> y módulos heredados)</h3>
+<p>El docente comparte el panel de cursos (<code>/cursos</code> → <code>PanelCursos.jsx</code>) y tiene acceso<br />
+a exámenes, alumnos, materiales, pizarra, foro y certificados según su permiso.</p>
+<h3 id="estudiante-estudiante">Estudiante (<code>/estudiante/*</code>)</h3>
+<table>
+<thead>
+<tr>
+<th>Ruta</th>
+<th>Pantalla</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>/estudiante/cursos</code></td>
+<td><strong>Mis cursos</strong> (inscripciones) + <strong>Catálogo</strong> (abajo)</td>
+</tr>
+<tr>
+<td><code>/estudiante/cursos/:id</code></td>
+<td>Detalle del curso, lecciones, bloqueo secuencial</td>
+</tr>
+<tr>
+<td><code>/estudiante/historial</code></td>
+<td>Historial de actividad</td>
+</tr>
+<tr>
+<td><code>/estudiante/foro</code></td>
+<td>Foro</td>
+</tr>
+<tr>
+<td><code>/estudiante/certificados</code></td>
+<td>Mis certificados</td>
+</tr>
+<tr>
+<td><code>/estudiante/configuracion</code></td>
+<td>Mi cuenta</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="7-referencia-de-la-api">7. Referencia de la API</h2>
+<ul>
+<li><strong>Prefijo global:</strong> <code>/api/v1</code> (<code>settings.API_V1_PREFIX</code>)</li>
+<li><strong>Total:</strong> 171 endpoints en 15 routers + 1 de configuración (Swagger: <code>/docs</code>)</li>
+<li><strong>Formato:</strong> JSON; auth por <code>Authorization: Bearer &lt;JWT&gt;</code></li>
+</ul>
+<h3 id="auth-autenticacion-14"><code>/auth</code> — Autenticación (14)</h3>
+<table>
+<thead>
+<tr>
+<th>Método</th>
+<th>Ruta</th>
+<th>Rol</th>
+<th>Descripción</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>POST</td>
+<td><code>/auth/login</code></td>
+<td>público</td>
+<td>OAuth2 password flow (form) → access + refresh</td>
+</tr>
+<tr>
+<td>POST</td>
+<td><code>/auth/register</code></td>
+<td>público</td>
+<td>Registro de estudiante</td>
+</tr>
+<tr>
+<td>POST</td>
+<td><code>/auth/google</code></td>
+<td>público</td>
+<td>Login con Google</td>
+</tr>
+<tr>
+<td>POST</td>
+<td><code>/auth/refresh</code></td>
+<td>público</td>
+<td>Renueva el access token</td>
+</tr>
+<tr>
+<td>POST</td>
+<td><code>/auth/logout</code></td>
+<td>sesión</td>
+<td>Revoca tokens</td>
+</tr>
+<tr>
+<td>GET</td>
+<td><code>/auth/me</code></td>
+<td>sesión</td>
+<td>Perfil actual</td>
+</tr>
+<tr>
+<td>PUT</td>
+<td><code>/auth/me</code></td>
+<td>sesión</td>
+<td>Actualiza perfil</td>
+</tr>
+<tr>
+<td>POST</td>
+<td><code>/auth/me/cambiar-password</code></td>
+<td>sesión</td>
+<td>Cambio de contraseña</td>
+</tr>
+<tr>
+<td>GET</td>
+<td><code>/auth/verificar</code></td>
+<td>sesión</td>
+<td>Verifica validez del token</td>
+</tr>
+<tr>
+<td>GET/POST</td>
+<td><code>/auth/usuarios</code></td>
+<td>admin</td>
+<td>Lista / crea usuarios</td>
+</tr>
+<tr>
+<td>PUT/DELETE</td>
+<td><code>/auth/usuarios/{user_id}</code></td>
+<td>admin</td>
+<td>Edita / elimina usuario</td>
+</tr>
+<tr>
+<td>POST</td>
+<td><code>/auth/seed/admin</code></td>
+<td><code>X-Bootstrap-Key</code></td>
+<td>Crea el primer admin</td>
+</tr>
+</tbody>
+</table>
+<h3 id="cursos-cursos-37"><code>/cursos</code> — Cursos (37)</h3>
+<table>
+<thead>
+<tr>
+<th>Método</th>
+<th>Ruta</th>
+<th>Rol</th>
+<th>Descripción</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>GET</td>
+<td><code>/cursos/</code></td>
+<td>sesión</td>
+<td>Catálogo (cache 60 s por usuario+filtros; solo <code>PUBLICADO</code>)</td>
+</tr>
+<tr>
+<td>GET</td>
+<td><code>/cursos/{id}</code></td>
+<td>sesión</td>
+<td>Detalle (aplica bloqueo secuencial)</td>
+</tr>
+<tr>
+<td>POST/PUT/DELETE</td>
+<td><code>/cursos/{id}</code></td>
+<td>docente/admin</td>
+<td>CRUD de curso</td>
+</tr>
+<tr>
+<td>POST</td>
+<td><code>/cursos/{id}/imagen</code> · DELETE …/imagen</td>
+<td>docente/admin</td>
+<td>Portada</td>
+</tr>
+<tr>
+<td>POST</td>
+<td><code>/cursos/{id}/publicar</code></td>
+<td>docente/admin</td>
+<td><code>BORRADOR</code> → <code>PUBLICADO</code> (invalida cache)</td>
+</tr>
+<tr>
+<td>GET</td>
+<td><code>/cursos/mis-cursos</code></td>
+<td>docente</td>
+<td>Cursos propios</td>
+</tr>
+<tr>
+<td>POST</td>
+<td><code>/cursos/{id}/inscribirse</code></td>
+<td>estudiante</td>
+<td>Inscripción</td>
+</tr>
+<tr>
+<td>DELETE</td>
+<td><code>/cursos/{id}/inscripcion</code> · <code>…/{estudiante_id}</code></td>
+<td>estudiante/admin</td>
+<td>Baja</td>
+</tr>
+<tr>
+<td>GET</td>
+<td><code>/cursos/{id}/estudiantes</code> · <code>…/exportar</code></td>
+<td>docente</td>
+<td>Alumnos y exportación</td>
+</tr>
+<tr>
+<td>GET</td>
+<td><code>/cursos/{id}/accesos</code> · POST <code>…/acceso</code> · DELETE <code>…/acceso/{e}</code> · GET <code>…/tiene-acceso/{e}</code></td>
+<td>docente/admin</td>
+<td>Control de acceso</td>
+</tr>
+<tr>
+<td>GET</td>
+<td><code>/cursos/{id}/progreso/{usuario_id}</code> · <code>…/progreso-detallado</code></td>
+<td>docente/admin</td>
+<td>Avance</td>
+</tr>
+<tr>
+<td>POST</td>
+<td><code>/cursos/{curso_id}/lecciones/{leccion_id}/completar</code> · <code>/progreso</code></td>
+<td>estudiante</td>
+<td>Marcar lección</td>
+</tr>
+<tr>
+<td>GET</td>
+<td><code>/cursos/{curso_id}/lecciones/{leccion_id}/estado-bloqueo</code></td>
+<td>estudiante</td>
+<td>¿Está desbloqueada?</td>
+</tr>
+<tr>
+<td>POST/GET/DELETE</td>
+<td><code>/cursos/{curso_id}/lecciones/{leccion_id}/evaluacion</code></td>
+<td>docente</td>
+<td>Evaluación de la lección</td>
+</tr>
+<tr>
+<td>POST</td>
+<td><code>…/lecciones/{leccion_id}/liberar</code></td>
+<td>docente</td>
+<td>Libera manualmente una lección</td>
+</tr>
+<tr>
+<td>PUT</td>
+<td><code>/cursos/{curso_id}/calificaciones/{estudiante_id}/{leccion_id}</code></td>
+<td>docente</td>
+<td>Calificación manual</td>
+</tr>
+<tr>
+<td>GET</td>
+<td><code>/cursos/solicitudes-pendientes</code> · POST <code>…/solicitudes/{id}/aprobar</code> · <code>/rechazar</code></td>
+<td>docente/admin</td>
+<td>Acceso a cursos</td>
+</tr>
+<tr>
+<td>POST</td>
+<td><code>/cursos/{id}/solicitar-acceso</code></td>
+<td>estudiante</td>
+<td>Pide acceso</td>
+</tr>
+</tbody>
+</table>
+<h3 id="examenes-examenes-44"><code>/examenes</code> — Exámenes (44)</h3>
+<table>
+<thead>
+<tr>
+<th>Método</th>
+<th>Ruta</th>
+<th>Rol</th>
+<th>Descripción</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>GET/POST</td>
+<td><code>/examenes/</code></td>
+<td>docente/admin</td>
+<td>Lista / crea examen</td>
+</tr>
+<tr>
+<td>GET</td>
+<td><code>/examenes/publicados</code></td>
+<td>estudiante</td>
+<td>Exámenes publicados</td>
+</tr>
+<tr>
+<td>PUT/DELETE</td>
+<td><code>/examenes/{examen_id}</code></td>
+<td>docente/admin</td>
+<td>Edita / elimina</td>
+</tr>
+<tr>
+<td>PUT</td>
+<td><code>/examenes/{examen_id}/estado</code></td>
+<td>docente/admin</td>
+<td>Publica/archiva</td>
+</tr>
+<tr>
+<td>GET</td>
+<td><code>/examenes/{examen_id}</code></td>
+<td>docente/admin</td>
+<td>Detalle con preguntas</td>
+</tr>
+<tr>
+<td>POST</td>
+<td><code>/examenes/{examen_id}/intentos</code></td>
+<td>estudiante</td>
+<td>Inicia intento</td>
+</tr>
+<tr>
+<td>POST</td>
+<td><code>/examenes/resultados</code></td>
+<td>estudiante</td>
+<td>Envía respuestas → nota 0–20</td>
+</tr>
+<tr>
+<td>GET</td>
+<td><code>/examenes/resultados/{examen_id}</code> · <code>/alumno/{alumno_id}</code> · <code>/mejor/{alumno_id}</code></td>
+<td>docente</td>
+<td>Resultados</td>
+</tr>
+<tr>
+<td>GET/DELETE</td>
+<td><code>/examenes/resultados/{examen_id}/revision/{resultado_id}</code></td>
+<td>docente</td>
+<td>Revisión / corrección</td>
+</tr>
+<tr>
+<td>GET</td>
+<td><code>/examenes/resumen</code> · <code>/bulk</code> · <code>/grupo/{grupo_id}</code></td>
+<td>docente/admin</td>
+<td>Resúmenes</td>
+</tr>
+<tr>
+<td>GET/POST/PUT/DELETE</td>
+<td><code>/examenes/grupos</code> … <code>/grupos/{id}</code></td>
+<td>docente</td>
+<td>Grupos (CRUD)</td>
+</tr>
+<tr>
+<td>POST</td>
+<td><code>/examenes/grupos/{id}/asistencia</code> · <code>/recursos</code> …</td>
+<td>docente</td>
+<td>Asistencia y recursos</td>
+</tr>
+<tr>
+<td><strong>Público</strong></td>
+<td>GET <code>/examenes/publico/{codigo}</code></td>
+<td>público</td>
+<td>Examen por enlace</td>
+</tr>
+<tr>
+<td></td>
+<td>POST <code>…/verificar-password</code> · <code>…/intentos</code> · <code>…/resultado</code></td>
+<td>público</td>
+<td>Flujo del examen público</td>
+</tr>
+<tr>
+<td><strong>Sync</strong></td>
+<td>POST <code>/examenes/sincronizar/iniciar</code> … <code>Cerrar</code></td>
+<td>docente</td>
+<td>Examen sincronizado en aula</td>
+</tr>
+<tr>
+<td></td>
+<td>POST <code>/examenes/compartir/alumnos</code> · GET/POST/DELETE <code>/examenes/alumnos</code>…</td>
+<td>docente</td>
+<td>Compartir con alumnos</td>
+</tr>
+</tbody>
+</table>
+<h3 id="otros-routers">Otros routers</h3>
+<table>
+<thead>
+<tr>
+<th>Prefijo</th>
+<th>Nº</th>
+<th>Rol principal</th>
+<th>Contenido</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>/alumnos</code></td>
+<td>10</td>
+<td>docente/admin</td>
+<td>CRUD alumnos, búsqueda, masivos, por grupo/curso</td>
+</tr>
+<tr>
+<td><code>/certificados</code></td>
+<td>6</td>
+<td>estudiante/admin</td>
+<td>Emitir, listar, <code>GET /certificados/validar/{codigo}</code> (público)</td>
+</tr>
+<tr>
+<td><code>/foro</code></td>
+<td>7</td>
+<td>sesión</td>
+<td>Hilos, respuestas, likes (por curso)</td>
+</tr>
+<tr>
+<td><code>/pizarra</code></td>
+<td>9</td>
+<td>docente</td>
+<td>CRUD pizarras, sesiones, elementos (trazos en vivo)</td>
+</tr>
+<tr>
+<td><code>/compartir</code></td>
+<td>7</td>
+<td>docente</td>
+<td>Salas con QR, vincular alumnos, material, cerrar</td>
+</tr>
+<tr>
+<td><code>/materiales</code></td>
+<td>6</td>
+<td>docente/admin</td>
+<td>CRUD materiales + <code>PATCH {id}/toggle</code></td>
+</tr>
+<tr>
+<td><code>/carpeta-docente</code></td>
+<td>4</td>
+<td>docente</td>
+<td>Carpeta personal + sync</td>
+</tr>
+<tr>
+<td><code>/historial</code></td>
+<td>4</td>
+<td>docente</td>
+<td>Historial de comparticiones</td>
+</tr>
+<tr>
+<td><code>/solicitudes-docente</code></td>
+<td>9</td>
+<td>estudiante→admin</td>
+<td>Postularse a docente; admin aprueba/rechaza</td>
+</tr>
+<tr>
+<td><code>/integraciones/edm</code></td>
+<td>8</td>
+<td>admin</td>
+<td>Integración EDM: CRUD, eventos, sincronizar</td>
+</tr>
+<tr>
+<td><code>/geo-analytics</code></td>
+<td>3</td>
+<td>admin</td>
+<td><code>stats</code>, <code>map-points</code>, <code>recent-logins</code></td>
+</tr>
+<tr>
+<td><code>/config/cliente</code></td>
+<td>1</td>
+<td>público</td>
+<td>Config pública de marca</td>
+</tr>
+<tr>
+<td><code>/media</code></td>
+<td>3</td>
+<td>público</td>
+<td>Proxy de imágenes / Drive</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="8-flujos-de-uso-por-rol">8. Flujos de uso por rol</h2>
+<h3 id="81-estudiante-curso-completo-paso-a-paso">8.1 Estudiante — curso completo (paso a paso)</h3>
+<ol>
+<li><strong>Registro</strong> en <code>/registro</code> → <code>POST /auth/register</code>.</li>
+<li><strong>Explorar catálogo:</strong> en <code>/estudiante/cursos</code>, la sección superior muestra <strong>Mis<br />
+   cursos</strong> (solo inscripciones) y la inferior el <strong>Catálogo</strong> con filtros de categoría,<br />
+   nivel y búsqueda. Un curso nuevo solo aparece en el Catálogo hasta inscribirse.</li>
+<li><strong>Inscribirse:</strong> botón de inscripción → <code>POST /cursos/{id}/inscribirse</code>.</li>
+<li><strong>Estudiar en orden</strong> (si el curso es <code>secuencial</code>, el default):<br />
+   - La lección 1 está desbloqueada; cada lección se desbloquea al completar la<br />
+     anterior (<code>estado-bloqueo</code>).<br />
+   - Un video se considera visto al ~90 % de reproducción; las lecturas al marcar<br />
+     completada.<br />
+   - El docente puede <strong>liberar</strong> manualmente una lección (<code>/liberar</code>).</li>
+<li><strong>Rendir el examen del módulo</strong> (lección <code>tipo=examen</code>):<br />
+   - <code>POST /examenes/{id}/intentos</code> respeta <code>max_intentos</code> y <code>tiempo_limite_min</code>.<br />
+   - Cambiar de pestaña durante el intento queda registrado.<br />
+   - Respuestas: opción múltiple (índice de opción) y verdadero/falso →<br />
+<code>POST /examenes/resultados</code> calcula nota 0–20 (aprobado ≥ 10).</li>
+<li><strong>Certificado:</strong> si la nota final ≥ <code>certificado_nota_minima</code> del curso, se emite<br />
+   un certificado con código HMAC → visible en <code>/estudiante/certificados</code> y<br />
+   verificable en <code>/validar/{codigo}</code>.</li>
+<li><strong>Comunidad:</strong> foro por curso, pizarra, materiales descargables.</li>
+</ol>
+<h3 id="82-docente-crear-y-dictar-un-curso-paso-a-paso">8.2 Docente — crear y dictar un curso (paso a paso)</h3>
+<ol>
+<li><strong>Perfil docente:</strong> el usuario se postula (<code>/solicitudes-docente</code>) o el admin le<br />
+   asigna el rol.</li>
+<li><strong>Crear curso:</strong> <code>/cursos</code> → <code>PanelCursos</code> → <code>POST /cursos/</code> en estado <code>BORRADOR</code>.</li>
+<li><strong>Componer módulos y lecciones:</strong> editar el curso con la estructura JSON<br />
+<code>modulos → lecciones</code> (video / texto / material / examen). Subir portada<br />
+   (<code>/cursos/{id}/imagen</code>).</li>
+<li><strong>Crear el examen del módulo:</strong> <code>/examenes</code> → crear con <code>umbral_aprobacion</code> (%),<br />
+<code>max_intentos</code>, <code>tiempo_limite_min</code>, preguntas OM (4 opciones) y VF → estado<br />
+<code>PUBLICADO</code>. Vincularlo como lección <code>tipo=examen</code> con <code>contenido.examen_id</code>.</li>
+<li><strong>Publicar el curso:</strong> <code>POST /cursos/{id}/publicar</code> (invalida la cache del<br />
+   catálogo). Si quedó <code>ninguno</code>, migración de arranque lo convierte en <code>secuencial</code>.</li>
+<li><strong>Dictar:</strong> pizarra en vivo, sala <code>compartir</code> con QR, materiales, foro.</li>
+<li><strong>Seguimiento:</strong> <code>GET /cursos/{id}/estudiantes</code>, <code>…/progreso-detallado</code>,<br />
+   exportación de alumnos, revisión y corrección de resultados de examen.</li>
+<li><strong>Certificados:</strong> se emiten automáticamente al alcanzar la nota mínima; el docente<br />
+   los ve en <code>/admin/certificados</code> (o panel docente).</li>
+</ol>
+<h3 id="83-admin-operacion-del-sistema">8.3 Admin — operación del sistema</h3>
+<ol>
+<li><strong>Usuarios:</strong> CRUD completo en <code>/auth/usuarios</code> (admin/docente/estudiante).</li>
+<li><strong>Solicitudes de docente:</strong> bandeja en <code>/admin/solicitudes-docente</code> → aprobar /<br />
+   rechazar / en revisión.</li>
+<li><strong>Cursos y exámenes globales:</strong> supervisión desde <code>/admin/cursos</code> y<br />
+<code>/admin/examenes</code>.</li>
+<li><strong>Configuración:</strong> <code>/admin/configuracion</code> (marca, límites, empresa).</li>
+<li><strong>Analítica:</strong> <code>/admin/analytics-geografico</code> → <code>geo-analytics/stats</code>,<br />
+<code>map-points</code>, <code>recent-logins</code>.</li>
+<li><strong>EDM:</strong> integraciones y sincronización en <code>/integraciones/edm</code>.</li>
+<li><strong>Validación pública</strong> de certificados y soporte con el diagnóstico de la §5.4.</li>
+</ol>
+<h3 id="84-flujo-publico-sin-sesion">8.4 Flujo público (sin sesión)</h3>
+<ul>
+<li>Explorar catálogo (<code>GET /cursos/</code> solo <code>PUBLICADO</code>)</li>
+<li>Responder examen por enlace <code>/examen/:codigo</code></li>
+<li>Validar certificado <code>/validar/{codigo}</code> → <code>GET /certificados/validar/{codigo}</code></li>
+</ul>
+<hr />
+<h2 id="9-particularidades-y-notas-tecnicas">9. Particularidades y notas técnicas</h2>
+<blockquote>
+<p>Estos puntos <strong>no son obvios</strong> y causan la mayoría de los errores al replicar.</p>
+</blockquote>
+<ol>
+<li><strong>No hay Alembic.</strong> Los cambios de esquema viven en <code>back/app/main.py</code><br />
+   (<code>COLUMNAS_ESPERADAS</code> + migraciones idempotentes al arranque) y en<br />
+<code>supabase/schema_completo.sql</code>. Ambos deben mantenerse sincronizados.</li>
+<li><strong>Módulos como JSON.</strong> No existe tabla <code>modulos</code>: la estructura está en<br />
+<code>Curso.modulos</code> (JSON). Las lecciones de examen <strong>no tienen bloques</strong>; solo<br />
+<code>contenido.examen_id</code>.</li>
+<li><strong>Estados en MAYÚSCULAS.</strong> Curso y examen usan <code>PUBLICADO</code>/<code>BORRADOR</code>. Un<br />
+   INSERT directo en BD con <code>publicado</code> (minúsculas) hace que el curso no aparezca.</li>
+<li><strong>Tres escalas distintas</strong> (ver §4): notas 0–20, umbral de examen en %, índice de<br />
+   respuesta 0-based. Mezclarlas es el bug clásico.</li>
+<li><strong>Cache del catálogo:</strong> <code>GET /api/v1/cursos/</code> cachea 60 s por usuario+filtros<br />
+   (<code>cursos.py</code>). Solo se invalida al publicar/editar <strong>vía API</strong>; un INSERT directo<br />
+   en BD no lo limpia (esperar 1 min o reiniciar).</li>
+<li><strong>Bloqueo secuencial</strong> <code>tipo_bloqueo='secuencial'</code> es el default (migración<br />
+<code>ninguno</code>→<code>secuencial</code> al arrancar). <code>libre</code> desactiva el orden.</li>
+<li><strong>YouTube sin API key:</strong> validar con<br />
+<code>https://www.youtube.com/oembed?format=json&amp;url=...</code> (200 + título); duración real<br />
+   leyendo <code>"lengthSeconds"</code> de la watch page.</li>
+<li><strong>JWT para diagnóstico:</strong> si no conoces la contraseña, firma un token local con<br />
+<code>app.core.security.create_access_token({"sub": user_id})</code> (ver §5.4). <code>type</code> debe<br />
+   ser <code>access</code>.</li>
+<li><strong>PowerShell:</strong> <code>Select-String -NotMatch</code> es <em>case-insensitive</em> (un patrón <code>FROM</code><br />
+   oculta líneas que contienen "from "); usa <code>-SimpleMatch</code> o guarda a archivo y usa<br />
+   grep de git para análisis sensibles a mayúsculas.</li>
+<li><strong><code>python -c</code> con comillas rompe en PowerShell</strong> → escribe el script en un <code>.py</code><br />
+    temporal y ejecútalo con el venv.</li>
+<li><strong>multi-tenant:</strong> casi todas las tablas llevan <code>empresa_id</code>; los queries lo<br />
+    filtran. Al replicar, define <code>EMPRESA_ID_DEFAULT</code>.</li>
+<li><strong>Certificados firmados con HMAC:</strong> el código público no se puede generar sin<br />
+<code>JWT_SECRET_KEY</code>/clave de firma; <code>validar/{codigo}</code> verifica la firma.</li>
+<li><strong>Google Sign-In</strong> está configurado para origen <code>http://localhost:5173</code> — cambiar<br />
+    en Google Cloud Console al desplegar.</li>
+<li><strong><code>progreso_pct</code> usa <code>math.ceil</code></strong> (<code>back/app/api/cursos.py</code>): 0.1 % se muestra<br />
+    como 1 %.</li>
+<li><strong>Sin logo:</strong> <code>front/public/</code> solo tiene <code>favicon.svg</code>.</li>
+<li><strong>Usuarios de prueba sembrados:</strong> admin, docente y estudiante; las contraseñas no<br />
+    están en el repo (definir por env var o resetear).</li>
+<li><strong>Pruebas backend con SQLite en memoria:</strong> no dependen de PostgreSQL; los tests<br />
+    aíslan fixtures por archivo.</li>
+<li><strong><code>seed_curso_ia.py</code> es idempotente:</strong> re-ejecutarlo reutiliza el curso existente<br />
+    (<code>058912e7-…</code>) y no duplica.</li>
+<li><strong>Rate limit en <code>/auth/seed/admin</code>:</strong> protegido por <code>X-Bootstrap-Key</code>; no exponer<br />
+    la clave.</li>
+<li><strong>El frontend separa "Mis cursos" del "Catálogo"</strong> dentro de la misma ruta — no es<br />
+    un bug de inscripción.</li>
+</ol>
+<hr />
+<h2 id="10-pruebas-despliegue-y-solucion-de-problemas">10. Pruebas, despliegue y solución de problemas</h2>
+<h3 id="101-suite-de-pruebas">10.1 Suite de pruebas</h3>
+<table>
+<thead>
+<tr>
+<th>Capa</th>
+<th>Comando</th>
+<th>Resultado esperado</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Backend</td>
+<td><code>cd back &amp;&amp; .\venv\Scripts\python.exe -m pytest tests/ -q</code></td>
+<td><strong>303 passed</strong></td>
+</tr>
+<tr>
+<td>Frontend lint</td>
+<td><code>cd front &amp;&amp; npx eslint</code></td>
+<td>0 errores</td>
+</tr>
+<tr>
+<td>Frontend unit</td>
+<td><code>cd front &amp;&amp; npm run test -- --run</code></td>
+<td><strong>60 passed</strong></td>
+</tr>
+<tr>
+<td>Build</td>
+<td><code>cd front &amp;&amp; npm run build</code></td>
+<td>Sin errores</td>
+</tr>
+</tbody>
+</table>
+<p>CI ejecuta las 4 verificaciones en cada push (Python 3.11 + Node 20).</p>
+<h3 id="102-checklist-de-despliegue">10.2 Checklist de despliegue</h3>
+<ul>
+<li>[ ] <code>SUPABASE_DATABASE_URL</code> y <code>JWT_SECRET_KEY</code> (≥ 16 chars) definidos</li>
+<li>[ ] <code>supabase/schema_completo.sql</code> aplicado</li>
+<li>[ ] <code>BACKEND_CORS_ORIGINS</code> y <code>FRONTEND_URL</code> con el dominio real</li>
+<li>[ ] <code>BACKEND_PUBLIC_URL</code> correcto (enlaces de certificados/QR)</li>
+<li>[ ] Frontend: <code>npm run build</code> y <code>VITE_API_URL</code> apuntando al backend</li>
+<li>[ ] Primer admin creado con <code>/auth/seed/admin</code></li>
+<li>[ ] <code>python scripts/generar_manual.py</code> regenerado (si cambió este documento)</li>
+</ul>
+<h3 id="103-troubleshooting">10.3 Troubleshooting</h3>
+<table>
+<thead>
+<tr>
+<th>Síntoma</th>
+<th>Causa probable</th>
+<th>Solución</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>ModuleNotFoundError</code> al arrancar</td>
+<td>venv no activado</td>
+<td><code>.\venv\Scripts\Activate.ps1</code></td>
+</tr>
+<tr>
+<td>Error de conexión a BD</td>
+<td>URL/credenciales Supabase</td>
+<td>Revisar <code>SUPABASE_DATABASE_URL</code></td>
+</tr>
+<tr>
+<td>Columna inexistente</td>
+<td>Modelo ≠ BD</td>
+<td>Añadir a <code>COLUMNAS_ESPERADAS</code> + <code>schema_completo.sql</code></td>
+</tr>
+<tr>
+<td>Curso publicado no aparece en catálogo</td>
+<td>Estado en minúsculas / cache</td>
+<td><code>UPDATE … SET estado='PUBLICADO'</code>; esperar 60 s o reiniciar</td>
+</tr>
+<tr>
+<td>El estudiante no ve su curso</td>
+<td>Mirando "Mis cursos" sin inscripción</td>
+<td>Inscribirse o revisar la sección Catálogo</td>
+</tr>
+<tr>
+<td>Lección no desbloquea</td>
+<td>Regla secuencial / progreso no guardado</td>
+<td>Completar la anterior o <code>/liberar</code></td>
+</tr>
+<tr>
+<td><code>403</code> en un endpoint</td>
+<td>Rol insuficiente</td>
+<td>Verificar JWT (<code>/auth/me</code>) y guard del router</td>
+</tr>
+<tr>
+<td><code>401</code> repentino</td>
+<td>Access token expirado</td>
+<td><code>POST /auth/refresh</code></td>
+</tr>
+<tr>
+<td>Login falla 5 veces</td>
+<td>Bloqueo de fuerza bruta</td>
+<td>Esperar <code>LOGIN_TIMEOUT_MINUTES</code></td>
+</tr>
+<tr>
+<td>YouTube no carga</td>
+<td>URL inválida</td>
+<td>Verificar con oembed (§9.7)</td>
+</tr>
+<tr>
+<td>Nota muestra escala equivocada</td>
+<td>Mezcla 0–20 vs %</td>
+<td>Ver §4: examen % → nota 0–20 server-side</td>
+</tr>
+<tr>
+<td>PDF/certificado inválido</td>
+<td>Firma HMAC con clave distinta</td>
+<td>Misma <code>JWT_SECRET_KEY</code> que emitió</td>
+</tr>
+<tr>
+<td>Pruebas frontend fallan en local</td>
+<td>Watch mode</td>
+<td>Usar <code>npm run test -- --run</code></td>
+</tr>
+<tr>
+<td><code>Set-Content</code> escribe mal</td>
+<td>PowerShell + comillas</td>
+<td>Usar scripts <code>.py</code>/<code>.ps1</code> en archivo</td>
+</tr>
+</tbody>
+</table>
+<h3 id="104-glosario">10.4 Glosario</h3>
+<table>
+<thead>
+<tr>
+<th>Término</th>
+<th>Significado</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>LMS</td>
+<td>Learning Management System (plataforma de cursos)</td>
+</tr>
+<tr>
+<td>JWT</td>
+<td>JSON Web Token (token firmado, <code>sub</code> = usuario)</td>
+</tr>
+<tr>
+<td>HMAC</td>
+<td>Firma de mensaje con clave compartida (códigos de certificado)</td>
+</tr>
+<tr>
+<td>Bloqueo secuencial</td>
+<td>Las lecciones se liberan en orden (estilo Platzi)</td>
+</tr>
+<tr>
+<td><code>BORRADOR</code>/<code>PUBLICADO</code></td>
+<td>Estados de curso y examen (MAYÚSCULAS)</td>
+</tr>
+<tr>
+<td>Seed</td>
+<td>Script de datos iniciales (<code>seed_curso_ia.py</code>, <code>/auth/seed/admin</code>)</td>
+</tr>
+<tr>
+<td>Gate</td>
+<td>Verificación obligatoria antes de commitear (lint, tests, build)</td>
+</tr>
+<tr>
+<td>multi-tenant</td>
+<td>Datos aislados por <code>empresa_id</code></td>
+</tr>
+</tbody>
+</table>
+<hr />
+<p><em>Manual generado desde <code>docs/manual-sistema.md</code>. Regenerar con <code>python scripts/generar_manual.py</code>.</em></p></main>
+</div>
+<footer class="manual-bottom">Zenth Academy · Manual Técnico v1.0.0 · Generado el 2026-09-24</footer>
+<script>
+document.addEventListener('click', function (e) {
+  var t = e.target.closest('[data-print]');
+  if (t) { e.preventDefault(); window.print(); }
+});
+</script>
+</body>
+</html>

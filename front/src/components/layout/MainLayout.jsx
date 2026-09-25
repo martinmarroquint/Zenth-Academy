@@ -450,6 +450,18 @@ const MainLayout = () => {
             </button>
           )}
 
+          {/* Manual del sistema (púbico, con botones de descarga) */}
+          <a
+            href="/manual"
+            className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-gray-500 hover:bg-teal-50 hover:text-[#0f766e] transition-colors min-h-[44px] ${
+              !expandido && 'lg:justify-center'
+            }`}
+            title={!expandido ? 'Manual del sistema' : ''}
+          >
+            <BookOpen className="w-5 h-5 flex-shrink-0" />
+            {expandido && <span className="text-sm font-medium">Manual</span>}
+          </a>
+
           <button
             onClick={handleLogout}
             className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-gray-400 hover:bg-red-50 hover:text-red-600 transition-colors min-h-[44px] ${

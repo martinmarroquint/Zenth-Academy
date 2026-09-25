@@ -231,7 +231,8 @@ def test_leccion_con_bloque_examen_completa_con_resultado_y_nota_del_servidor(
             alumno_id_unificado=str(estudiante_user.id),
             alumno_nombre="Alumno Test",
             respuestas={},
-            calificacion=15.0,
+            # Escala real de calificacion: 0-100 (15/20 puntos = 75%)
+            calificacion=75.0,
             correctas=3,
             total_preguntas=4,
             puntos_obtenidos=15.0,
@@ -253,8 +254,50 @@ def test_leccion_con_bloque_examen_completa_con_resultado_y_nota_del_servidor(
         ProgresoLeccion.leccion_id == "l1",
     ).first()
     assert prog is not None and prog.completado is True
-    assert prog.nota == pytest.approx(15.0)
+    assert prog.nota == pytest.approx(75.0)
     assert prog.aprobado is True
+
+
+@pytest.mark.integration
+@pytest.mark.security
+def test_leccion_examen_calificacion_baja_no_aprueba(
+    client, db, docente_user, estudiante_user, estudiante_headers
+):
+    """✅ BAJA 15: la nota de examen está en escala 0-100 y se aprueba con el
+    puntaje_aprobacion (60). Con ">= 10" una calificación de 15/100 aprobaba."""
+    curso = _crear_curso(db, docente_user, modulos=MODULOS_CON_BLOQUE_EXAMEN)
+    _inscribir(client, curso.id, estudiante_headers)
+
+    db.add(
+        ResultadoExamen(
+            id=str(uuid.uuid4()),
+            examen_id="examen-bloque-test",
+            alumno_id=str(estudiante_user.id),
+            alumno_id_unificado=str(estudiante_user.id),
+            alumno_nombre="Alumno Test",
+            respuestas={},
+            calificacion=15.0,
+            correctas=0,
+            total_preguntas=4,
+            puntos_obtenidos=3.0,
+            total_puntos=20.0,
+            estado="COMPLETADO",
+        )
+    )
+    db.commit()
+
+    resp = _completar(client, curso.id, "l1", estudiante_user.id, estudiante_headers)
+
+    assert resp.status_code == 200, resp.text
+    db.expire_all()
+    prog = db.query(ProgresoLeccion).filter(
+        ProgresoLeccion.curso_id == str(curso.id),
+        ProgresoLeccion.estudiante_id == str(estudiante_user.id),
+        ProgresoLeccion.leccion_id == "l1",
+    ).first()
+    assert prog is not None and prog.completado is True
+    assert prog.nota == pytest.approx(15.0)
+    assert prog.aprobado is False
 
 
 @pytest.mark.integration

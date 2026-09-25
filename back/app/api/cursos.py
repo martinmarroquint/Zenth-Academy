@@ -28,6 +28,7 @@ from app.models.curso import (
 from app.models.certificado import Certificado
 from app.core.certificado_firma import calcular_firma
 from app.models.resultado_examen import ResultadoExamen
+from app.models.examen import Examen
 from app.models.comentario_leccion import ComentarioLeccion, LikeComentarioLeccion
 from app.schemas.curso import (
     CursoCreate, CursoUpdate, CursoResponse,
@@ -234,6 +235,11 @@ def _emitir_certificado_automatico(db: Session, curso: Curso, estudiante_id: str
                 if promedio < float(curso.certificado_nota_minima):
                     logger.info(f"Certificado NO emitido para {estudiante_id}: promedio {promedio:.2f} < minimo {curso.certificado_nota_minima}")
                     return
+            else:
+                # ✅ BAJA 12: exige nota mínima pero NO hay ninguna nota →
+                # no emitir. Antes se salteaba la validación y emitía igual.
+                logger.info(f"Certificado NO emitido para {estudiante_id}: exige nota minima {curso.certificado_nota_minima} pero no hay notas registradas")
+                return
 
         # Evitar duplicados
         existe = db.query(Certificado).filter(
@@ -1593,6 +1599,18 @@ async def obtener_progreso_detallado(
 # COMPLETAR LECCIÓN, PROGRESO, EVALUACIONES Y BLOQUEOS
 # =============================================
 
+def _umbral_aprobacion_examen(db: Session, examen_id) -> float:
+    """✅ BAJA 15: umbral de aprobación de un examen en escala 0-100
+    (puntaje_aprobacion del examen, default 60). La regla ">= 10" solo
+    aplica a calificaciones manuales de lección (escala 0-20)."""
+    if not examen_id:
+        return 60.0
+    examen = db.query(Examen).filter(Examen.id == str(examen_id)).first()
+    if examen and examen.puntaje_aprobacion:
+        return float(examen.puntaje_aprobacion)
+    return 60.0
+
+
 def _nota_confiable_desde_examen(
     db: Session,
     leccion: dict,
@@ -1719,10 +1737,12 @@ async def completar_leccion(
             ]
         )
         nota_examen = None
+        aprobado_examen = None
         if ids_examen_leccion and current_user.rol == "estudiante":
             # Todos los exámenes de la lección deben tener resultado válido;
             # con varios, la nota de la lección es la más baja (hay que cubrirlos).
             notas_examen = []
+            todos_aprobados = True
             for eid in ids_examen_leccion:
                 n = _nota_confiable_desde_examen(db, leccion, estudiante_id, examen_id=eid)
                 if n is None:
@@ -1731,7 +1751,12 @@ async def completar_leccion(
                         detail="Debes rendir el examen antes de completar esta lección",
                     )
                 notas_examen.append(n)
+                # ✅ BAJA 15: aprobación por examen en escala 0-100
+                # (puntaje_aprobacion), no ">= 10".
+                if (n or 0.0) < _umbral_aprobacion_examen(db, eid):
+                    todos_aprobados = False
             nota_examen = min(notas_examen) if len(notas_examen) > 1 else notas_examen[0]
+            aprobado_examen = todos_aprobados
 
         # Obtener o crear el progreso de la lección
         progreso = _get_progreso_leccion(db, curso_id, estudiante_id, leccion_id)
@@ -1753,7 +1778,17 @@ async def completar_leccion(
             nota_examen = _nota_confiable_desde_examen(db, leccion, estudiante_id)
         if nota_examen is not None:
             progreso.nota = nota_examen
-            progreso.aprobado = nota_examen >= 10
+            # ✅ BAJA 15: la nota de examen está en escala 0-100 y se aprueba
+            # con el puntaje_aprobacion del examen (default 60). ">= 10"
+            # aprobaba cualquier examen con 10/100. La regla ">= 10" sigue
+            # siendo la de calificaciones manuales (escala 0-20, más abajo).
+            if aprobado_examen is None:
+                contenido_nd = (leccion or {}).get("contenido") or {}
+                examen_umbral_id = contenido_nd.get("examen_id") or (
+                    ids_examen_leccion[0] if ids_examen_leccion else None
+                )
+                aprobado_examen = nota_examen >= _umbral_aprobacion_examen(db, examen_umbral_id)
+            progreso.aprobado = bool(aprobado_examen)
         elif data.nota is not None and current_user.rol in ["admin", "docente"]:
             # Solo docentes/admins pueden fijar notas manualmente vía este endpoint
             progreso.nota = data.nota

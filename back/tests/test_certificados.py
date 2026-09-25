@@ -597,3 +597,178 @@ def test_emision_automatica_incluye_firma(client, db, docente_user, estudiante_u
     ).first()
     assert cert is not None
     assert cert.firma, "La emisión automática debe incluir firma HMAC"
+
+
+# =====================================================
+# 4. SEGURIDAD: EMISIÓN MANUAL (MEDIA 10) Y NOTA MÍNIMA (BAJA 12)
+# =====================================================
+
+def _inscribir_estudiante(db, curso, estudiante, notas=None):
+    """Inscribe al estudiante, marca l1/l2 completadas y registra notas (si se pasan)."""
+    db.add(InscripcionCurso(
+        id=str(uuid.uuid4()),
+        curso_id=str(curso.id),
+        estudiante_id=str(estudiante.id),
+        estudiante_nombre=estudiante.nombre_completo,
+        progreso=100,
+        completado=True,
+        lecciones_completadas=["l1", "l2"],
+    ))
+    for i, leccion_id in enumerate(("l1", "l2")):
+        db.add(ProgresoLeccion(
+            id=str(uuid.uuid4()),
+            curso_id=str(curso.id),
+            estudiante_id=str(estudiante.id),
+            leccion_id=leccion_id,
+            modulo_id="m1",
+            completado=True,
+            nota=(notas[i] if notas and i < len(notas) else None),
+            fecha_completado=datetime.now(timezone.utc),
+        ))
+    db.commit()
+
+
+def _payload_cert_manual(docente_user, estudiante, curso):
+    return {
+        "estudiante_id": str(estudiante.id),
+        "estudiante_nombre": estudiante.nombre_completo,
+        "curso_id": str(curso.id),
+        "curso_titulo": curso.titulo,
+        "docente_id": str(docente_user.id),
+        "docente_nombre": docente_user.nombre_completo,
+    }
+
+
+@pytest.mark.security
+@pytest.mark.integration
+def test_crea_certificado_de_curso_ajeno_403(
+    client, db, docente_user, otro_docente_user, docente_headers
+):
+    curso = _crear_curso_certificable(db, otro_docente_user)
+
+    resp = client.post(
+        "/api/v1/certificados/",
+        json=_payload_cert_manual(docente_user, docente_user, curso),
+        headers=docente_headers,
+    )
+    assert resp.status_code == 403, resp.text
+
+
+@pytest.mark.security
+@pytest.mark.integration
+def test_crea_certificado_exige_inscripcion_del_estudiante(
+    client, db, docente_user, estudiante_user, docente_headers
+):
+    curso = _crear_curso_certificable(db, docente_user)
+
+    resp = client.post(
+        "/api/v1/certificados/",
+        json=_payload_cert_manual(docente_user, estudiante_user, curso),
+        headers=docente_headers,
+    )
+    assert resp.status_code == 400, resp.text
+    assert "inscrito" in resp.json()["detail"].lower()
+
+
+@pytest.mark.integration
+def test_crea_certificado_inscrito_sin_nota_minima_201(
+    client, db, docente_user, estudiante_user, docente_headers
+):
+    curso = _crear_curso_certificable(db, docente_user)  # sin certificado_nota_minima
+    _inscribir_estudiante(db, curso, estudiante_user)
+
+    resp = client.post(
+        "/api/v1/certificados/",
+        json=_payload_cert_manual(docente_user, estudiante_user, curso),
+        headers=docente_headers,
+    )
+    assert resp.status_code == 201, resp.text
+
+
+@pytest.mark.security
+@pytest.mark.integration
+def test_crea_certificado_respeta_nota_minima_400(
+    client, db, docente_user, estudiante_user, docente_headers
+):
+    curso = _crear_curso_certificable(db, docente_user, certificado_nota_minima=15)
+    _inscribir_estudiante(db, curso, estudiante_user, notas=[10.0, 12.0])  # promedio 11 < 15
+
+    resp = client.post(
+        "/api/v1/certificados/",
+        json=_payload_cert_manual(docente_user, estudiante_user, curso),
+        headers=docente_headers,
+    )
+    assert resp.status_code == 400, resp.text
+    assert "nota mínima" in resp.json()["detail"]
+
+
+@pytest.mark.integration
+def test_crea_certificado_con_nota_minima_cumplida_201(
+    client, db, docente_user, estudiante_user, docente_headers
+):
+    curso = _crear_curso_certificable(db, docente_user, certificado_nota_minima=15)
+    _inscribir_estudiante(db, curso, estudiante_user, notas=[16.0, 18.0])  # promedio 17 >= 15
+
+    resp = client.post(
+        "/api/v1/certificados/",
+        json=_payload_cert_manual(docente_user, estudiante_user, curso),
+        headers=docente_headers,
+    )
+    assert resp.status_code == 201, resp.text
+
+
+@pytest.mark.security
+@pytest.mark.integration
+def test_crea_certificado_sin_notas_con_minima_400(
+    client, db, docente_user, estudiante_user, docente_headers
+):
+    """✅ BAJA 12 (ruta manual): exige nota mínima pero no hay notas → 400."""
+    curso = _crear_curso_certificable(db, docente_user, certificado_nota_minima=15)
+    _inscribir_estudiante(db, curso, estudiante_user)  # completo, SIN notas
+
+    resp = client.post(
+        "/api/v1/certificados/",
+        json=_payload_cert_manual(docente_user, estudiante_user, curso),
+        headers=docente_headers,
+    )
+    assert resp.status_code == 400, resp.text
+
+
+@pytest.mark.integration
+def test_emision_automatica_no_omite_nota_minima_sin_notas(db, docente_user, estudiante_user):
+    """✅ BAJA 12: con nota mínima exigida y CERO notas, NO se emite."""
+    from app.api.cursos import _actualizar_progreso_curso
+
+    curso = _crear_curso_certificable(
+        db, docente_user, certificado_habilitado=True, certificado_nota_minima=15
+    )
+    _inscribir_estudiante(db, curso, estudiante_user)  # l1/l2 completadas sin notas
+
+    _actualizar_progreso_curso(db, str(curso.id), str(estudiante_user.id))
+    db.expire_all()
+
+    cert = db.query(Certificado).filter(
+        Certificado.curso_id == str(curso.id),
+        Certificado.estudiante_id == str(estudiante_user.id),
+    ).first()
+    assert cert is None, "No debe emitirse certificado sin notas cuando exige nota mínima"
+
+
+@pytest.mark.integration
+def test_emision_automatica_con_notas_suficientes(db, docente_user, estudiante_user):
+    """Con nota mínima exigida y promedio suficiente, sí se emite."""
+    from app.api.cursos import _actualizar_progreso_curso
+
+    curso = _crear_curso_certificable(
+        db, docente_user, certificado_habilitado=True, certificado_nota_minima=15
+    )
+    _inscribir_estudiante(db, curso, estudiante_user, notas=[16.0, 18.0])
+
+    _actualizar_progreso_curso(db, str(curso.id), str(estudiante_user.id))
+    db.expire_all()
+
+    cert = db.query(Certificado).filter(
+        Certificado.curso_id == str(curso.id),
+        Certificado.estudiante_id == str(estudiante_user.id),
+    ).first()
+    assert cert is not None, "Debe emitirse con promedio >= nota mínima"

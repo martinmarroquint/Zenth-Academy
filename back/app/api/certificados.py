@@ -2,6 +2,7 @@
 # ROUTER DE CERTIFICADOS
 
 from fastapi import APIRouter, Depends, HTTPException, Query
+from sqlalchemy import cast, String
 from sqlalchemy.orm import Session
 from typing import List, Optional
 import uuid
@@ -12,6 +13,7 @@ from app.core.dependencies import require_roles
 from app.core.errors import error_interno
 from app.core.certificado_firma import calcular_firma, verificar_firma
 from app.models.certificado import Certificado
+from app.models.curso import Curso, InscripcionCurso, ProgresoLeccion
 from app.schemas.certificado import (
     CertificadoCreate, CertificadoUpdate, CertificadoResponse, MensajeResponse
 )
@@ -132,6 +134,53 @@ async def crear_certificado(
             raise HTTPException(status_code=400, detail="El codigo ya existe")
         # ✅ SEGURIDAD: el emisor es SIEMPRE el usuario autenticado (admin puede indicar otro).
         docente_id_final = data.docente_id if current_user.rol == "admin" and data.docente_id else str(current_user.id)
+        # ✅ SEGURIDAD (MEDIA 10): si el curso existe, validar ownership,
+        # inscripción del estudiante y nota mínima. Antes cualquier docente
+        # emitía certificados de cursos ajenos o de estudiantes que no
+        # completaron/aprobaron. (curso_id inexistente se tolera por
+        # compatibilidad con certificados manuales externos/legacy.)
+        curso = None
+        if data.curso_id:
+            curso = db.query(Curso).filter(Curso.id == str(data.curso_id)).first()
+        if curso is not None:
+            if (
+                current_user.rol != "admin"
+                and curso.docente_id
+                and str(curso.docente_id) != str(current_user.id)
+            ):
+                logger.warning(
+                    f"Acceso denegado: docente {current_user.id} intentó emitir "
+                    f"certificado del curso {curso.id} (dueño {curso.docente_id})"
+                )
+                raise HTTPException(
+                    status_code=403,
+                    detail="No tienes permiso para emitir certificados de este curso",
+                )
+            inscripcion = db.query(InscripcionCurso).filter(
+                cast(InscripcionCurso.curso_id, String) == str(curso.id),
+                cast(InscripcionCurso.estudiante_id, String) == str(data.estudiante_id),
+            ).first()
+            if not inscripcion:
+                raise HTTPException(
+                    status_code=400,
+                    detail="El estudiante no está inscrito en este curso",
+                )
+            if curso.certificado_nota_minima is not None:
+                notas = db.query(ProgresoLeccion.nota).filter(
+                    ProgresoLeccion.curso_id == curso.id,
+                    ProgresoLeccion.estudiante_id == str(data.estudiante_id),
+                    ProgresoLeccion.nota.isnot(None),
+                ).all()
+                valores = [float(n[0]) for n in notas if n[0] is not None]
+                promedio = (sum(valores) / len(valores)) if valores else None
+                if promedio is None or promedio < float(curso.certificado_nota_minima):
+                    raise HTTPException(
+                        status_code=400,
+                        detail=(
+                            "El estudiante no alcanza la nota mínima del curso "
+                            f"({curso.certificado_nota_minima})"
+                        ),
+                    )
         metadata_extra = {}
         if data.diseno:
             metadata_extra["diseno"] = data.diseno

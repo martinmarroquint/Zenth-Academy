@@ -284,14 +284,21 @@ def test_docente_ajeno_no_obtiene_examen_borrador_de_otro(
 
 
 @pytest.mark.integration
-def test_estudiante_solo_ve_examenes_publicados_en_listado(client, db, docente_user, estudiante_headers):
-    _crear_examen(db, docente_user, estado="PUBLICADO", titulo="Publicado")
+def test_estudiante_solo_ve_examenes_publicados_en_listado(
+    client, db, docente_user, estudiante_user, estudiante_headers
+):
+    examen_pub = _crear_examen(db, docente_user, estado="PUBLICADO", titulo="Publicado")
     _crear_examen(db, docente_user, estado="BORRADOR", titulo="Borrador")
+    # ✅ BAJA 14: además de estar PUBLICADO debe pertenecer a un curso suyo
+    _crear_curso_con_examen(db, docente_user, examen_pub.id, estudiante_user)
 
     resp = client.get("/api/v1/examenes/", headers=estudiante_headers)
     assert resp.status_code == 200, resp.text
     estados = {e["estado"] for e in resp.json()}
-    assert estados <= {"PUBLICADO"}
+    assert estados == {"PUBLICADO"}
+    titulos = {e["titulo"] for e in resp.json()}
+    assert "Publicado" in titulos
+    assert "Borrador" not in titulos
 
 
 # =====================================================
@@ -812,3 +819,108 @@ def test_revision_oculta_todo_si_mostrar_resultados_false(
     assert item["correcta"] is None
     assert item["puntos_obtenidos"] == 0
     assert "respuesta_correcta" not in item, resp.text
+
+
+# =====================================================
+# 10. SEGURIDAD: INYECCIÓN DE RESULTADOS Y LISTADO DE EXÁMENES (BAJA 13/14)
+# =====================================================
+
+def _crear_curso_con_examen(db, docente, examen_id, estudiante, *, leccion_id="l1"):
+    """Crea un curso PUBLICADO con una lección-examen y matricula al estudiante."""
+    from app.models.curso import Curso, InscripcionCurso
+
+    curso = Curso(
+        id=str(uuid.uuid4()),
+        titulo="Curso con examen",
+        descripcion="",
+        categoria="general",
+        nivel="principiante",
+        docente_id=str(docente.id),
+        docente_nombre=docente.nombre_completo,
+        precio_tipo="gratis",
+        estado="PUBLICADO",
+        modulos=[{
+            "id": "m1",
+            "titulo": "Módulo 1",
+            "lecciones": [{
+                "id": leccion_id,
+                "titulo": "Lección examen",
+                "tipo": "examen",
+                "contenido": {"examen_id": str(examen_id)},
+            }],
+        }],
+        tipo_bloqueo="ninguno",
+        bloqueo_config={},
+        etiquetas=[],
+        requisitos=[],
+        objetivos=[],
+        certificado_habilitado=True,
+        certificado_nota_minima=None,
+    )
+    db.add(curso)
+    db.add(InscripcionCurso(
+        id=str(uuid.uuid4()),
+        curso_id=str(curso.id),
+        estudiante_id=str(estudiante.id),
+        estudiante_nombre=estudiante.nombre_completo,
+        progreso=0,
+        completado=False,
+        lecciones_completadas=[],
+    ))
+    db.commit()
+    return curso
+
+
+@pytest.mark.security
+@pytest.mark.integration
+def test_docente_no_inyecta_resultado_en_examen_ajeno(
+    client, db, otro_docente_user, docente_headers, estudiante_user
+):
+    """✅ BAJA 13: sin intento propio, un docente no registra resultados en exámenes ajenos."""
+    from app.models.resultado_examen import ResultadoExamen
+
+    examen = _crear_examen(db, otro_docente_user, estado="PUBLICADO", preguntas=[_pregunta_om()])
+
+    resp = client.post(
+        "/api/v1/examenes/resultados",
+        json=_payload_resultado(examen, estudiante_user.id, {"0": 1}),
+        headers=docente_headers,
+    )
+    assert resp.status_code == 403, resp.text
+
+    db.expire_all()
+    assert db.query(ResultadoExamen).filter(
+        ResultadoExamen.examen_id == str(examen.id)
+    ).count() == 0
+
+
+@pytest.mark.integration
+def test_docente_registra_resultado_manual_en_su_examen(
+    client, db, docente_user, docente_headers, estudiante_user
+):
+    """El registro manual (sin intento) sigue permitido en exámenes propios."""
+    examen = _crear_examen(db, docente_user, estado="PUBLICADO", preguntas=[_pregunta_om()])
+
+    resp = client.post(
+        "/api/v1/examenes/resultados",
+        json=_payload_resultado(examen, estudiante_user.id, {"0": 1}),
+        headers=docente_headers,
+    )
+    assert resp.status_code == 201, resp.text
+
+
+@pytest.mark.security
+@pytest.mark.integration
+def test_estudiante_lista_solo_examenes_de_sus_cursos(
+    client, db, docente_user, estudiante_user, estudiante_headers
+):
+    """✅ BAJA 14: no se enumeran exámenes publicados de cursos ajenos."""
+    examen_propio = _crear_examen(db, docente_user, estado="PUBLICADO", titulo="De mi curso")
+    _crear_examen(db, docente_user, estado="PUBLICADO", titulo="Suelto ajeno")
+    _crear_curso_con_examen(db, docente_user, examen_propio.id, estudiante_user)
+
+    resp = client.get("/api/v1/examenes/", headers=estudiante_headers)
+    assert resp.status_code == 200, resp.text
+    titulos = {e["titulo"] for e in resp.json()}
+    assert "De mi curso" in titulos
+    assert "Suelto ajeno" not in titulos

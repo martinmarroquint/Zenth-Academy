@@ -2,7 +2,7 @@
 # VERSION COMPLETA - CON ENDPOINTS PARA EMBED EN CURSOS Y NUEVOS ROLES
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
-from sqlalchemy import or_, func
+from sqlalchemy import or_, func, cast, String, false
 from sqlalchemy.orm import Session, selectinload
 from typing import List, Optional
 import uuid
@@ -278,12 +278,42 @@ def _serializar_examen(examen: Examen, incluir_respuestas: bool, db: Session = N
     }
 
 
-def _filtrar_examenes_por_rol(query, current_user: Usuario):
+def _examenes_accesibles_estudiante(db: Session, estudiante_id) -> set:
+    """✅ BAJA 14: ids de exámenes que un estudiante puede ver en LISTADOS:
+    los referenciados por lecciones (contenido.examen_id o bloque-examen) de
+    los cursos donde está inscrito. Los exámenes compartidos por link siguen
+    accesibles por id/código (fetch/intento); esto solo limita la enumeración.
+    """
+    from app.models.curso import Curso, InscripcionCurso
+
+    inscripciones = db.query(InscripcionCurso).filter(
+        cast(InscripcionCurso.estudiante_id, String) == str(estudiante_id)
+    ).all()
+    if not inscripciones:
+        return set()
+    curso_ids = {str(i.curso_id) for i in inscripciones}
+    ids = set()
+    for curso in db.query(Curso).filter(Curso.id.in_(curso_ids)).all():
+        for modulo in curso.modulos or []:
+            for leccion in modulo.get("lecciones") or []:
+                contenido = leccion.get("contenido") or {}
+                if contenido.get("examen_id"):
+                    ids.add(str(contenido["examen_id"]))
+                for bloque in leccion.get("bloques") or []:
+                    if bloque.get("tipo") == "examen":
+                        eid = (bloque.get("contenido") or {}).get("examen_id")
+                        if eid:
+                            ids.add(str(eid))
+    return ids
+
+
+def _filtrar_examenes_por_rol(query, current_user: Usuario, db=None):
     """Aísla los exámenes según el rol.
 
     - admin: ve todos.
     - docente: ve los suyos (+ legacy sin dueño).
-    - estudiante: solo exámenes PUBLICADO.
+    - estudiante: solo exámenes PUBLICADO de lecciones de SUS cursos
+      (✅ BAJA 14: antes listaba todos los publicados de todos los docentes).
     """
     if current_user.rol == 'admin':
         return query
@@ -291,7 +321,14 @@ def _filtrar_examenes_por_rol(query, current_user: Usuario):
         return query.filter(
             or_(Examen.docente_id == str(current_user.id), Examen.docente_id.is_(None))
         )
-    return query.filter(Examen.estado == 'PUBLICADO')
+    query = query.filter(Examen.estado == 'PUBLICADO')
+    if db is not None:
+        accesibles = _examenes_accesibles_estudiante(db, current_user.id)
+        if accesibles:
+            query = query.filter(Examen.id.in_(accesibles))
+        else:
+            query = query.filter(false())
+    return query
 
 
 def _aware_utc(dt):
@@ -1421,6 +1458,13 @@ def guardar_resultado(
     examen = db.query(Examen).filter(Examen.id == data.examen_id).first()
     if not examen:
         raise HTTPException(status_code=404, detail="Examen no encontrado")
+
+    # ✅ SEGURIDAD (BAJA 13): el registro MANUAL (sin intento emitido por el
+    # servidor) de un docente solo aplica a SUS exámenes (admin: cualquiera).
+    # Rendir con intento propio sigue permitido (rol dual / práctica), porque
+    # `_resolver_tiempo_desde_intento` amarra el intento al usuario que lo inició.
+    if current_user.rol == 'docente' and not data.intento_id:
+        _verificar_ownership_examen(examen, current_user)
     
     # ✅ SEGURIDAD (CRÍTICO): Un estudiante solo puede enviar resultados como él mismo.
     # Docentes/admins pueden registrar en nombre de un alumno (uso manual/testing).
@@ -1914,7 +1958,7 @@ def listar_examenes_bulk(
     if not grupo_ids:
         return {}
     query = db.query(Examen).options(selectinload(Examen.preguntas)).filter(Examen.grupo_id.in_(grupo_ids))
-    query = _filtrar_examenes_por_rol(query, current_user)
+    query = _filtrar_examenes_por_rol(query, current_user, db)
     if estado:
         query = query.filter(Examen.estado == estado)
     if busqueda:
@@ -1959,7 +2003,7 @@ def listar_examenes_por_grupo(
     current_user: Usuario = Depends(get_current_active_user)
 ):
     query = db.query(Examen).options(selectinload(Examen.preguntas)).filter(Examen.grupo_id == grupo_id)
-    query = _filtrar_examenes_por_rol(query, current_user)
+    query = _filtrar_examenes_por_rol(query, current_user, db)
     if estado:
         query = query.filter(Examen.estado == estado)
     if busqueda:
@@ -1977,7 +2021,7 @@ def obtener_resumen_examenes(
     current_user: Usuario = Depends(get_current_active_user)
 ):
     query = db.query(Examen)
-    query = _filtrar_examenes_por_rol(query, current_user)
+    query = _filtrar_examenes_por_rol(query, current_user, db)
     if grupo_ids:
         query = query.filter(Examen.grupo_id.in_(grupo_ids))
     total = query.count()
@@ -1990,7 +2034,7 @@ def obtener_resumen_examenes(
         conteos_query = db.query(Examen.grupo_id, func.count(Examen.id)).filter(
             Examen.grupo_id.in_(grupo_ids)
         )
-        conteos_query = _filtrar_examenes_por_rol(conteos_query, current_user)
+        conteos_query = _filtrar_examenes_por_rol(conteos_query, current_user, db)
         conteos = conteos_query.group_by(Examen.grupo_id).all()
         conteos_map = {gid: cnt for gid, cnt in conteos}
         por_grupo = {gid: conteos_map.get(gid, 0) for gid in grupo_ids}
@@ -2018,7 +2062,7 @@ def listar_examenes(
     current_user: Usuario = Depends(get_current_active_user)
 ):
     query = db.query(Examen).options(selectinload(Examen.preguntas))
-    query = _filtrar_examenes_por_rol(query, current_user)
+    query = _filtrar_examenes_por_rol(query, current_user, db)
     if estado:
         query = query.filter(Examen.estado == estado)
     if busqueda:
@@ -2040,7 +2084,7 @@ def listar_examenes_publicados(
     current_user: Usuario = Depends(get_current_active_user)
 ):
     query = db.query(Examen).options(selectinload(Examen.preguntas)).filter(Examen.estado == 'PUBLICADO')
-    query = _filtrar_examenes_por_rol(query, current_user)
+    query = _filtrar_examenes_por_rol(query, current_user, db)
     return query.order_by(Examen.created_at.desc()).all()
 
 

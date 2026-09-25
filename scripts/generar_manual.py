@@ -1,13 +1,11 @@
 #!/usr/bin/env python3
 """
-generar_manual.py — Genera las versiones descargables del manual del sistema.
+generar_manual.py — Genera las versiones descargables de los manuales.
 
-Entrada (fuente canónica):
-    docs/manual-sistema.md
-
-Salidas:
-    front/public/manual.html         Manual autocontenido (navegable e imprimible a PDF)
-    front/public/manual-sistema.md   Copia en Markdown para descarga directa
+Fuentes canónicas (docs/) y salidas (front/public/):
+    manual-sistema.md   -> manual.html            + manual-sistema.md   (técnico, equipo)
+    manual-docentes.md  -> manual-docentes.html    + manual-docentes.md  (uso, docentes)
+    manual-alumnos.md   -> manual-alumnos.html     + manual-alumnos.md   (uso, alumnos)
 
 Uso:
     python scripts/generar_manual.py
@@ -23,13 +21,24 @@ from pathlib import Path
 
 try:
     import markdown
+    from markdown.extensions.toc import slugify_unicode
 except ImportError:
     sys.exit("Falta la dependencia 'markdown'. Instala con: pip install markdown")
 
 RAIZ = Path(__file__).resolve().parent.parent
-FUENTE = RAIZ / "docs" / "manual-sistema.md"
-SALIDA_HTML = RAIZ / "front" / "public" / "manual.html"
-SALIDA_MD = RAIZ / "front" / "public" / "manual-sistema.md"
+DOCS = RAIZ / "docs"
+PUBLIC = RAIZ / "front" / "public"
+
+# (fuente en docs/, HTML en front/public/, MD copiado en front/public/,
+#  título de página, etiqueta del pie)
+MANUALES = [
+    ("manual-sistema.md", "manual.html", "manual-sistema.md",
+     "Manual del Sistema", "Manual Técnico v1.0.0"),
+    ("manual-docentes.md", "manual-docentes.html", "manual-docentes.md",
+     "Manual para Docentes", "Manual para Docentes v1.0.0"),
+    ("manual-alumnos.md", "manual-alumnos.html", "manual-alumnos.md",
+     "Manual para Alumnos", "Manual para Alumnos v1.0.0"),
+]
 
 CSS = """
 :root {
@@ -104,14 +113,14 @@ PLANTILLA = """<!DOCTYPE html>
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Zenth Academy — Manual del Sistema</title>
+<title>Zenth Academy — {titulo}</title>
 <style>{css}</style>
 </head>
 <body>
 <header class="manual-top no-print">
-  <h1>Zenth Academy — Manual del Sistema</h1>
+  <h1>Zenth Academy — {titulo}</h1>
   <div class="spacer"></div>
-  <a class="btn ghost" href="/manual-sistema.md" download>Descargar Markdown</a>
+  <a class="btn ghost" href="/{descarga_md}" download>Descargar Markdown</a>
   <a class="btn ghost" href="#" data-print>Imprimir / Guardar PDF</a>
   <a class="btn" href="/">Volver a la app</a>
 </header>
@@ -122,7 +131,7 @@ PLANTILLA = """<!DOCTYPE html>
   </nav>
   <main>{cuerpo}</main>
 </div>
-<footer class="manual-bottom">Zenth Academy · Manual Técnico v1.0.0 · Generado el {fecha}</footer>
+<footer class="manual-bottom">Zenth Academy · {pie} · Generado el {fecha}</footer>
 <script>{js}</script>
 </body>
 </html>
@@ -133,7 +142,11 @@ def md_a_html(texto: str) -> str:
     return markdown.markdown(
         texto,
         extensions=["tables", "fenced_code", "toc", "sane_lists", "nl2br"],
-        extension_configs={"toc": {"toc_depth": "2-3", "permalink": False}},
+        extension_configs={
+            # slugify_unicode: las anclas conservan los acentos, igual que los
+            # índices escritos a mano en los manuales (#1-cómo-crear-...).
+            "toc": {"slugify": slugify_unicode, "toc_depth": "2-3", "permalink": False},
+        },
     )
 
 
@@ -160,19 +173,25 @@ def construir_toc(html: str) -> str:
 
 
 def main() -> None:
-    if not FUENTE.exists():
-        sys.exit(f"No se encontró la fuente: {FUENTE}")
-    texto = FUENTE.read_text(encoding="utf-8")
-    html_cuerpo = md_a_html(texto)
-    toc = construir_toc(html_cuerpo)
-    html = PLANTILLA.format(css=CSS, js=JS, toc=toc, cuerpo=html_cuerpo, fecha=date.today().isoformat())
+    PUBLIC.mkdir(parents=True, exist_ok=True)
+    for fuente, salida_html, salida_md, titulo, pie in MANUALES:
+        origen = DOCS / fuente
+        if not origen.exists():
+            sys.exit(f"No se encontró la fuente: {origen}")
+        texto = origen.read_text(encoding="utf-8")
+        html_cuerpo = md_a_html(texto)
+        toc = construir_toc(html_cuerpo)
+        html = PLANTILLA.format(
+            css=CSS, js=JS, toc=toc, cuerpo=html_cuerpo,
+            fecha=date.today().isoformat(), titulo=titulo,
+            descarga_md=salida_md, pie=pie,
+        )
 
-    SALIDA_HTML.parent.mkdir(parents=True, exist_ok=True)
-    SALIDA_HTML.write_text(html, encoding="utf-8")
-    SALIDA_MD.write_text(texto, encoding="utf-8")
+        (PUBLIC / salida_html).write_text(html, encoding="utf-8")
+        (PUBLIC / salida_md).write_text(texto, encoding="utf-8")
 
-    print(f"OK  {SALIDA_HTML.relative_to(RAIZ)}  ({len(html):,} bytes)")
-    print(f"OK  {SALIDA_MD.relative_to(RAIZ)}  ({len(texto):,} bytes)")
+        print(f"OK  front/public/{salida_html}  ({len(html):,} bytes)")
+        print(f"OK  front/public/{salida_md}  ({len(texto):,} bytes)")
 
 
 if __name__ == "__main__":

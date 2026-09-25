@@ -343,6 +343,14 @@ const Home = () => {
 
       <p className="text-[10px] text-gray-300 mt-8 animate-fade-in-up-delay-4">
         Zenth Academy v2.0 Sistema Educativo ·{' '}
+        <Link to="/manual-alumnos" className="transition-colors hover:underline" style={{ color: '#0f766e' }}>
+          Manual para alumnos
+        </Link>
+        {' · '}
+        <Link to="/manual-docentes" className="transition-colors hover:underline" style={{ color: '#0f766e' }}>
+          Manual para docentes
+        </Link>
+        {' · '}
         <Link to="/manual" className="transition-colors hover:underline" style={{ color: '#0f766e' }}>
           Manual del sistema
         </Link>

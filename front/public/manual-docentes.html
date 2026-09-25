@@ -1,0 +1,623 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Zenth Academy — Manual para Docentes</title>
+<style>
+:root {
+  --teal: #0f766e; --teal-dark: #115e59; --ink: #1e293b; --muted: #64748b;
+  --bg: #f8fafc; --card: #ffffff; --line: #e2e8f0; --code-bg: #0f172a;
+}
+* { box-sizing: border-box; }
+html { scroll-behavior: smooth; }
+body {
+  margin: 0; font-family: "Segoe UI", system-ui, -apple-system, sans-serif;
+  color: var(--ink); background: var(--bg); line-height: 1.65; font-size: 16px;
+}
+header.manual-top {
+  position: sticky; top: 0; z-index: 20; background: var(--teal-dark);
+  color: #fff; padding: 0.7rem 1.2rem; display: flex; align-items: center;
+  gap: 1rem; flex-wrap: wrap; box-shadow: 0 2px 8px rgba(0,0,0,.18);
+}
+header.manual-top h1 { font-size: 1rem; margin: 0; font-weight: 600; }
+header.manual-top .spacer { flex: 1; }
+header.manual-top a.btn {
+  background: #fff; color: var(--teal-dark); text-decoration: none;
+  padding: 0.4rem 0.85rem; border-radius: 6px; font-size: .85rem; font-weight: 600;
+}
+header.manual-top a.btn.ghost { background: transparent; color: #fff; border: 1px solid rgba(255,255,255,.6); }
+.layout { display: flex; max-width: 1200px; margin: 0 auto; gap: 1.5rem; padding: 1.5rem 1rem 4rem; }
+nav.toc {
+  width: 250px; flex-shrink: 0; position: sticky; top: 64px; align-self: flex-start;
+  max-height: calc(100vh - 80px); overflow-y: auto; background: var(--card);
+  border: 1px solid var(--line); border-radius: 10px; padding: 1rem; font-size: .85rem;
+}
+nav.toc .toc-title { font-weight: 700; color: var(--teal); margin-bottom: .5rem; text-transform: uppercase; font-size: .72rem; letter-spacing: .06em; }
+nav.toc ol { list-style: none; margin: 0; padding: 0; }
+nav.toc ol ol { padding-left: 0.9rem; }
+nav.toc a { display: block; color: var(--muted); text-decoration: none; padding: .22rem 0; }
+nav.toc a:hover { color: var(--teal); }
+main { flex: 1; min-width: 0; background: var(--card); border: 1px solid var(--line); border-radius: 10px; padding: 1.8rem 2.2rem; }
+main h1 { color: var(--teal-dark); font-size: 1.9rem; margin-top: 0; }
+main h2 { color: var(--teal-dark); font-size: 1.4rem; border-bottom: 2px solid var(--line); padding-bottom: .35rem; margin-top: 2.4rem; }
+main h3 { color: var(--teal); font-size: 1.12rem; margin-top: 1.8rem; }
+main a { color: var(--teal); }
+main code { background: #eef2f5; padding: .1rem .35rem; border-radius: 4px; font-size: .87em; font-family: Consolas, "Courier New", monospace; }
+main pre { background: var(--code-bg); color: #e2e8f0; padding: 1rem; border-radius: 8px; overflow-x: auto; }
+main pre code { background: none; color: inherit; padding: 0; }
+main blockquote { margin: 1rem 0; padding: .6rem 1rem; border-left: 4px solid var(--teal); background: #f0fdfa; color: var(--teal-dark); border-radius: 0 8px 8px 0; }
+main table { border-collapse: collapse; width: 100%; margin: 1rem 0; font-size: .9rem; display: block; overflow-x: auto; }
+main th, main td { border: 1px solid var(--line); padding: .5rem .65rem; text-align: left; vertical-align: top; }
+main th { background: #f1f5f9; color: var(--teal-dark); }
+main tr:nth-child(even) td { background: #f8fafc; }
+main hr { border: 0; border-top: 1px solid var(--line); margin: 2rem 0; }
+main li { margin: .25rem 0; }
+footer.manual-bottom { text-align: center; color: var(--muted); font-size: .8rem; padding: 1.5rem; }
+@media (max-width: 900px) { nav.toc { display: none; } main { padding: 1.2rem; } }
+@media print {
+  header.manual-top, nav.toc, footer.manual-bottom, .no-print { display: none !important; }
+  body { background: #fff; font-size: 11pt; }
+  .layout { display: block; max-width: none; padding: 0; }
+  main { border: 0; border-radius: 0; padding: 0; }
+  main h2 { break-after: avoid; } main table, main pre { break-inside: avoid; }
+  main a { color: inherit; text-decoration: none; }
+}
+</style>
+</head>
+<body>
+<header class="manual-top no-print">
+  <h1>Zenth Academy — Manual para Docentes</h1>
+  <div class="spacer"></div>
+  <a class="btn ghost" href="/manual-docentes.md" download>Descargar Markdown</a>
+  <a class="btn ghost" href="#" data-print>Imprimir / Guardar PDF</a>
+  <a class="btn" href="/">Volver a la app</a>
+</header>
+<div class="layout">
+  <nav class="toc no-print">
+    <div class="toc-title">Contenido</div>
+    <ol><li><a href="#índice">Índice</a></li><li><a href="#1-cómo-crear-tu-cuenta-e-ingresar">1. Cómo crear tu cuenta e ingresar</a></li><ol><li><a href="#crear-tu-cuenta">Crear tu cuenta</a></li><li><a href="#iniciar-sesión">Iniciar sesión</a></li><li><a href="#entrar-con-google">Entrar con Google</a></li></ol><li><a href="#2-cómo-solicitar-ser-docente">2. Cómo solicitar ser docente</a></li><ol><li><a href="#opción-a-desde-tu-panel-recomendada">Opción A — desde tu panel (recomendada)</a></li><li><a href="#opción-b-desde-la-página-de-registro">Opción B — desde la página de registro</a></li></ol><li><a href="#3-un-vistazo-a-tu-panel">3. Un vistazo a tu panel</a></li><li><a href="#4-cómo-crear-un-curso">4. Cómo crear un curso</a></li><li><a href="#5-cómo-organizar-módulos-y-lecciones">5. Cómo organizar módulos y lecciones</a></li><li><a href="#6-los-tipos-de-contenido-de-una-lección">6. Los tipos de contenido de una lección</a></li><ol><li><a href="#video-de-youtube">Video (de YouTube)</a></li><li><a href="#texto-lectura-enriquecida">Texto (lectura enriquecida)</a></li><li><a href="#material-archivos-de-apoyo">Material (archivos de apoyo)</a></li><li><a href="#examen">Examen</a></li><li><a href="#recuerda">Recuerda</a></li></ol><li><a href="#7-cómo-guardar-y-publicar-tu-curso">7. Cómo guardar y publicar tu curso</a></li><li><a href="#8-cómo-crear-un-examen">8. Cómo crear un examen</a></li><li><a href="#9-cómo-agregar-preguntas">9. Cómo agregar preguntas</a></li><ol><li><a href="#opción-múltiple">Opción múltiple</a></li><li><a href="#verdadero-falso">Verdadero / Falso</a></li></ol><li><a href="#10-cómo-asignar-y-publicar-el-examen-en-tu-curso">10. Cómo asignar y publicar el examen en tu curso</a></li><ol><li><a href="#asignarlo">Asignarlo</a></li><li><a href="#publicarlo">Publicarlo</a></li></ol><li><a href="#11-cómo-ver-a-tus-alumnos-y-su-avance">11. Cómo ver a tus alumnos y su avance</a></li><li><a href="#12-cómo-calificar-y-liberar-lecciones">12. Cómo calificar y liberar lecciones</a></li><ol><li><a href="#cargar-una-nota-a-mano">Cargar una nota a mano</a></li><li><a href="#revisar-los-resultados-de-un-examen">Revisar los resultados de un examen</a></li><li><a href="#liberar-una-lección-manualmente">Liberar una lección manualmente</a></li></ol><li><a href="#13-cómo-atender-las-solicitudes-de-acceso">13. Cómo atender las solicitudes de acceso</a></li><li><a href="#14-cómo-revisar-los-certificados-emitidos">14. Cómo revisar los certificados emitidos</a></li><ol><li><a href="#emitir-un-certificado-a-mano">Emitir un certificado a mano</a></li></ol><li><a href="#15-foro-comentarios-y-material-de-apoyo">15. Foro, comentarios y material de apoyo</a></li><ol><li><a href="#foro-y-comunidad">Foro y comunidad</a></li><li><a href="#material-de-apoyo">Material de apoyo</a></li></ol><li><a href="#16-cómo-lograr-que-tus-alumnos-avancen-en-orden">16. Cómo lograr que tus alumnos avancen en orden</a></li><li><a href="#17-consejos">17. Consejos</a></li><li><a href="#18-preguntas-frecuentes">18. Preguntas frecuentes</a></li></ol>
+  </nav>
+  <main><h1 id="zenth-academy-manual-de-uso-para-docentes">Zenth Academy — Manual de Uso para Docentes</h1>
+<p><strong>Zenth Academy</strong> es una plataforma para crear, publicar y dictar cursos en línea: organizas tu<br />
+contenido en módulos y lecciones, agregas videos, lecturas y materiales, creas exámenes, das<br />
+seguimiento al avance de tus alumnos y emites certificados. Esta guía está pensada para ti, como<br />
+docente: solo necesitas un navegador y ganas de enseñar, no conocimientos técnicos.</p>
+<p><strong>Versión:</strong> 1.0 — septiembre 2026</p>
+<hr />
+<h2 id="índice">Índice</h2>
+<ol>
+<li><a href="#1-cómo-crear-tu-cuenta-e-ingresar">Cómo crear tu cuenta e ingresar</a></li>
+<li><a href="#2-cómo-solicitar-ser-docente">Cómo solicitar ser docente</a></li>
+<li><a href="#3-un-vistazo-a-tu-panel">Un vistazo a tu panel</a></li>
+<li><a href="#4-cómo-crear-un-curso">Cómo crear un curso</a></li>
+<li><a href="#5-cómo-organizar-módulos-y-lecciones">Cómo organizar módulos y lecciones</a></li>
+<li><a href="#6-los-tipos-de-contenido-de-una-lección">Los tipos de contenido de una lección</a></li>
+<li><a href="#7-cómo-guardar-y-publicar-tu-curso">Cómo guardar y publicar tu curso</a></li>
+<li><a href="#8-cómo-crear-un-examen">Cómo crear un examen</a></li>
+<li><a href="#9-cómo-agregar-preguntas">Cómo agregar preguntas</a></li>
+<li><a href="#10-cómo-asignar-y-publicar-el-examen-en-tu-curso">Cómo asignar y publicar el examen en tu curso</a></li>
+<li><a href="#11-cómo-ver-a-tus-alumnos-y-su-avance">Cómo ver a tus alumnos y su avance</a></li>
+<li><a href="#12-cómo-calificar-y-liberar-lecciones">Cómo calificar y liberar lecciones</a></li>
+<li><a href="#13-cómo-atender-las-solicitudes-de-acceso">Cómo atender las solicitudes de acceso</a></li>
+<li><a href="#14-cómo-revisar-los-certificados-emitidos">Cómo revisar los certificados emitidos</a></li>
+<li><a href="#15-foro-comentarios-y-material-de-apoyo">Foro, comentarios y material de apoyo</a></li>
+<li><a href="#16-cómo-lograr-que-tus-alumnos-avancen-en-orden">Cómo lograr que tus alumnos avancen en orden</a></li>
+<li><a href="#17-consejos">Consejos</a></li>
+<li><a href="#18-preguntas-frecuentes">Preguntas frecuentes</a></li>
+</ol>
+<hr />
+<h2 id="1-cómo-crear-tu-cuenta-e-ingresar">1. Cómo crear tu cuenta e ingresar</h2>
+<h3 id="crear-tu-cuenta">Crear tu cuenta</h3>
+<ol>
+<li>Abre la página de inicio de Zenth Academy.</li>
+<li>En la tarjeta <strong>Iniciar sesión</strong>, haz clic en <strong>Regístrate</strong> (abajo del formulario).</li>
+<li>Completa el formulario <strong>Crear cuenta</strong>:<br />
+   - <strong>Nombres</strong><br />
+   - <strong>Apellidos</strong><br />
+   - <strong>Correo electrónico</strong><br />
+   - <strong>Contraseña</strong> (mínimo 6 caracteres)<br />
+   - <strong>Teléfono</strong> (opcional)<br />
+   - <strong>Institución</strong> (opcional)</li>
+<li>Pulsa <strong>Crear cuenta</strong>. Verás el mensaje <strong>¡Registro exitoso!</strong> y entrarás a tu panel.</li>
+</ol>
+<h3 id="iniciar-sesión">Iniciar sesión</h3>
+<ol>
+<li>En la página de inicio escribe tu <strong>Correo electrónico</strong> y tu <strong>Contraseña</strong>.</li>
+<li>Pulsa <strong>Iniciar sesión</strong>.</li>
+</ol>
+<h3 id="entrar-con-google">Entrar con Google</h3>
+<ol>
+<li>En la tarjeta <strong>Iniciar sesión</strong>, busca la línea <strong>o continúa con</strong>.</li>
+<li>Pulsa el botón de <strong>Google</strong> y elige tu cuenta.</li>
+<li>Espera el mensaje <strong>Iniciando sesión con Google…</strong>: en unos segundos llegarás a tu panel.</li>
+</ol>
+<blockquote>
+<p>Si no ves el botón de Google, entra con tu correo y contraseña; tu cuenta funciona igual.</p>
+</blockquote>
+<hr />
+<h2 id="2-cómo-solicitar-ser-docente">2. Cómo solicitar ser docente</h2>
+<p>Todas las cuentas nacen como estudiante. Para dictar cursos necesitas que te asignen el rol de<br />
+docente. Tienes dos caminos:</p>
+<h3 id="opción-a-desde-tu-panel-recomendada">Opción A — desde tu panel (recomendada)</h3>
+<ol>
+<li>En el menú lateral, hasta abajo, pulsa el botón verde <strong>Ser Docente</strong>.</li>
+<li>Completa el formulario:<br />
+   - <strong>Especialidad</strong> (áreas que dominas) — por ejemplo: <em>Matemáticas, Programación, Física…</em><br />
+   - <strong>Institución Educativa</strong><br />
+   - <strong>Años de Experiencia</strong><br />
+   - <strong>Experiencia Profesional</strong> (describe tu trayectoria)<br />
+   - <strong>¿Por qué quieres ser docente?</strong> (tu motivación)<br />
+   - <strong>URL de Portafolio</strong> (opcional)<br />
+   - <strong>URL de Documentos</strong> (certificados o títulos, opcional)</li>
+<li>Pulsa <strong>Enviar Solicitud</strong>.</li>
+<li>Un administrador revisará tu solicitud y te avisará. Mientras tanto, el botón del menú mostrará<br />
+<strong>Solicitud en proceso</strong>.</li>
+</ol>
+<h3 id="opción-b-desde-la-página-de-registro">Opción B — desde la página de registro</h3>
+<ol>
+<li>En la pantalla <strong>Crear cuenta</strong>, haz clic en <strong>Solicita acceso</strong> (abajo).</li>
+<li>Completa el mismo formulario y pulsa <strong>Enviar Solicitud</strong>.</li>
+</ol>
+<p>Cuando tu solicitud sea aprobada, vuelve a iniciar sesión y verás el <strong>Panel Docente</strong>.</p>
+<hr />
+<h2 id="3-un-vistazo-a-tu-panel">3. Un vistazo a tu panel</h2>
+<p>Al entrar, el menú de la izquierda se organiza así:</p>
+<table>
+<thead>
+<tr>
+<th>Sección del menú</th>
+<th>Qué encontrarás</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>PANEL</strong></td>
+<td><strong>Dashboard</strong> — resumen de tus cursos, alumnos, solicitudes y certificados</td>
+</tr>
+<tr>
+<td><strong>CURSOS</strong></td>
+<td><strong>Mis Cursos</strong>, <strong>Solicitudes</strong>, <strong>Certificados</strong></td>
+</tr>
+<tr>
+<td><strong>MATERIALES</strong></td>
+<td><strong>Mi carpeta</strong> — tus archivos de apoyo</td>
+</tr>
+<tr>
+<td><strong>HERRAMIENTAS</strong></td>
+<td><strong>Exámenes</strong>, <strong>Pizarra</strong></td>
+</tr>
+<tr>
+<td><strong>COMUNIDAD</strong></td>
+<td><strong>Foro</strong></td>
+</tr>
+<tr>
+<td><strong>CONFIGURACIÓN</strong></td>
+<td><strong>Configuración</strong> de tu cuenta</td>
+</tr>
+</tbody>
+</table>
+<p>En la parte inferior del menú encuentras:</p>
+<ul>
+<li>El selector <strong>Docente / Estudiante</strong>, para ver la plataforma como la ven tus alumnos.</li>
+<li><strong>Manual</strong>, para volver a esta guía en cualquier momento.</li>
+<li><strong>Salir</strong>, para cerrar tu sesión.</li>
+</ul>
+<p>En el <strong>Dashboard</strong> verás de un vistazo: <strong>Mis cursos</strong>, <strong>Estudiantes</strong> en tus cursos,<br />
+<strong>Solicitudes</strong> pendientes y <strong>Certificados emitidos</strong>.</p>
+<hr />
+<h2 id="4-cómo-crear-un-curso">4. Cómo crear un curso</h2>
+<ol>
+<li>En el menú lateral entra a <strong>Mis Cursos</strong>.</li>
+<li>Pulsa el botón <strong>Crear curso</strong> (en pantallas pequeñas aparece como <strong>Nuevo</strong>).</li>
+<li>Se abrirá el editor con el título <strong>Nuevo Curso</strong>. Escribe primero el <strong>Título del curso</strong> y,<br />
+   debajo, la <strong>Descripción del curso</strong>.</li>
+<li>En la tarjeta <strong>Configuración del curso</strong> define los datos del curso:</li>
+</ol>
+<table>
+<thead>
+<tr>
+<th>Dato</th>
+<th>Qué hacer</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Categoría</strong></td>
+<td>Elige entre las opciones disponibles (Programación, Diseño, Educación, Idiomas, etc.)</td>
+</tr>
+<tr>
+<td><strong>Nivel</strong></td>
+<td>Principiante, Intermedio, Avanzado o Todos los niveles</td>
+</tr>
+<tr>
+<td><strong>Instructor</strong></td>
+<td>Se completa solo con tu nombre; no se puede editar</td>
+</tr>
+<tr>
+<td><strong>Pago</strong></td>
+<td>Déjalo apagado si el curso es <strong>Gratis</strong>; enciéndelo si es de pago</td>
+</tr>
+<tr>
+<td><strong>Monto y moneda</strong></td>
+<td>Si activas Pago: escribe el precio (por ejemplo <code>49.99</code>), elige la moneda (PEN, USD o EUR) y agrega tu <strong>número de pago</strong> (por ejemplo Yape o Plin)</td>
+</tr>
+<tr>
+<td><strong>Certificado</strong></td>
+<td>Enciéndelo si quieres entregar certificado y define la <strong>Nota</strong> mínima (de 0 a 20; por ejemplo <code>11</code>)</td>
+</tr>
+<tr>
+<td><strong>Bloqueo</strong></td>
+<td><strong>Secuencial (desbloquear al completar la anterior)</strong> o <strong>Sin bloqueo (acceso libre a todas)</strong></td>
+</tr>
+</tbody>
+</table>
+<ol start="5">
+<li>Sube la <strong>Imagen de portada</strong>: arrastra la foto al recuadro o haz clic para elegirla.<br />
+   Tamaño recomendado: <strong>1200x628 px</strong> (mínimo 800x420, máximo 2400x1256). También puedes pegar<br />
+   la <strong>URL de imagen</strong> si la tienes alojada en línea.</li>
+<li>Pulsa <strong>Guardar</strong> (esquina superior derecha). Tu curso queda guardado como borrador.</li>
+</ol>
+<hr />
+<h2 id="5-cómo-organizar-módulos-y-lecciones">5. Cómo organizar módulos y lecciones</h2>
+<ol>
+<li>Bajo el título <strong>Contenido del Curso</strong> pulsa <strong>Agregar Módulo</strong>.</li>
+<li>Escribe el <strong>Nombre del módulo</strong> (por ejemplo: <em>1. Introducción</em>).</li>
+<li>Haz clic en el módulo para abrirlo y pulsa <strong>Agregar lección</strong>.</li>
+<li>Escribe el <strong>Título de la lección</strong> (por ejemplo: <em>¿Qué es este tema?</em>).</li>
+<li>Dentro de la lección pulsa <strong>Agregar contenido</strong> para añadir bloques (video, texto, material o<br />
+   examen).</li>
+<li>Repite los pasos 3 a 5 tantas veces como necesites.</li>
+</ol>
+<p>Para reorganizar todo:</p>
+<ul>
+<li>Los bloques tienen flechas <strong>↑</strong> y <strong>↓</strong> para moverlos arriba o abajo.</li>
+<li>El icono de <strong>lápiz</strong> edita un bloque; la <strong>X</strong> lo elimina.</li>
+<li>La <strong>papelera</strong> borra una lección o un módulo (se pide confirmación).</li>
+</ul>
+<hr />
+<h2 id="6-los-tipos-de-contenido-de-una-lección">6. Los tipos de contenido de una lección</h2>
+<p>Al editar un bloque verás dos campos: <strong>Título del bloque</strong> y <strong>Tipo de contenido</strong>. Estos son los<br />
+tipos disponibles y cómo llenar cada uno:</p>
+<h3 id="video-de-youtube">Video (de YouTube)</h3>
+<ol>
+<li>Elige <strong>Video</strong> en <strong>Tipo de contenido</strong>.</li>
+<li>Pega la dirección en <strong>URL de YouTube</strong> (formato <code>https://youtu.be/...</code>).</li>
+<li>Pulsa <strong>Guardar</strong> en el bloque.</li>
+</ol>
+<p>El video se reproduce dentro de la lección y se marca como visto cuando termina de reproducirse.</p>
+<h3 id="texto-lectura-enriquecida">Texto (lectura enriquecida)</h3>
+<ol>
+<li>Elige <strong>Texto</strong>.</li>
+<li>Escribe en el campo <strong>Contenido</strong>. Puedes usar negrita, listas, títulos y enlaces con la barra<br />
+   de herramientas del editor.</li>
+<li>Pulsa <strong>Guardar</strong>.</li>
+</ol>
+<p>Úsalo para explicaciones, consignas, teoría o ejemplos escritos.</p>
+<h3 id="material-archivos-de-apoyo">Material (archivos de apoyo)</h3>
+<ol>
+<li>Elige el tipo de archivo o recurso.</li>
+<li>En <strong>Recursos</strong> agrega cada archivo con su <strong>Nombre</strong> y su <strong>URL</strong> (por ejemplo, un PDF o un<br />
+   documento compartido).</li>
+<li>Puedes agregar varios archivos a la misma lección.</li>
+<li>Pulsa <strong>Guardar</strong>.</li>
+</ol>
+<h3 id="examen">Examen</h3>
+<ol>
+<li>Elige <strong>Examen</strong>.</li>
+<li>En el desplegable <strong>Examen</strong>, selecciona uno de los exámenes que ya creaste (los verás en la<br />
+   sección <strong>Exámenes</strong> del menú).</li>
+<li>Pulsa <strong>Guardar</strong>.</li>
+</ol>
+<blockquote>
+<p>Consejo: crea primero el examen (sección 8) y luego vuelve a la lección para vincularlo.</p>
+</blockquote>
+<h3 id="recuerda">Recuerda</h3>
+<p>Cada bloque tiene sus propios botones <strong>Guardar</strong> y <strong>Cancelar</strong>. Si editas un bloque y cierras<br />
+sin guardar, verás el aviso <em>“Recuerda guardar este bloque antes de guardar el curso.”</em></p>
+<hr />
+<h2 id="7-cómo-guardar-y-publicar-tu-curso">7. Cómo guardar y publicar tu curso</h2>
+<p>Tu curso nace como <strong>borrador</strong>: solo tú lo ves. Para que aparezca a tus alumnos:</p>
+<ol>
+<li>Revisa que el <strong>Título</strong>, la <strong>Descripción</strong>, los módulos y las lecciones estén completos.</li>
+<li>En la esquina superior derecha pulsa <strong>Guardar</strong> para conservar el borrador.</li>
+<li>Cuando todo esté listo, pulsa <strong>Publicar</strong>.</li>
+<li>El estado de la tarjeta cambiará de <strong>BORRADOR</strong> a <strong>PUBLICADO</strong>.</li>
+</ol>
+<p>También puedes publicar directamente desde <strong>Mis Cursos</strong>: coloca el cursor sobre la tarjeta del<br />
+curso y pulsa el icono de <strong>Publicar</strong> (la flechita).</p>
+<p>En la tarjeta del curso encontrarás además:</p>
+<ul>
+<li><strong>Editar</strong> (lápiz) para volver al editor.</li>
+<li><strong>Eliminar</strong> (papelera) para borrarlo, con confirmación.</li>
+<li><strong>Ver curso</strong> si está publicado, o <strong>Continuar editando</strong> si sigue en borrador.</li>
+</ul>
+<blockquote>
+<p>Si publicaste y tus alumnos aún no ven el curso en su <strong>Catálogo</strong>, espera un minuto y recarga<br />
+la página.</p>
+</blockquote>
+<hr />
+<h2 id="8-cómo-crear-un-examen">8. Cómo crear un examen</h2>
+<ol>
+<li>En el menú lateral entra a <strong>Exámenes</strong>.</li>
+<li>Pulsa <strong>Nuevo examen</strong>.</li>
+<li>Escribe el <strong>Título del examen</strong> y, si quieres, una <strong>Descripción opcional</strong>.</li>
+<li>En la barra de <strong>Configuración rápida</strong> define:</li>
+</ol>
+<table>
+<thead>
+<tr>
+<th>Campo</th>
+<th>Qué significa</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Reloj</td>
+<td><strong>Tiempo límite</strong> en minutos (por ejemplo <code>60</code>)</td>
+</tr>
+<tr>
+<td>Diana</td>
+<td><strong>Porcentaje mínimo de aprobación</strong> (por ejemplo <code>60%</code>)</td>
+</tr>
+<tr>
+<td>Intentos</td>
+<td><strong>1, 2, 3, 5, 10</strong> o <strong>Ilimitados</strong></td>
+</tr>
+<tr>
+<td>Puntos</td>
+<td>Suma de los puntos de todas las preguntas</td>
+</tr>
+<tr>
+<td>Fechas</td>
+<td><strong>Inicio</strong> y <strong>Cierre</strong> del examen (opcional)</td>
+</tr>
+</tbody>
+</table>
+<ol start="5">
+<li>Si necesitas más control, abre <strong>Seguridad y restricciones</strong>:<br />
+   - <strong>Límite violaciones</strong>: cuántas advertencias se toleran antes de cerrar el examen.<br />
+   - <strong>Al exceder</strong>: qué ocurre al superar ese límite.<br />
+   - <strong>Contraseña</strong>: si quieres que solo los alumnos que la conozcan puedan abrirlo.<br />
+   - <strong>Acceso público</strong>: al activarlo, la plataforma te muestra un <strong>enlace</strong> para compartir el<br />
+     examen fuera del curso.<br />
+   - <strong>Modo anónimo</strong>: oculta el nombre del alumno al calificar.</li>
+<li>Pulsa <strong>Guardar</strong>.</li>
+</ol>
+<hr />
+<h2 id="9-cómo-agregar-preguntas">9. Cómo agregar preguntas</h2>
+<ol>
+<li>Dentro del examen, pulsa el botón <strong>+</strong> que está debajo del último bloque de preguntas.</li>
+<li>Elige el tipo de pregunta. Las dos básicas son:</li>
+</ol>
+<h3 id="opción-múltiple">Opción múltiple</h3>
+<ol>
+<li>Escribe el enunciado de la pregunta.</li>
+<li>Agrega las alternativas (A, B, C, D…).</li>
+<li>Marca cuál es la <strong>respuesta correcta</strong>.</li>
+<li>Asigna los <strong>puntos</strong> que vale.</li>
+</ol>
+<h3 id="verdadero-falso">Verdadero / Falso</h3>
+<ol>
+<li>Escribe la afirmación.</li>
+<li>Indica si es <strong>Verdadero</strong> o <strong>Falso</strong>.</li>
+<li>
+<p>Asigna los <strong>puntos</strong>.</p>
+</li>
+<li>
+<p>Repite el proceso con todas las preguntas. Al final verás un resumen como<br />
+<em>“10 preguntas | 20 puntos totales”</em>.</p>
+</li>
+<li>Pulsa <strong>Guardar</strong>.</li>
+</ol>
+<hr />
+<h2 id="10-cómo-asignar-y-publicar-el-examen-en-tu-curso">10. Cómo asignar y publicar el examen en tu curso</h2>
+<p>Un examen guardado todavía no está dentro de tu curso. Faltan dos pasos:</p>
+<h3 id="asignarlo">Asignarlo</h3>
+<ol>
+<li>En <strong>Exámenes</strong>, sobre la tarjeta del examen, pulsa <strong>Asignar</strong>.</li>
+<li>Elige el <strong>Curso</strong>.</li>
+<li>Elige el <strong>Módulo</strong>.</li>
+<li>Elige la <strong>Lección</strong>; si aún no existe, selecciona <strong>Crear nueva lección</strong> y escribe el<br />
+<strong>Título de la lección</strong>.</li>
+<li>Confirma. El examen quedará como una lección de tipo examen dentro de esa parte del curso.</li>
+</ol>
+<p>También puedes hacerlo desde el editor del curso: agrega un bloque de tipo <strong>Examen</strong> en la<br />
+lección y selecciónalo en el desplegable.</p>
+<h3 id="publicarlo">Publicarlo</h3>
+<ol>
+<li>En la tarjeta del examen pulsa el icono del <strong>ojo</strong>.</li>
+<li>El estado pasará de <strong>Borrador</strong> a <strong>Publicado</strong>. Vuelve a pulsarlo para devolverlo a borrador.</li>
+</ol>
+<p>Estados que verás: <strong>Publicado</strong> (disponible para rendir), <strong>Borrador</strong> (en edición, invisible<br />
+para alumnos) y <strong>Cerrado</strong> (solo consulta).</p>
+<hr />
+<h2 id="11-cómo-ver-a-tus-alumnos-y-su-avance">11. Cómo ver a tus alumnos y su avance</h2>
+<ol>
+<li>Entra a <strong>Mis Cursos</strong> y abre el curso (<strong>Ver curso</strong>).</li>
+<li>Pulsa la pestaña <strong>Estudiantes</strong>.</li>
+</ol>
+<p>Allí encontrarás:</p>
+<ul>
+<li>Las tarjetas con el total: alumnos, <strong>Completaron</strong>, en progreso y sin iniciar.</li>
+<li>Un buscador: <strong>Buscar estudiante…</strong></li>
+<li>Filtros: <strong>Todos</strong>, <strong>Completaron</strong>, <strong>En progreso</strong>, <strong>Sin iniciar</strong>.</li>
+<li>Ordenamiento por <strong>Nombre</strong>, <strong>Progreso</strong>, <strong>Estado</strong> o <strong>Fecha</strong>.</li>
+<li>De cada alumno: su <strong>porcentaje de avance</strong> y sus lecciones completadas<br />
+  (por ejemplo <em>12/40 lecciones</em>).</li>
+<li>El botón <strong>Exportar CSV</strong> para descargar la lista y trabajar con ella fuera de la plataforma.</li>
+</ul>
+<p>Al desplegar a un alumno verás su recorrido módulo por módulo, con cada lección marcada como<br />
+completada o pendiente.</p>
+<hr />
+<h2 id="12-cómo-calificar-y-liberar-lecciones">12. Cómo calificar y liberar lecciones</h2>
+<h3 id="cargar-una-nota-a-mano">Cargar una nota a mano</h3>
+<ol>
+<li>En la pestaña <strong>Estudiantes</strong> del curso, busca al alumno.</li>
+<li>Escribe la nota en el campo <strong>Nota</strong>.</li>
+<li>Pulsa el icono de guardar al lado del campo para registrar la nota.</li>
+</ol>
+<h3 id="revisar-los-resultados-de-un-examen">Revisar los resultados de un examen</h3>
+<ol>
+<li>Entra a <strong>Exámenes</strong> y pulsa <strong>Resultados</strong> sobre el examen.</li>
+<li>Verás a cada alumno con su nota y su estado (aprobado / no aprobado).</li>
+<li>Usa <strong>Exportar</strong> si quieres descargar los resultados.</li>
+</ol>
+<h3 id="liberar-una-lección-manualmente">Liberar una lección manualmente</h3>
+<p>Si un alumno se quedó atascado (por ejemplo, un video que no pudo terminar), puedes liberarle la<br />
+lección:</p>
+<ol>
+<li>En la pestaña <strong>Estudiantes</strong>, despliega al alumno.</li>
+<li>Localiza la lección bloqueada y pulsa el botón de <strong>Liberar manualmente</strong>.</li>
+</ol>
+<p>También puedes desactivar el orden completo del curso: en <strong>Editar curso</strong> → <strong>Configuración del<br />
+curso</strong>, cambia el bloqueo a <strong>Sin bloqueo (acceso libre a todas)</strong>.</p>
+<hr />
+<h2 id="13-cómo-atender-las-solicitudes-de-acceso">13. Cómo atender las solicitudes de acceso</h2>
+<p>Los alumnos de cursos de pago (y quienes pidan acceso especial) envían una solicitud que llega a<br />
+tu bandeja.</p>
+<ol>
+<li>Entra a <strong>Solicitudes</strong> en el menú lateral (también aparece una cuenta de pendientes en tu<br />
+<strong>Dashboard</strong>).</li>
+<li>Usa las pestañas: <strong>Pendientes</strong>, <strong>Aprobados</strong> y <strong>Rechazados</strong>.</li>
+<li>Puedes buscar con <strong>Buscar por nombre o email…</strong></li>
+<li>Sobre cada solicitud:<br />
+   - <strong>Aprobar</strong>: confirma con <strong>Aprobar solicitud</strong> y el alumno tendrá acceso al curso.<br />
+   - <strong>Rechazar</strong>: escribe <em>“Explica brevemente el motivo del rechazo…”</em> y confirma.</li>
+</ol>
+<p>También puedes gestionarlas dentro del curso, en la pestaña <strong>Solicitudes</strong>.</p>
+<hr />
+<h2 id="14-cómo-revisar-los-certificados-emitidos">14. Cómo revisar los certificados emitidos</h2>
+<p>Los certificados se generan solos cuando un alumno alcanza la nota mínima que fijaste en el<br />
+curso. También puedes emitirlos tú.</p>
+<ol>
+<li>Entra a <strong>Certificados</strong> en el menú lateral.</li>
+<li>Verás los totales: <strong>Total</strong>, <strong>Emitidos</strong> y <strong>Pendientes</strong>, más un buscador.</li>
+<li>Sobre cada tarjeta tienes tres acciones: <strong>Ver certificado</strong>, <strong>Descargar certificado</strong> (PDF)<br />
+   y <strong>Cancelar certificado</strong>.</li>
+</ol>
+<h3 id="emitir-un-certificado-a-mano">Emitir un certificado a mano</h3>
+<ol>
+<li>Pulsa <strong>Nuevo Certificado</strong>.</li>
+<li>Selecciona el <strong>Curso</strong> y luego el <strong>Estudiante</strong>.</li>
+<li>Completa los datos: título (por ejemplo <em>Certificado de Finalización</em>), <strong>Instructor<br />
+   Certificado</strong>, la leyenda (<em>“Por completar satisfactoriamente el curso”</em>), la <strong>Nota</strong> y, si<br />
+   quieres, un enlace.</li>
+<li>Revisa la <strong>Vista previa</strong> y guarda. La plataforma mostrará el <strong>Código</strong> del certificado.</li>
+</ol>
+<p>Ese código es el que cualquier persona puede usar para comprobar la autenticidad del<br />
+certificado (sección 13 del manual del alumno).</p>
+<hr />
+<h2 id="15-foro-comentarios-y-material-de-apoyo">15. Foro, comentarios y material de apoyo</h2>
+<h3 id="foro-y-comunidad">Foro y comunidad</h3>
+<ol>
+<li>Entra a <strong>Foro</strong> en el menú lateral. Verás <strong>Comunidad</strong> con los contadores de<br />
+<strong>Publicaciones</strong>, <strong>Comentarios</strong>, <strong>Miembros activos</strong> y <strong>Likes</strong>.</li>
+<li>Para publicar, pulsa <strong>Nueva publicación</strong> y completa:<br />
+   - <strong>Título de la publicación</strong><br />
+   - El contenido<br />
+   - La categoría: <strong>General</strong>, <strong>Recursos</strong>, <strong>Metodología</strong>, <strong>Tecnología</strong> o <strong>Eventos</strong></li>
+<li>Ordena las publicaciones por <strong>Más Recientes</strong>, <strong>Más Populares</strong> o <strong>Destacados</strong>.</li>
+<li>En cada publicación puedes leer y escribir en <strong>Comentarios</strong> y dar <em>me gusta</em>.</li>
+</ol>
+<p>Cada curso tiene además su propia pestaña <strong>Foro</strong>, con el buscador <strong>“Buscar en el foro del<br />
+curso…”</strong>.</p>
+<h3 id="material-de-apoyo">Material de apoyo</h3>
+<ol>
+<li>Entra a <strong>Mi carpeta</strong> (sección MATERIALES).</li>
+<li>Pulsa <strong>Crear material</strong>, dale un nombre y guarda el archivo o enlace.</li>
+<li>Los materiales quedan disponibles para acompañar tus clases y compartirlos con tus alumnos.</li>
+</ol>
+<p>Si es tu primera vez, verás el mensaje <em>“Tu carpeta esta vacia — Crea tu primer material para tu<br />
+clase”</em>.</p>
+<hr />
+<h2 id="16-cómo-lograr-que-tus-alumnos-avancen-en-orden">16. Cómo lograr que tus alumnos avancen en orden</h2>
+<p>Por defecto, los cursos usan el bloqueo <strong>Secuencial</strong>: la primera lección está abierta y cada<br />
+lección siguiente se desbloquea cuando la anterior está completada. Las que faltan muestran un<br />
+<strong>candado</strong> con la etiqueta <strong>Bloqueada</strong>.</p>
+<p>Esto es lo que debes saber:</p>
+<ul>
+<li>Un alumno solo avanza con <strong>Siguiente</strong> o <strong>Continuar</strong> cuando la lección actual está<br />
+  completada.</li>
+<li>Si la siguiente lección está en otro módulo, debe terminar <strong>todo el módulo actual</strong> primero.</li>
+<li>Las lecciones de examen se completan solas al rendir el examen; no se pueden marcar a mano.</li>
+<li>Si un alumno se atasca, puedes <strong>liberar manualmente</strong> su lección (sección 12) o cambiar el<br />
+  curso a <strong>Sin bloqueo</strong>.</li>
+</ul>
+<p>Recomendaciones para que el orden funcione:</p>
+<ol>
+<li>Deja el bloqueo <strong>Secuencial</strong> si tu curso tiene una ruta de aprendizaje (lo recomendable).</li>
+<li>Divide el contenido en módulos cortos y con un objetivo claro.</li>
+<li>Coloca el examen al final de cada módulo, no en medio de la teoría.</li>
+<li>Revisa semanalmente la pestaña <strong>Estudiantes</strong> y escribe a quien lleva poco avance.</li>
+<li>Si alguien necesita saltar una lección (por conocimientos previos), libérala tú.</li>
+</ol>
+<hr />
+<h2 id="17-consejos">17. Consejos</h2>
+<ul>
+<li><strong>Empieza por el curso, no por el examen:</strong> crea la estructura primero y luego las<br />
+  evaluaciones.</li>
+<li><strong>Guarda con frecuencia:</strong> usa <strong>Guardar</strong> mientras trabajas y <strong>Publicar</strong> solo cuando el<br />
+  curso esté completo.</li>
+<li><strong>Recuerda guardar cada bloque</strong> antes de guardar el curso completo.</li>
+<li><strong>Cuida la portada:</strong> es lo primero que el alumno ve en el <strong>Catálogo</strong>.</li>
+<li><strong>Escribe descripciones concretas:</strong> di qué aprenderá el alumno y a quién va dirigido el curso.</li>
+<li><strong>Define la nota mínima del certificado</strong> desde el inicio (recuerda que las notas van de 0 a<br />
+  20 y se aprueba con 10 o más).</li>
+<li><strong>Revisa el curso como alumno:</strong> usa el selector <strong>Docente / Estudiante</strong> del menú inferior y<br />
+  recorre tu propio curso; así detectarás candados mal puestos o lecciones vacías.</li>
+<li><strong>Publica exámenes:</strong> un examen en borrador no lo verán tus alumnos.</li>
+<li><strong>Aprovecha el foro</strong> para resolver dudas frecuentes: ahí ahorras tiempo a todos.</li>
+<li><strong>Da seguimiento:</strong> un correo o un comentario a quien lleva 10% de avance cambia el resultado<br />
+  del curso.</li>
+</ul>
+<hr />
+<h2 id="18-preguntas-frecuentes">18. Preguntas frecuentes</h2>
+<p><strong>¿Ya publiqué mi curso y mis alumnos no lo ven?</strong><br />
+Verifica que la tarjeta diga <strong>PUBLICADO</strong>. Si lo está, espera un minuto y recarga la página del<br />
+alumno. Recuerda que el alumno debe inscribirse: hasta entonces el curso solo aparece en su<br />
+<strong>Catálogo</strong>.</p>
+<p><strong>¿Cómo hago que un alumno entre a mi curso de pago?</strong><br />
+Él envía la solicitud con el botón <strong>Solicitar</strong>; tú la apruebas en <strong>Solicitudes</strong> (o en la<br />
+pestaña <strong>Solicitudes</strong> del curso).</p>
+<p><strong>¿Por qué un alumno no puede avanzar de lección?</strong><br />
+Por el bloqueo <strong>Secuencial</strong>: tiene una lección anterior sin completar. Puedes pedirle que la<br />
+termine o liberarla tú desde <strong>Estudiantes</strong> → <strong>Liberar manualmente</strong>.</p>
+<p><strong>¿Dónde veo quién va bien y quién no?</strong><br />
+En <strong>Mis Cursos</strong> → curso → pestaña <strong>Estudiantes</strong>, con filtros por estado y exportación a CSV.</p>
+<p><strong>¿Cómo pongo mi examen dentro del curso?</strong><br />
+Pulsa <strong>Asignar</strong> en la tarjeta del examen y elige curso, módulo y lección; o agrega un bloque<br />
+<strong>Examen</strong> dentro de la lección.</p>
+<p><strong>¿Cuántos intentos debo permitir?</strong><br />
+Lo decides tú al crear el examen: 1, 2, 3, 5, 10 o ilimitados. Para exámenes finales suele ser<br />
+mejor 2 o 3 intentos.</p>
+<p><strong>¿Se emite solo el certificado?</strong><br />
+Sí, si activaste el interruptor <strong>Certificado</strong> y el alumno alcanza la <strong>Nota</strong> mínima. También<br />
+puedes emitirlo a mano con <strong>Nuevo Certificado</strong>.</p>
+<p><strong>¿Puedo corregir una nota?</strong><br />
+Sí: escribe la nueva nota en el campo <strong>Nota</strong> de la ficha del alumno y guárdala; o revisa los<br />
+resultados del examen desde <strong>Exámenes</strong> → <strong>Resultados</strong>.</p>
+<p><strong>¿Cómo comparto mis archivos?</strong><br />
+Desde <strong>Mi carpeta</strong> (materiales) o dentro de una lección con el bloque de <strong>Recursos</strong>.</p>
+<p><strong>¿Puedo dejar el curso sin orden?</strong><br />
+Sí. En <strong>Editar curso</strong> → <strong>Configuración del curso</strong> cambia el bloqueo a <strong>Sin bloqueo (acceso<br />
+libre a todas)</strong>.</p>
+<p><strong>¿Cómo sé si mi examen está activo?</strong><br />
+En <strong>Exámenes</strong>, la tarjeta debe decir <strong>Publicado</strong>. Si dice <strong>Borrador</strong>, pulsa el icono del<br />
+ojo.</p>
+<p><strong>¿Y si ya no enseño en la plataforma?</strong><br />
+Puedes eliminar un curso desde <strong>Mis Cursos</strong> (icono de papelera) o ponerlo nuevamente en<br />
+borrador.</p>
+<hr />
+<p><em>Manual de uso para docentes de Zenth Academy. Para instalar o mantener la plataforma, consulta<br />
+el manual técnico del sistema.</em></p></main>
+</div>
+<footer class="manual-bottom">Zenth Academy · Manual para Docentes v1.0.0 · Generado el 2026-09-24</footer>
+<script>
+document.addEventListener('click', function (e) {
+  var t = e.target.closest('[data-print]');
+  if (t) { e.preventDefault(); window.print(); }
+});
+</script>
+</body>
+</html>

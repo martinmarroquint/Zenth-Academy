@@ -109,8 +109,10 @@ function App() {
           <Route path="/login" element={<Navigate to="/" replace />} />
           <Route path="/registro" element={<Registro />} />
 
-          {/* MANUAL DEL SISTEMA — PÚBLICO (con botones de descarga) */}
+          {/* MANUALES — PÚBLICOS (con botones de descarga) */}
           <Route path="/manual" element={<ManualPage />} />
+          <Route path="/manual-docentes" element={<ManualPage manual="docentes" />} />
+          <Route path="/manual-alumnos" element={<ManualPage manual="alumnos" />} />
           <Route
             path="/solicitar-docente"
             element={

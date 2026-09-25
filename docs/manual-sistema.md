@@ -44,7 +44,7 @@ React.
 | Comunidad | Foro por curso con respuestas anidadas, pizarra colaborativa en tiempo real |
 | Compartir | Salas con QR/código para unir alumnos rápidamente |
 | Materiales | Biblioteca de archivos del docente con enlaces de descarga |
-| EDM | Sistema de educación a distancia con geo-localización de estudiantes y analítica geográfica |
+| EDM Team | Integraciones externas (Microsoft Teams, Slack, Zoom, etc.) con CRUD y sincronización de eventos, panel admin |
 | Multiempresa | Clave `empresa_id` en las tablas principales para aislar datos por instancia/empresa |
 
 ### Roles
@@ -388,7 +388,7 @@ sesión no corresponde.
 | `/admin/solicitudes` | Solicitudes generales |
 | `/admin/configuracion` | Configuración |
 | `/admin/solicitudes-docente` | Aprobación de docentes |
-| `/admin/analytics-geografico` | Analítica geográfica |
+| `/admin/analytics-geografico` | Estadísticas de accesos (logins por país/ciudad) — panel interno en pruebas |
 
 ### Docente (panel `/cursos` y módulos heredados)
 
@@ -547,9 +547,9 @@ a exámenes, alumnos, materiales, pizarra, foro y certificados según su permiso
 3. **Cursos y exámenes globales:** supervisión desde `/admin/cursos` y
    `/admin/examenes`.
 4. **Configuración:** `/admin/configuracion` (marca, límites, empresa).
-5. **Analítica:** `/admin/analytics-geografico` → `geo-analytics/stats`,
-   `map-points`, `recent-logins`.
-6. **EDM:** integraciones y sincronización en `/integraciones/edm`.
+5. **Accesos:** `/admin/analytics-geografico` → estadísticas de logins
+   (`geo-analytics/stats`, `map-points`, `recent-logins`) — panel interno en pruebas.
+6. **EDM Team:** integraciones y sincronización en `/integraciones/edm`.
 7. **Validación pública** de certificados y soporte con el diagnóstico de la §5.4.
 
 ### 8.4 Flujo público (sin sesión)

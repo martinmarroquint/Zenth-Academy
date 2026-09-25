@@ -450,16 +450,20 @@ const MainLayout = () => {
             </button>
           )}
 
-          {/* Manual del sistema (púbico, con botones de descarga) */}
+          {/* Manual: el enlace se adapta al rol (alumnos/docentes; admin = técnico) */}
           <a
-            href="/manual"
+            href={rol === 'docente' ? '/manual-docentes' : rol === 'admin' ? '/manual' : '/manual-alumnos'}
             className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-gray-500 hover:bg-teal-50 hover:text-[#0f766e] transition-colors min-h-[44px] ${
               !expandido && 'lg:justify-center'
             }`}
-            title={!expandido ? 'Manual del sistema' : ''}
+            title={!expandido ? (rol === 'docente' ? 'Manual para docentes' : rol === 'admin' ? 'Manual del sistema' : 'Manual para alumnos') : ''}
           >
             <BookOpen className="w-5 h-5 flex-shrink-0" />
-            {expandido && <span className="text-sm font-medium">Manual</span>}
+            {expandido && (
+              <span className="text-sm font-medium">
+                {rol === 'docente' ? 'Manual docentes' : rol === 'admin' ? 'Manual' : 'Manual alumnos'}
+              </span>
+            )}
           </a>
 
           <button

@@ -44,10 +44,12 @@ const AdminSolicitudesDocente = () => {
   const handleMarcarEnRevision = async (id) => {
     try {
       await solicitudesDocenteService.marcarEnRevision(id);
+      toast.success('Solicitud marcada en revisión');
       cargarSolicitudes();
       setSolicitudSeleccionada(null);
     } catch (e) {
       console.error('Error:', e);
+      toast.error(e?.response?.data?.detail || 'No se pudo marcar en revisión');
     }
   };
 
@@ -55,11 +57,13 @@ const AdminSolicitudesDocente = () => {
     setProcesando(true);
     try {
       await solicitudesDocenteService.aprobar(id, comentario);
+      toast.success('Docente aprobado: ya puede entrar con su cuenta');
       cargarSolicitudes();
       setSolicitudSeleccionada(null);
       setComentario('');
     } catch (e) {
       console.error('Error:', e);
+      toast.error(e?.response?.data?.detail || 'No se pudo aprobar la solicitud');
     } finally {
       setProcesando(false);
     }
@@ -73,11 +77,13 @@ const AdminSolicitudesDocente = () => {
     setProcesando(true);
     try {
       await solicitudesDocenteService.rechazar(id, comentario);
+      toast.success('Solicitud rechazada');
       cargarSolicitudes();
       setSolicitudSeleccionada(null);
       setComentario('');
     } catch (e) {
       console.error('Error:', e);
+      toast.error(e?.response?.data?.detail || 'No se pudo rechazar la solicitud');
     } finally {
       setProcesando(false);
     }

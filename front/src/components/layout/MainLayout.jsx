@@ -233,6 +233,20 @@ const MainLayout = () => {
     verificarSolicitud();
   }, [rol]);
 
+  // ✅ Si el rol cambió en el servidor (p. ej. el admin aprobó su postulación
+  // de docente), sincronizar la sesión abierta sin obligar a cerrar sesión.
+  useEffect(() => {
+    let activo = true;
+    (async () => {
+      const rolAntes = authService.getRol();
+      const perfil = await authService.refrescarPerfil();
+      if (activo && perfil?.rol && perfil.rol !== rolAntes) {
+        window.location.reload();
+      }
+    })();
+    return () => { activo = false; };
+  }, []);
+
   // ✅ Admin: contador de postulaciones a docente pendientes (badge del menú)
   useEffect(() => {
     if (rol !== 'admin') return;

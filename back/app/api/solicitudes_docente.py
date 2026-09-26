@@ -282,10 +282,14 @@ async def aprobar_solicitud(
             usuario.rol = "docente"
             usuario.especialidad = solicitud.especialidad
             usuario.institucion = solicitud.institucion
-            db.refresh(usuario)
-        
+
         db.commit()
+        # ✅ El refresh va DESPUÉS del commit: antes estaba antes y descartaba
+        # el cambio de rol (la solicitud quedaba aprobada pero el usuario
+        # seguía siendo estudiante).
         db.refresh(solicitud)
+        if usuario:
+            db.refresh(usuario)
         
         logger.info(f"Solicitud {solicitud_id} aprobada por admin {current_user.id}. Usuario {solicitud.usuario_id} ahora es docente.")
         

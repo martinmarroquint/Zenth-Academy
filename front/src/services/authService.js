@@ -225,6 +225,31 @@ class AuthService {
   }
 
   // =============================================
+  // PERFIL
+  // =============================================
+
+  /**
+   * ✅ Refresca los datos del usuario desde el servidor (`/auth/me`).
+   *
+   * El rol viaja guardado en localStorage: si un admin aprueba la postulación
+   * de docente de alguien que ya está dentro, esa sesión seguiría mostrando
+   * "estudiante" hasta cerrar sesión. Esto lo sincroniza en caliente.
+   * Devuelve el perfil actualizado o null si no hay sesión.
+   */
+  async refrescarPerfil() {
+    try {
+      const data = await api.get('/auth/me');
+      if (!data?.id) return null;
+      const actualizado = { ...(this.getCurrentUser() || {}), ...data };
+      this.user = actualizado;
+      localStorage.setItem(USER_KEY, JSON.stringify(actualizado));
+      return actualizado;
+    } catch {
+      return null;
+    }
+  }
+
+  // =============================================
   // ADMIN - GESTIÓN DE USUARIOS
   // =============================================
 

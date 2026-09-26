@@ -18,8 +18,13 @@ class SolicitudDocenteCreate(BaseModel):
 
 
 class SolicitudDocenteUpdate(BaseModel):
-    """Schema para actualizar una solicitud (admin)"""
-    estado: str = Field(..., pattern="^(pendiente|en_revision|aprobado|rechazado)$")
+    """Schema para actualizar una solicitud (admin).
+
+    `estado` es opcional: en aprobar/rechazar lo fija el servidor según el
+    endpoint. Antes era obligatorio y el front (que solo envía el comentario)
+    recibía un 422 que rompía la validación de docentes.
+    """
+    estado: Optional[str] = Field(None, pattern="^(pendiente|en_revision|aprobado|rechazado)$")
     comentario_admin: Optional[str] = Field(None, description="Comentario del admin")
 
 

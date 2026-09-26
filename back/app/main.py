@@ -124,6 +124,7 @@ app.add_middleware(
         "Accept",
         "X-Empresa-ID",
         "X-Cliente-ID",
+        "X-Pantalla-Secret",  # ✅ emparejamiento de la pantalla del aula
         "Origin",
         "Access-Control-Request-Method",
         "Access-Control-Request-Headers",

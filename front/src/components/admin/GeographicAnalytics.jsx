@@ -8,25 +8,26 @@ import {
   Wifi, TrendingUp, RefreshCw, ChevronDown
 } from 'lucide-react';
 import geoAnalyticsService from '../../services/geoAnalyticsService';
+import MapaAccesos from './MapaAccesos';
 
 const GeographicAnalytics = () => {
   const [stats, setStats] = useState(null);
   const [loginsRecientes, setLoginsRecientes] = useState([]);
+  const [puntos, setPuntos] = useState([]);
   const [cargando, setCargando] = useState(true);
   const [periodo, setPeriodo] = useState(30);
   const [error, setError] = useState('');
 
-  useEffect(() => {
-    cargarDatos();
-  }, [cargarDatos]);
-
+  // ✅ `cargarDatos` se declara ANTES del efecto (antes lanzaba
+  // "Cannot access 'cargarDatos' before initialization" y rompía el panel)
   const cargarDatos = useCallback(async () => {
     setCargando(true);
     setError('');
     try {
-      const [statsData, loginsData] = await Promise.allSettled([
+      const [statsData, loginsData, puntosData] = await Promise.allSettled([
         geoAnalyticsService.obtenerStats(periodo),
-        geoAnalyticsService.obtenerLoginsRecientes(20)
+        geoAnalyticsService.obtenerLoginsRecientes(20),
+        geoAnalyticsService.obtenerPuntosMapa(periodo)
       ]);
 
       if (statsData.status === 'fulfilled') {
@@ -38,6 +39,10 @@ const GeographicAnalytics = () => {
       if (loginsData.status === 'fulfilled') {
         setLoginsRecientes(loginsData.value?.logins || []);
       }
+
+      if (puntosData.status === 'fulfilled') {
+        setPuntos(puntosData.value?.puntos || []);
+      }
     } catch (e) {
       console.error('Error:', e);
       setError('Error al cargar datos');
@@ -45,6 +50,10 @@ const GeographicAnalytics = () => {
       setCargando(false);
     }
   }, [periodo]);
+
+  useEffect(() => {
+    cargarDatos();
+  }, [cargarDatos]);
 
   if (cargando && !stats) {
     return (
@@ -123,6 +132,9 @@ const GeographicAnalytics = () => {
           />
         </div>
       )}
+
+      {/* ✅ MAPA MUNDIAL DE ACCESOS */}
+      <MapaAccesos puntos={puntos} cargando={cargando} />
 
       {/* Contenido principal */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">

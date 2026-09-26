@@ -497,6 +497,15 @@ async def startup_event():
             "certificados": {
                 "firma": "VARCHAR(128)",
             },
+            # ✅ COMPARTIR EN CLASE: emparejamiento de pantalla (QR estilo WhatsApp Web)
+            "historial_comparticiones": {
+                "pantalla_secret_hash": "VARCHAR(128)",
+                "pantalla_vinculada_en": "TIMESTAMP",
+                "pantalla_expira": "TIMESTAMP",
+                "pantalla_ip": "VARCHAR(50)",
+                "pantalla_user_agent": "TEXT",
+                "pantalla_revocada_en": "TIMESTAMP",
+            },
         }
         insp2 = _insp2(_eng2)
         tablas_actuales = set(insp2.get_table_names())

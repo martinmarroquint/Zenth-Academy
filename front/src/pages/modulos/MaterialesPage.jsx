@@ -108,6 +108,27 @@ const MaterialesPage = () => {
     }
   };
 
+  // ✅ Desvincular la pantalla del aula (deja de recibir contenido al instante)
+  const desvincularPantalla = async () => {
+    if (!sala) return;
+    setCargandoAccion(true);
+    try {
+      const data = await compartirService.revocarPantalla(sala.codigo);
+      setSala((prev) => ({
+        ...prev,
+        ...(data?.sala || {}),
+        pantalla_vinculada: false,
+        pantalla_expira: null,
+        pantalla_vinculada_en: null,
+      }));
+      toast.success('Pantalla desvinculada');
+    } catch (e) {
+      toast.error(e.message || 'No se pudo desvincular la pantalla');
+    } finally {
+      setCargandoAccion(false);
+    }
+  };
+
   const terminarSesion = async () => {
     if (!sala) return;
     const ok = await confirmar({
@@ -213,25 +234,61 @@ const MaterialesPage = () => {
       {salaActiva && (
         <div className="bg-emerald-50 border border-emerald-200 rounded-xl p-4 space-y-3">
           <div className="flex items-center justify-between flex-wrap gap-2">
-            <div className="flex items-center gap-3">
+            <div className="flex items-center gap-3 flex-wrap">
               <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
               <span className="text-sm font-medium text-emerald-800">
                 Sala activa: <code className="font-mono bg-emerald-100 px-2 py-0.5 rounded">{sala.codigo}</code>
               </span>
-              <Badge variant="success" size="sm">
-                {sala.estado === 'ACTIVO' ? 'Vinculado' : 'Esperando vinculacion'}
+              <Badge variant={sala.pantalla_vinculada ? 'success' : 'warning'} size="sm">
+                {sala.pantalla_vinculada ? 'Pantalla vinculada' : 'Esperando vinculación'}
               </Badge>
             </div>
-            <Button
-              variant="danger"
-              size="sm"
-              onClick={terminarSesion}
-              disabled={cargandoAccion}
-            >
-              <Power className="w-3.5 h-3.5" />
-              Terminar
-            </Button>
+            <div className="flex items-center gap-2 flex-wrap">
+              <a
+                href={`/p/${sala.codigo}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg border border-emerald-300 text-emerald-800 hover:bg-emerald-100 transition-colors"
+              >
+                <Monitor className="w-3.5 h-3.5" />
+                Abrir pantalla
+              </a>
+              {sala.pantalla_vinculada && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={desvincularPantalla}
+                  disabled={cargandoAccion}
+                >
+                  <X className="w-3.5 h-3.5" />
+                  Desvincular
+                </Button>
+              )}
+              <Button
+                variant="danger"
+                size="sm"
+                onClick={terminarSesion}
+                disabled={cargandoAccion}
+              >
+                <Power className="w-3.5 h-3.5" />
+                Terminar
+              </Button>
+            </div>
           </div>
+
+          {!sala.pantalla_vinculada && (
+            <p className="text-xs text-emerald-800/80">
+              Abrí la pantalla del aula en la PC (sin iniciar sesión) y escaneá el QR con tu celular.
+              No tenés que teclear tu contraseña en esa máquina.
+            </p>
+          )}
+
+          {sala.pantalla_vinculada && sala.pantalla_expira && (
+            <p className="text-xs text-emerald-800/80 flex items-center gap-1.5">
+              <Clock className="w-3.5 h-3.5" />
+              Pantalla conectada. La sesión expira a las {new Date(sala.pantalla_expira).toLocaleTimeString()}.
+            </p>
+          )}
 
           {sala.material_activo && (
             <div className="bg-white rounded-lg border border-emerald-200 p-3 flex items-center justify-between">

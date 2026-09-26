@@ -24,22 +24,40 @@ const compartirService = {
     }
   },
 
-  // ✅ Estado público de la sala (con QR y expiración)
-  estadoSala: async (codigo) => {
+  // ✅ Estado público de la sala. Si se pasa el secreto de pantalla, el backend
+  // entrega el material activo (solo la pantalla emparejada lo recibe).
+  estadoSala: async (codigo, pantallaSecret = null) => {
     try {
-      return await api.get(`/compartir/${codigo}`);
+      const options = pantallaSecret
+        ? { headers: { 'X-Pantalla-Secret': pantallaSecret } }
+        : {};
+      return await api.get(`/compartir/${codigo}`, options);
     } catch (error) {
       console.error('Error obteniendo estado de sala:', error);
       throw error;
     }
   },
 
-  // Vincular (escanea QR)
-  vincular: async (codigo) => {
+  // ✅ Vincular la pantalla del aula (escaneo del QR, estilo WhatsApp Web):
+  // el celular del docente envía el token del QR y el secreto de la pantalla.
+  vincular: async (codigo, qrToken, pantallaSecret) => {
     try {
-      return await api.post(`/compartir/${codigo}/vincular`, {});
+      return await api.post(`/compartir/${codigo}/vincular`, {
+        qr_token: qrToken,
+        pantalla_secret: pantallaSecret,
+      });
     } catch (error) {
       console.error('Error vinculando sala:', error);
+      throw error;
+    }
+  },
+
+  // ✅ Desvincular la pantalla (deja de recibir contenido al instante)
+  revocarPantalla: async (codigo) => {
+    try {
+      return await api.post(`/compartir/${codigo}/pantalla/revocar`, {});
+    } catch (error) {
+      console.error('Error desvinculando pantalla:', error);
       throw error;
     }
   },

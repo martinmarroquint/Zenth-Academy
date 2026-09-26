@@ -79,8 +79,10 @@ const extractOptions = (params = {}, additionalOptions = {}) => {
   // Extraer opciones especiales de params
   const signal = params.signal || additionalOptions.signal || null;
   const timeout = params.timeout || additionalOptions.timeout || null;
-  
-  return { signal, timeout };
+  // ✅ Headers personalizados (ej: X-Pantalla-Secret de la pantalla del aula)
+  const headers = params.headers || additionalOptions.headers || null;
+
+  return { signal, timeout, headers };
 };
 
 // =====================================================
@@ -287,7 +289,7 @@ export const apiClient = {
     }
     
     // Extraer opciones especiales (no van en query string)
-    const { signal, timeout } = extractOptions(params);
+    const { signal, timeout, headers } = extractOptions(params);
     
     // Construir URL con query params normales
     const url = buildUrl(endpoint, params);
@@ -296,6 +298,8 @@ export const apiClient = {
     const requestOptions = { method: 'GET' };
     if (signal) requestOptions.signal = signal;
     if (timeout) requestOptions.timeout = timeout;
+    // ✅ FIX: antes los headers se descartaban silenciosamente en GET
+    if (headers) requestOptions.headers = headers;
     
     return this.request(url, requestOptions);
   },

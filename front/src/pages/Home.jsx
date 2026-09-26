@@ -3,7 +3,6 @@
 
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useNavigate, Link, Navigate } from 'react-router-dom';
-import { QRCodeSVG } from 'qrcode.react';
 import {
   GraduationCap, Lock, Mail, Eye, EyeOff, Loader2, AlertCircle,
   Monitor
@@ -23,7 +22,6 @@ const Home = () => {
   
   const [sala, setSala] = useState(null);
   const [cargandoQR, setCargandoQR] = useState(false);
-  const [qrKey, setQrKey] = useState(0);
   const [tieneToken, setTieneToken] = useState(false);
   
   const pollingIntervalRef = useRef(null);
@@ -111,9 +109,6 @@ const Home = () => {
       const data = await compartirService.salaActiva();
       if (data) {
         setSala(data);
-        if (data.qr_token) {
-          setQrKey(prev => prev + 1);
-        }
         reconfigurarPolling(data);
       } else {
         setSala(null);
@@ -183,7 +178,8 @@ const Home = () => {
     }
   };
 
-  const urlSala = sala?.codigo ? `${window.location.origin}/compartir/${sala.codigo}` : '';
+  // ✅ La pantalla del aula se abre por URL (sin login) y se vincula escaneando el QR
+  const urlPantalla = sala?.codigo ? `/p/${sala.codigo}` : '';
 
   // ✅ Si ya hay sesión activa, entrar DIRECTO al panel (no mostrar el login).
   if (authService.isAuthenticated()) {
@@ -208,9 +204,9 @@ const Home = () => {
             <Monitor className="w-4 h-4 text-gray-400" />
             <span className="text-sm font-medium text-gray-700">Compartir en clase</span>
           </div>
-          {sala?.estado === 'ACTIVO' && (
+          {sala?.pantalla_vinculada && (
             <span className="text-[10px] px-2 py-0.5 rounded-full" style={{ color: '#0f766e', backgroundColor: '#e6f4f2' }}>
-              Vinculado
+              Pantalla vinculada
             </span>
           )}
         </div>
@@ -241,17 +237,24 @@ const Home = () => {
             </button>
           </div>
         ) : sala ? (
-          <div className="flex justify-center">
-            <div className="bg-white p-3 rounded-xl border-2 shadow-inner-card" style={{ borderColor: '#0f766e' }}>
-              <QRCodeSVG 
-                key={qrKey}
-                value={sala.qr_token ? `${urlSala}?token=${sala.qr_token}` : urlSala}
-                size={180} 
-                level="M" 
-                bgColor="#fff" 
-                fgColor="#0f172a" 
-              />
+          <div className="space-y-3">
+            <div className="flex items-center justify-center gap-2">
+              <span className="text-[10px] text-gray-400 uppercase tracking-wider">Código</span>
+              <code className="text-lg font-mono font-bold text-gray-800 tracking-widest">{sala.codigo}</code>
             </div>
+            <a
+              href={urlPantalla}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="w-full inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl text-white text-sm font-medium transition-colors"
+              style={{ backgroundColor: '#0f766e' }}
+            >
+              <Monitor className="w-4 h-4" />
+              Abrir pantalla del aula
+            </a>
+            <p className="text-[11px] text-gray-400 text-center leading-relaxed">
+              Abrí esa pantalla en la PC del aula (sin iniciar sesión) y escaneá el QR con tu celular.
+            </p>
           </div>
         ) : (
           <div className="text-center py-4">

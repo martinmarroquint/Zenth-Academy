@@ -13,6 +13,19 @@ import compartirService from '../services/compartirService';
 
 const POLLING_MS = 2000; // 2 segundos
 
+// ✅ EMPAREJAMIENTO DE PANTALLA: el secreto vive SOLO en memoria de este equipo.
+// Viaja dentro del QR y el celular del docente (autenticado) lo envía al
+// vincular. Si se recarga la página se genera uno nuevo y hay que re-escanear.
+const generarSecretoPantalla = () => {
+  const bytes = new Uint8Array(24);
+  if (window.crypto?.getRandomValues) {
+    window.crypto.getRandomValues(bytes);
+  } else {
+    for (let i = 0; i < bytes.length; i += 1) bytes[i] = Math.floor(Math.random() * 256);
+  }
+  return Array.from(bytes).map((b) => b.toString(16).padStart(2, '0')).join('');
+};
+
 // =============================================
 // ICONO SEGÚN TIPO DE MATERIAL
 // =============================================
@@ -83,6 +96,11 @@ const CompartirSala = () => {
   }, []);
   const pollRef = useRef(null);
   const timerRef = useRef(null);
+  // ✅ Secreto de esta pantalla (en memoria, nunca en localStorage)
+  const pantallaSecretRef = useRef(null);
+  if (pantallaSecretRef.current === null) {
+    pantallaSecretRef.current = generarSecretoPantalla();
+  }
 
   const urlVinculacion = `${window.location.origin}/compartir/${codigo}`;
 
@@ -92,7 +110,7 @@ const CompartirSala = () => {
   const cargarEstado = useCallback(async () => {
     if (!codigo) return;
     try {
-      const data = await compartirService.estadoSala(codigo);
+      const data = await compartirService.estadoSala(codigo, pantallaSecretRef.current);
       setEstado(data);
       setError('');
       
@@ -170,6 +188,7 @@ const CompartirSala = () => {
 
   const salaCerrada = estado?.estado === 'CERRADO';
   const materialActivo = estado?.material_activo || null;
+  const vinculada = !!estado?.pantalla_vinculada;
   const qrToken = estado?.qr_token;
   const qrRestante = estado?.qr_restante || segundosRestantes;
 
@@ -184,17 +203,17 @@ const CompartirSala = () => {
             <span className="text-xs text-gray-500">· Sala {codigo}</span>
           </div>
           <div className="flex items-center gap-3">
-            {/* ✅ Timer QR */}
-            {!salaCerrada && !materialActivo && (
+            {/* ✅ Timer QR (solo mientras no hay pantalla vinculada) */}
+            {!salaCerrada && !materialActivo && !vinculada && (
               <QRTimer segundosRestantes={qrRestante} total={30} />
             )}
-            {estado?.estado === 'ACTIVO' && (
+            {vinculada && (
               <span className="flex items-center gap-1.5 text-[11px] text-emerald-400 bg-emerald-500/10 px-2 py-1 rounded-full">
                 <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
                 Vinculado
               </span>
             )}
-            {estado?.estado === 'ESPERANDO' && (
+            {!vinculada && !salaCerrada && (
               <span className="flex items-center gap-1.5 text-[11px] text-amber-400 bg-amber-500/10 px-2 py-1 rounded-full">
                 <span className="w-1.5 h-1.5 rounded-full bg-amber-400 animate-pulse" />
                 Esperando vinculación
@@ -269,6 +288,18 @@ const CompartirSala = () => {
               </div>
             </div>
           </div>
+        ) : /* ===== PANTALLA VINCULADA (esperando material) ===== */
+        vinculada ? (
+          <div className="text-center max-w-md">
+            <div className="w-16 h-16 rounded-2xl bg-emerald-500/10 flex items-center justify-center mx-auto mb-5">
+              <CheckCircle2 className="w-8 h-8 text-emerald-400" />
+            </div>
+            <h1 className="text-2xl font-bold text-white mb-2">Pantalla vinculada</h1>
+            <p className="text-sm text-gray-400 mb-2">Esta pantalla ya está conectada a tu carpeta.</p>
+            <p className="text-xs text-gray-500">
+              Elegí el material desde <span className="text-gray-300">Mi carpeta → Mostrar en pantalla</span>.
+            </p>
+          </div>
         ) : /* ===== QR DE VINCULACIÓN ===== */
         (
           <div className="text-center max-w-md w-full">
@@ -277,11 +308,13 @@ const CompartirSala = () => {
               Escanea con tu celular para vincular
             </div>
 
-            {/* ✅ QR DINÁMICO CON TOKEN */}
+            {/* ✅ QR DINÁMICO CON TOKEN + SECRETO DE PANTALLA */}
             <div className="bg-white rounded-3xl p-6 inline-block shadow-2xl mb-6 relative">
               <QRCodeSVG 
                 key={qrKey}
-                value={qrToken ? `${urlVinculacion}?token=${qrToken}` : urlVinculacion}
+                value={qrToken
+                  ? `${urlVinculacion}?t=${qrToken}&s=${pantallaSecretRef.current}`
+                  : urlVinculacion}
                 size={qrSize} 
                 level="M" 
                 bgColor="#fff" 
@@ -310,8 +343,11 @@ const CompartirSala = () => {
             </div>
 
             <h1 className="text-2xl font-bold text-white mb-2">Compartir en clase</h1>
-            <p className="text-sm text-gray-400 mb-6 max-w-sm mx-auto">
-              Escanea este QR con tu celular para vincular tu sesión y compartir material en la pantalla.
+            <p className="text-sm text-gray-400 mb-3 max-w-sm mx-auto">
+              Escaneá este QR con tu celular para vincular esta pantalla y compartir tu material.
+            </p>
+            <p className="text-xs text-gray-500 mb-6 max-w-sm mx-auto">
+              Mantené esta página abierta: si la recargás, hay que vincular de nuevo.
             </p>
 
             <div className="flex flex-col items-center gap-3">

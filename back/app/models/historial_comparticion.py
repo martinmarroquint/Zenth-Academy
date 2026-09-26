@@ -24,7 +24,19 @@ class HistorialComparticion(Base):
     # ✅ QR EXPIRACIÓN
     qr_token = Column(String, nullable=True)
     qr_expira = Column(DateTime, nullable=True)
-    
+
+    # ✅ EMPAREJAMIENTO DE PANTALLA (QR estilo WhatsApp Web)
+    # El equipo que muestra (PC del aula, sin login) genera un secreto EN MEMORIA
+    # que viaja en el QR; el celular del docente (autenticado) lo envía al
+    # vincular. Se guarda solo el hash y el contenido se sirve únicamente a esa
+    # pantalla, mientras la sesión esté viva.
+    pantalla_secret_hash = Column(String(128), nullable=True)
+    pantalla_vinculada_en = Column(DateTime, nullable=True)
+    pantalla_expira = Column(DateTime, nullable=True)
+    pantalla_ip = Column(String(50), nullable=True)
+    pantalla_user_agent = Column(Text, nullable=True)
+    pantalla_revocada_en = Column(DateTime, nullable=True)
+
     fecha_inicio = Column(DateTime, nullable=False, default=lambda: datetime.now(timezone.utc))
     fecha_fin = Column(DateTime, nullable=True)
     duracion_segundos = Column(Integer, default=0)

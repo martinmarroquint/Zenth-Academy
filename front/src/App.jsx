@@ -54,6 +54,7 @@ const EstudianteCursoDetalle = lazy(() => import('./pages/EstudianteCursoDetalle
 const EstudianteCertificados = lazy(() => import('./pages/EstudianteCertificados'));
 const HistorialEstudiante = lazy(() => import('./components/examenes/HistorialEstudiante'));
 const CompartirSala = lazy(() => import('./pages/CompartirSala'));
+const VincularPantalla = lazy(() => import('./pages/VincularPantalla'));
 const PanelSolicitudes = lazy(() => import('./components/docente/PanelSolicitudes'));
 
 // =============================================
@@ -127,6 +128,14 @@ function App() {
               El QR SIEMPRE visible aquí (como WhatsApp Web)
           ============================================= */}
           <Route path="/compartir/:codigo" element={<CompartirSala />} />
+          {/* Alias corto para tipear en la PC del aula (sin credenciales) */}
+          <Route path="/p/:codigo" element={<CompartirSala />} />
+
+          {/* =============================================
+              VINCULAR PANTALLA — landing del escaneo del QR
+              El celular del docente (autenticado) autoriza la pantalla
+          ============================================= */}
+          <Route path="/vincular/:codigo" element={<VincularPantalla />} />
 
           {/* =============================================
               EXAMEN PUBLICO — SIN LOGIN (acceso con codigo)

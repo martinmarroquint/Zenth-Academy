@@ -12,7 +12,9 @@ class HistorialComparticion(Base):
     __table_args__ = {'extend_existing': True, 'keep_existing': False}
 
     id = Column(String, primary_key=True)
-    docente_id = Column(String, nullable=False, index=True)
+    # ✅ NULL = pantalla creada desde /proyectar que todavía no fue reclamada
+    # por ningún docente (se asigna al escanear el QR con el celular)
+    docente_id = Column(String, nullable=True, index=True)
     grupo_id = Column(String, nullable=True)
     grupo_nombre = Column(String(200), nullable=True)
     recursos_compartidos = Column(JSON, default=list)

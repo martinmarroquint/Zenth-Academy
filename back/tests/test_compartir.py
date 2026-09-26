@@ -333,3 +333,121 @@ def test_sala_activa_refleja_el_emparejamiento(client, docente_headers):
     assert despues["pantalla_vinculada"] is True, despues
     assert despues["pantalla_expira"], despues
     assert despues["pantalla_vinculada_en"], despues
+
+
+# =====================================================
+# 7. PANTALLA DEL AULA SIN CÓDIGO (/proyectar)
+#    URL fija → QR → escanear. Sin códigos ni credenciales.
+# =====================================================
+
+def _crear_pantalla(client, *, secret=SECRET_PANTALLA, headers=None):
+    return client.post(
+        "/api/v1/compartir/pantallas",
+        json={"pantalla_secret": secret},
+        headers=headers or {},
+    )
+
+
+@pytest.mark.integration
+def test_vincular_sin_sesion_pide_iniciar_sesion(client):
+    """Un visitante anónimo (celular sin sesión) recibe un mensaje claro, no un 401."""
+    pantalla = _crear_pantalla(client).json()
+
+    resp = client.post(
+        f"/api/v1/compartir/{pantalla['codigo']}/vincular",
+        json={"qr_token": pantalla["qr_token"], "pantalla_secret": SECRET_PANTALLA},
+    )
+    assert resp.status_code == 200, resp.text
+    data = resp.json()
+    assert data["ok"] is False, data
+    assert "inici" in (data["mensaje"] or "").lower(), data
+
+
+@pytest.mark.integration
+def test_pantalla_nace_pendiente_con_qr(client):
+    """Sin sesión: la pantalla nace pendiente y muestra un QR para escanear."""
+    resp = _crear_pantalla(client)
+    assert resp.status_code == 201, resp.text
+    data = resp.json()
+    assert data["codigo"], data
+    assert data["qr_token"], data
+    assert data["pantalla_vinculada"] is False, data
+    assert data["material_activo"] is None, data
+
+
+@pytest.mark.integration
+def test_docente_reclama_la_pantalla_escaneando(client, docente_headers):
+    """El docente que escanea el QR reclama la pantalla pendiente."""
+    pantalla = _crear_pantalla(client).json()
+
+    resp = client.post(
+        f"/api/v1/compartir/{pantalla['codigo']}/vincular",
+        json={"qr_token": pantalla["qr_token"], "pantalla_secret": SECRET_PANTALLA},
+        headers=docente_headers,
+    )
+    assert resp.status_code == 200, resp.text
+    data = resp.json()
+    assert data["ok"] is True, data
+    assert data["pantalla_vinculada"] is True, data
+
+    estado = client.get(
+        f"/api/v1/compartir/{pantalla['codigo']}", headers=HEADER_PANTALLA
+    ).json()
+    assert estado["pantalla_vinculada"] is True, estado
+    # La pantalla muestra a quién quedó vinculada
+    assert estado["pantalla_docente_nombre"], estado
+
+
+@pytest.mark.security
+@pytest.mark.integration
+def test_estudiante_no_puede_reclamar_la_pantalla(client, estudiante_headers):
+    pantalla = _crear_pantalla(client).json()
+
+    resp = client.post(
+        f"/api/v1/compartir/{pantalla['codigo']}/vincular",
+        json={"qr_token": pantalla["qr_token"], "pantalla_secret": SECRET_PANTALLA},
+        headers=estudiante_headers,
+    )
+    assert resp.status_code == 200, resp.text
+    data = resp.json()
+    assert data["ok"] is False, data
+    assert data["pantalla_vinculada"] is False, data
+
+
+@pytest.mark.integration
+def test_pantalla_con_sesion_de_docente_se_vincula_directo(client, docente_headers):
+    """Si el equipo ya tiene sesión de docente, no hace falta escanear nada."""
+    resp = _crear_pantalla(client, headers=docente_headers)
+    assert resp.status_code == 201, resp.text
+    data = resp.json()
+    assert data["pantalla_vinculada"] is True, data
+    assert data["qr_token"] is None, data
+    assert data["pantalla_docente_nombre"], data
+
+    # Y ya recibe material sin haber escaneado
+    material = _crear_material(client, docente_headers)
+    _mostrar_material(client, data["codigo"], material, docente_headers)
+
+    estado = client.get(
+        f"/api/v1/compartir/{data['codigo']}", headers=HEADER_PANTALLA
+    ).json()
+    assert estado["material_activo"] is not None, estado
+
+
+@pytest.mark.integration
+def test_pantalla_pendiente_aparece_en_el_panel_al_reclamarse(client, docente_headers):
+    pantalla = _crear_pantalla(client).json()
+
+    antes = client.get("/api/v1/compartir/salas/activa", headers=docente_headers).json()
+    assert antes is None, antes
+
+    client.post(
+        f"/api/v1/compartir/{pantalla['codigo']}/vincular",
+        json={"qr_token": pantalla["qr_token"], "pantalla_secret": SECRET_PANTALLA},
+        headers=docente_headers,
+    )
+
+    despues = client.get("/api/v1/compartir/salas/activa", headers=docente_headers).json()
+    assert despues is not None, despues
+    assert despues["codigo"] == pantalla["codigo"], despues
+    assert despues["pantalla_vinculada"] is True, despues

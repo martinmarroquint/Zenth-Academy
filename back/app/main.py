@@ -558,6 +558,19 @@ async def startup_event():
                     logger.warning(f"No se pudieron crear índices OAuth: {_e3}")
                 _conn3.commit()
 
+        # 3b) ✅ PANTALLAS SIN DUEÑO: una pantalla creada desde /proyectar nace
+        # pendiente (docente_id NULL) y se asigna al escanear el QR.
+        if "historial_comparticiones" in tablas_actuales:
+            with _eng2.connect() as _conn_pan:
+                try:
+                    _conn_pan.execute(_text2(
+                        "ALTER TABLE historial_comparticiones "
+                        "ALTER COLUMN docente_id DROP NOT NULL;"
+                    ))
+                except Exception as _e_pan:
+                    logger.debug(f"historial_comparticiones.docente_id ya era nullable: {_e_pan}")
+                _conn_pan.commit()
+
         # 4) ✅ FLUJO SECUENCIAL POR DEFECTO (estilo Platzi): cada lección se
         # desbloquea solo al completar la anterior. Los cursos sin bloqueo
         # pasan a 'secuencial'. Idempotente: solo toca los que están en 'ninguno'.

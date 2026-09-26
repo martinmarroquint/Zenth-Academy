@@ -29,10 +29,8 @@ const MaterialesPage = () => {
 
   // Estado de la sala de compartir
   const [sala, setSala] = useState(null);
-  const [abriendoSala, setAbriendoSala] = useState(false);
   const [cargandoAccion, setCargandoAccion] = useState(false);
   const [mostrarHistorial, setMostrarHistorial] = useState(false);
-  const [salaError, setSalaError] = useState('');
 
   const usuario = authService.getCurrentUser();
   const docenteId = usuario?.id || '';
@@ -51,36 +49,31 @@ const MaterialesPage = () => {
     }
   }, []);
 
-  const inicializar = useCallback(async () => {
-    await cargarMateriales();
+  // ✅ Pantalla activa del docente. Se refresca sola: la pantalla se vincula
+  // desde la PC del aula escaneando el QR (no hay código que tipear).
+  const cargarSalaActiva = useCallback(async () => {
     try {
       const activa = await compartirService.salaActiva();
-      if (activa) {
-        setSala(activa);
-      }
+      setSala((prev) => {
+        if (activa) return activa;
+        // Si veníamos de una sala cerrada, mantenemos el aviso
+        return prev?.estado === 'CERRADO' ? prev : null;
+      });
     } catch {
       // Sin sala activa: normal
     }
-  }, [cargarMateriales]);
+  }, []);
+
+  const inicializar = useCallback(async () => {
+    await cargarMateriales();
+    await cargarSalaActiva();
+  }, [cargarMateriales, cargarSalaActiva]);
 
   useEffect(() => {
     inicializar();
-  }, [inicializar]);
-
-  // COMPARTIR EN CLASE
-  const abrirCompartir = async () => {
-    setAbriendoSala(true);
-    setSalaError('');
-    try {
-      const data = await compartirService.crearSala();
-      setSala(data);
-    } catch (e) {
-      console.error('Error creando sala:', e);
-      setSalaError(e.message || 'No se pudo iniciar el compartir');
-    } finally {
-      setAbriendoSala(false);
-    }
-  };
+    const id = setInterval(cargarSalaActiva, 5000);
+    return () => clearInterval(id);
+  }, [inicializar, cargarSalaActiva]);
 
   const enviarMaterial = async (material) => {
     if (!sala) return;
@@ -215,20 +208,36 @@ const MaterialesPage = () => {
           </p>
         </div>
         <div className="flex flex-col sm:flex-row gap-2 flex-shrink-0">
-          <Button
-            variant={salaActiva ? 'success' : 'secondary'}
-            onClick={abrirCompartir}
-            disabled={abriendoSala || salaActiva}
+          <a
+            href="/proyectar"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl text-white text-sm font-semibold transition-colors hover:bg-[#0d5e57]"
+            style={{ backgroundColor: '#0f766e' }}
           >
-            {abriendoSala ? <Loader2 className="w-4 h-4 animate-spin" /> : <Monitor className="w-4 h-4" />}
-            {salaActiva ? 'Sala activa' : 'Compartir en clase'}
-          </Button>
+            <Monitor className="w-4 h-4" />
+            Proyectar en esta PC
+          </a>
           <Button variant="primary" onClick={() => { setMaterialEditando(null); setMostrarModal(true); }}>
             <Plus className="w-4 h-4" />
             Nuevo material
           </Button>
         </div>
       </div>
+
+      {/* ✅ Cómo se comparte: URL FIJA en la PC del aula + QR al celular */}
+      {!salaActiva && !salaCerrada && (
+        <div className="bg-gray-50 border border-gray-200 rounded-xl p-4">
+          <p className="text-sm text-gray-600 leading-relaxed">
+            Para compartir en clase: abrí{' '}
+            <code className="font-mono bg-white border border-gray-200 px-1.5 py-0.5 rounded text-xs">
+              zenthacademy.com/proyectar
+            </code>{' '}
+            en la PC del aula y escaneá el QR con tu celular. No hace falta iniciar sesión
+            en esa máquina.
+          </p>
+        </div>
+      )}
 
       {/* Estado de sala activa */}
       {salaActiva && (
@@ -314,22 +323,16 @@ const MaterialesPage = () => {
 
       {salaCerrada && (
         <div className="bg-gray-50 border border-gray-200 rounded-xl p-4 text-center">
-          <p className="text-sm text-gray-500">Sesion terminada. La pantalla del aula ya no muestra contenido.</p>
-          <Button
-            variant="secondary"
-            size="sm"
-            onClick={abrirCompartir}
-            className="mt-2"
+          <p className="text-sm text-gray-500">Sesión terminada. La pantalla del aula ya no muestra contenido.</p>
+          <a
+            href="/proyectar"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="mt-2 inline-flex items-center gap-2 text-xs font-medium text-[#0f766e] hover:underline"
           >
-            Iniciar nueva sesion
-          </Button>
-        </div>
-      )}
-
-      {salaError && (
-        <div className="bg-red-50 border border-red-200 text-red-600 text-sm px-4 py-3 rounded-lg">
-          {salaError}
-          <button onClick={() => setSalaError('')} className="ml-3 underline">Cerrar</button>
+            <Monitor className="w-3.5 h-3.5" />
+            Abrir pantalla de nuevo
+          </a>
         </div>
       )}
 
@@ -431,13 +434,14 @@ const MaterialesPage = () => {
                       {sala.material_activo?.id === material.id ? 'Mostrando' : 'Mostrar en pantalla'}
                     </button>
                   ) : (
-                    <button
-                      onClick={abrirCompartir}
-                      disabled={abriendoSala}
-                      className="flex-1 px-3 py-2 text-xs font-medium bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-lg transition-colors flex items-center justify-center gap-1.5 disabled:opacity-50"
+                    <a
+                      href="/proyectar"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="flex-1 px-3 py-2 text-xs font-medium bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-lg transition-colors flex items-center justify-center gap-1.5"
                     >
-                      <Monitor className="w-3.5 h-3.5" /> Compartir en clase
-                    </button>
+                      <Monitor className="w-3.5 h-3.5" /> Abrir pantalla
+                    </a>
                   )}
                   <button
                     onClick={() => setMostrarHistorial(!mostrarHistorial)}

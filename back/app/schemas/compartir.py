@@ -18,6 +18,13 @@ class VincularRequest(BaseModel):
     pantalla_secret: Optional[str] = None
 
 
+class PantallaCreateRequest(BaseModel):
+    """✅ PANTALLA DEL AULA (/proyectar): el equipo que proyecta genera un secreto
+    EN MEMORIA y lo envía al crear la pantalla. Si el equipo ya tiene sesión de
+    docente, la pantalla queda vinculada al instante (sin escanear nada)."""
+    pantalla_secret: Optional[str] = None
+
+
 class SalaEstadoResponse(BaseModel):
     """Estado público de la sala (sin datos del docente)."""
     codigo: str
@@ -31,6 +38,8 @@ class SalaEstadoResponse(BaseModel):
     qr_restante: Optional[int] = 0
     # ✅ True solo mientras hay una pantalla emparejada con sesión viva
     pantalla_vinculada: bool = False
+    # ✅ Nombre del docente dueño (para que la pantalla muestre a quién está vinculada)
+    pantalla_docente_nombre: Optional[str] = None
 
 
 class VincularResponse(BaseModel):

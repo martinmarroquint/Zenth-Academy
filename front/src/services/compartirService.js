@@ -24,6 +24,20 @@ const compartirService = {
     }
   },
 
+  // ✅ Crea la pantalla de proyección del aula (URL FIJA /proyectar).
+  // Sin sesión nace pendiente (muestra QR para escanear); con sesión de docente
+  // queda vinculada al instante, sin códigos ni credenciales.
+  crearPantalla: async (pantallaSecret) => {
+    try {
+      return await api.post('/compartir/pantallas', {
+        pantalla_secret: pantallaSecret,
+      });
+    } catch (error) {
+      console.error('Error creando pantalla:', error);
+      throw error;
+    }
+  },
+
   // ✅ Estado público de la sala. Si se pasa el secreto de pantalla, el backend
   // entrega el material activo (solo la pantalla emparejada lo recibe).
   estadoSala: async (codigo, pantallaSecret = null) => {

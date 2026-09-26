@@ -178,8 +178,8 @@ const Home = () => {
     }
   };
 
-  // ✅ La pantalla del aula se abre por URL (sin login) y se vincula escaneando el QR
-  const urlPantalla = sala?.codigo ? `/p/${sala.codigo}` : '';
+  // ✅ La pantalla del aula se abre en /proyectar (URL fija, sin login) y se
+  // vincula escaneando el QR con el celular.
 
   // ✅ Si ya hay sesión activa, entrar DIRECTO al panel (no mostrar el login).
   if (authService.isAuthenticated()) {
@@ -238,22 +238,19 @@ const Home = () => {
           </div>
         ) : sala ? (
           <div className="space-y-3">
-            <div className="flex items-center justify-center gap-2">
-              <span className="text-[10px] text-gray-400 uppercase tracking-wider">Código</span>
-              <code className="text-lg font-mono font-bold text-gray-800 tracking-widest">{sala.codigo}</code>
-            </div>
             <a
-              href={urlPantalla}
+              href="/proyectar"
               target="_blank"
               rel="noopener noreferrer"
               className="w-full inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl text-white text-sm font-medium transition-colors"
               style={{ backgroundColor: '#0f766e' }}
             >
               <Monitor className="w-4 h-4" />
-              Abrir pantalla del aula
+              Proyectar en esta PC
             </a>
             <p className="text-[11px] text-gray-400 text-center leading-relaxed">
-              Abrí esa pantalla en la PC del aula (sin iniciar sesión) y escaneá el QR con tu celular.
+              En la PC del aula abrí <span className="font-mono">zenthacademy.com/proyectar</span> y
+              escaneá el QR con tu celular. Sin códigos ni contraseñas.
             </p>
           </div>
         ) : (

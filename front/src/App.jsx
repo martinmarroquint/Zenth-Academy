@@ -128,7 +128,10 @@ function App() {
               El QR SIEMPRE visible aquí (como WhatsApp Web)
           ============================================= */}
           <Route path="/compartir/:codigo" element={<CompartirSala />} />
-          {/* Alias corto para tipear en la PC del aula (sin credenciales) */}
+          {/* ✅ URL FIJA para la PC del aula: sin código, sin credenciales.
+              Muestra el QR y se vincula escaneando (estilo WhatsApp Web). */}
+          <Route path="/proyectar" element={<CompartirSala autoCrear />} />
+          {/* Alias corto heredado */}
           <Route path="/p/:codigo" element={<CompartirSala />} />
 
           {/* =============================================

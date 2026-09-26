@@ -14,6 +14,13 @@ from app.core.security_logger import log_unauthorized_access, log_role_escalatio
 
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/v1/auth/login")
 
+# ✅ Para autenticación OPCIONAL: sin `auto_error`, así un visitante anónimo
+# recibe None en lugar de un 401 (antes `get_current_user_optional` nunca
+# llegaba a devolver None porque el esquema cortaba con 401).
+oauth2_scheme_optional = OAuth2PasswordBearer(
+    tokenUrl="/api/v1/auth/login", auto_error=False
+)
+
 
 def get_current_user(
     token: str = Depends(oauth2_scheme),
@@ -153,7 +160,7 @@ def require_roles(allowed_roles: list):
 # =============================================
 
 def get_current_user_optional(
-    token: Optional[str] = Depends(oauth2_scheme),
+    token: Optional[str] = Depends(oauth2_scheme_optional),
     db: Session = Depends(get_db)
 ) -> Optional[Usuario]:
     """

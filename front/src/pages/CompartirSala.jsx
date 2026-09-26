@@ -75,8 +75,10 @@ const QRTimer = ({ segundosRestantes, total = 30 }) => {
 // COMPONENTE PRINCIPAL
 // =============================================
 
-const CompartirSala = () => {
-  const { codigo } = useParams();
+const CompartirSala = ({ autoCrear = false }) => {
+  const { codigo: codigoParam } = useParams();
+  // ✅ En /proyectar no hay código en la URL: la pantalla se crea sola
+  const [codigo, setCodigo] = useState(codigoParam || null);
   const [estado, setEstado] = useState(null);
   const [cargando, setCargando] = useState(true);
   const [error, setError] = useState('');
@@ -133,9 +135,32 @@ const CompartirSala = () => {
   }, [codigo]);
 
   // =============================================
+  // CREACIÓN AUTOMÁTICA (/proyectar) — sin código ni credenciales
+  // =============================================
+  const yaCreo = useRef(false);
+  useEffect(() => {
+    if (!autoCrear || codigo || yaCreo.current) return;
+    yaCreo.current = true;
+    compartirService
+      .crearPantalla(pantallaSecretRef.current)
+      .then((data) => {
+        if (data?.codigo) {
+          setEstado(data);
+          setCodigo(data.codigo);
+          setCargando(false);
+        }
+      })
+      .catch((e) => {
+        setError(e?.message || 'No se pudo iniciar la pantalla');
+        setCargando(false);
+      });
+  }, [autoCrear, codigo]);
+
+  // =============================================
   // POLLING Y TIMER
   // =============================================
   useEffect(() => {
+    if (!codigo) return undefined;
     cargarEstado();
     
     // Polling cada 2 segundos
@@ -157,7 +182,7 @@ const CompartirSala = () => {
       if (pollRef.current) clearInterval(pollRef.current);
       if (timerRef.current) clearInterval(timerRef.current);
     };
-  }, [cargarEstado]);
+  }, [cargarEstado, codigo]);
 
   // =============================================
   // RENDER
@@ -295,7 +320,11 @@ const CompartirSala = () => {
               <CheckCircle2 className="w-8 h-8 text-emerald-400" />
             </div>
             <h1 className="text-2xl font-bold text-white mb-2">Pantalla vinculada</h1>
-            <p className="text-sm text-gray-400 mb-2">Esta pantalla ya está conectada a tu carpeta.</p>
+            <p className="text-sm text-gray-400 mb-2">
+              {estado?.pantalla_docente_nombre
+                ? `Vinculada a ${estado.pantalla_docente_nombre}.`
+                : 'Esta pantalla ya está conectada a tu carpeta.'}
+            </p>
             <p className="text-xs text-gray-500">
               Elegí el material desde <span className="text-gray-300">Mi carpeta → Mostrar en pantalla</span>.
             </p>

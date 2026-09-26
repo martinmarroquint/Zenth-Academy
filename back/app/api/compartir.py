@@ -24,6 +24,7 @@ from app.schemas.compartir import (
     SalaEstadoResponse,
     VincularRequest,
     VincularResponse,
+    PantallaCreateRequest,
     SalaDocenteResponse,
 )
 from app.schemas.material_compartido import MensajeResponse
@@ -130,6 +131,15 @@ def _limpiar_pantalla(
         sala.estado = "ESPERANDO"
 
 
+def _nombre_docente_sala(db: Session, sala: HistorialComparticion) -> Optional[str]:
+    """✅ Nombre del docente dueño, para que la pantalla muestre a quién está
+    vinculada (si alguien más la reclamó, el docente lo nota)."""
+    if not sala.docente_id:
+        return None
+    user = db.query(Usuario).filter(Usuario.id == str(sala.docente_id)).first()
+    return user.nombre_completo if user else None
+
+
 def _material_publico(m: MaterialCompartido) -> dict:
     return {
         "id": str(m.id),
@@ -144,7 +154,8 @@ def _material_publico(m: MaterialCompartido) -> dict:
 
 def _estado_sala(
     sala: HistorialComparticion, ahora: datetime, *,
-    con_material: bool = True, incluir_qr: bool = True
+    con_material: bool = True, incluir_qr: bool = True,
+    docente_nombre: Optional[str] = None
 ) -> dict:
     """Estado de la sala.
 
@@ -175,6 +186,7 @@ def _estado_sala(
         "qr_expira": sala.qr_expira.isoformat() if (sala.qr_expira and incluir_qr) else None,
         "qr_restante": qr_restante if incluir_qr else 0,
         "pantalla_vinculada": _pantalla_bindeada(sala, ahora),
+        "pantalla_docente_nombre": docente_nombre,
     }
 
 
@@ -278,6 +290,76 @@ def sala_activa_docente(
 
 
 # =============================================
+# PANTALLA DEL AULA (/proyectar) — SIN CÓDIGO NI CREDENCIALES
+# El docente abre una URL FIJA en la PC del aula, ve un QR y lo escanea con su
+# celular (estilo WhatsApp Web). Si el equipo ya tiene sesión de docente, la
+# pantalla queda vinculada al instante sin escanear nada.
+# =============================================
+
+@router.post("/pantallas", response_model=SalaEstadoResponse, status_code=201)
+def crear_pantalla(
+    request: Request,
+    data: Optional[PantallaCreateRequest] = None,
+    db: Session = Depends(get_db),
+    current_user: Optional[Usuario] = Depends(get_current_user_optional),
+    # ✅ Endpoint público que crea registros → rate limit
+    _rate_limited = Depends(rate_limit(20, 60)),
+):
+    """Crea la pantalla de proyección del aula (nace pendiente si no hay sesión)."""
+    try:
+        ahora = _ahora_utc()
+        payload = data or PantallaCreateRequest()
+
+        codigo = _generar_codigo()
+        while _buscar_sala(db, codigo):
+            codigo = _generar_codigo()
+
+        sala = HistorialComparticion(
+            id=str(uuid.uuid4()),
+            docente_id=None,
+            session_id=codigo,
+            qr_token=_generar_qr_token(),
+            qr_expira=ahora + timedelta(seconds=QR_EXPIRATION_SECONDS),
+            estado="ESPERANDO",
+            recursos_compartidos=[],
+            cantidad_recursos=0,
+            fecha_inicio=ahora,
+        )
+
+        # ✅ Si el equipo ya tiene sesión de docente/admin, se vincula directo
+        vinculada_directo = bool(
+            current_user is not None
+            and current_user.rol in ["admin", "docente"]
+            and payload.pantalla_secret
+        )
+        if vinculada_directo:
+            sala.docente_id = str(current_user.id)
+            sala.pantalla_secret_hash = _hash_secret(payload.pantalla_secret)
+            sala.pantalla_vinculada_en = ahora
+            sala.pantalla_expira = ahora + timedelta(hours=PANTALLA_SESION_HORAS)
+            sala.pantalla_ip = request.client.host if request.client else None
+            sala.pantalla_user_agent = request.headers.get("user-agent")
+            sala.qr_token = None
+            sala.qr_expira = None
+            sala.estado = "ACTIVO"
+
+        db.add(sala)
+        db.commit()
+        db.refresh(sala)
+
+        logger.info(f"Pantalla {codigo} creada (vinculada_directo={vinculada_directo})")
+        return _estado_sala(
+            sala, ahora,
+            docente_nombre=_nombre_docente_sala(db, sala) if vinculada_directo else None,
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=error_interno(e, "Error creando pantalla"))
+
+
+# =============================================
 # ESTADO PUBLICO DE LA SALA (renueva QR automaticamente)
 # =============================================
 
@@ -328,6 +410,7 @@ def estado_sala(
             sala, ahora,
             con_material=es_pantalla,
             incluir_qr=not vinculada,
+            docente_nombre=_nombre_docente_sala(db, sala) if vinculada else None,
         )
     except HTTPException:
         raise
@@ -368,17 +451,28 @@ def vincular_sala(
             )
 
         es_docente = current_user.rol in ["admin", "docente"]
-        es_dueño = str(sala.docente_id) == str(current_user.id) or current_user.rol == "admin"
 
-        if not es_dueño:
-            logger.warning(
-                f"Acceso denegado: usuario {current_user.id} intentó vincular "
-                f"la sala {codigo} de {sala.docente_id}"
-            )
-            return VincularResponse(
-                ok=False, es_docente=es_docente, es_dueño=False,
-                mensaje="No tienes permiso para vincular esta sala",
-            )
+        if sala.docente_id is None:
+            # ✅ Pantalla PENDIENTE (creada desde /proyectar sin login): la reclama
+            # el docente que escanea. Los estudiantes no pueden reclamarla.
+            if not es_docente:
+                return VincularResponse(
+                    ok=False, es_docente=False, es_dueño=False,
+                    mensaje="Solo una cuenta docente puede vincular esta pantalla",
+                )
+            es_dueño = True
+            sala.docente_id = str(current_user.id)
+        else:
+            es_dueño = str(sala.docente_id) == str(current_user.id) or current_user.rol == "admin"
+            if not es_dueño:
+                logger.warning(
+                    f"Acceso denegado: usuario {current_user.id} intentó vincular "
+                    f"la sala {codigo} de {sala.docente_id}"
+                )
+                return VincularResponse(
+                    ok=False, es_docente=es_docente, es_dueño=False,
+                    mensaje="No tienes permiso para vincular esta sala",
+                )
 
         if sala.estado == "CERRADO":
             return VincularResponse(

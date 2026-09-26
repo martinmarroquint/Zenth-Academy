@@ -19,6 +19,18 @@ describe('compartirService', () => {
     vi.clearAllMocks();
   });
 
+  describe('crearPantalla', () => {
+    it('crea la pantalla de proyección enviando el secreto en memoria', async () => {
+      api.post.mockResolvedValue({ codigo: 'ABC123', qr_token: 'tok' });
+
+      await compartirService.crearPantalla('secreto-abc');
+
+      expect(api.post).toHaveBeenCalledWith('/compartir/pantallas', {
+        pantalla_secret: 'secreto-abc',
+      });
+    });
+  });
+
   describe('estadoSala', () => {
     it('envía el secreto de pantalla como header', async () => {
       api.get.mockResolvedValue({ pantalla_vinculada: true });

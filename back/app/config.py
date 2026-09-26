@@ -110,6 +110,22 @@ class Settings(BaseSettings):
     REDIS_URL: Optional[str] = None  # ← NUEVO
     REDIS_ENABLED: bool = False  # ← NUEVO
 
+    # =====================================================
+    # WEBAUTHN / PASSKEYS (huella, Face ID, Windows Hello)
+    # =====================================================
+    # RP ID = dominio SIN puerto (debe coincidir con el sitio). En producción:
+    # zenthacademy.com. Si queda "localhost" se deriva del host de la petición.
+    WEBAUTHN_RP_ID: str = "localhost"
+    WEBAUTHN_RP_NAME: str = "Zenth Academy"
+    # Orígenes permitidos, separados por coma (dev + producción)
+    WEBAUTHN_ORIGINS: str = (
+        "http://localhost:5173,http://localhost:3000,http://127.0.0.1:5173"
+    )
+
+    @property
+    def webauthn_origins_lista(self) -> list:
+        return [o.strip() for o in (self.WEBAUTHN_ORIGINS or "").split(",") if o.strip()]
+
     model_config = ConfigDict(
         env_file=".env",
         env_file_encoding="utf-8",

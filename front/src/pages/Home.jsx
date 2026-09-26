@@ -4,11 +4,12 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate, Link, Navigate } from 'react-router-dom';
 import {
-  Lock, Mail, Eye, EyeOff, Loader2, AlertCircle
+  Lock, Mail, Eye, EyeOff, Loader2, AlertCircle, Fingerprint
 } from 'lucide-react';
 import { authService } from '../services/authService';
 import SocialLoginButtons from '../components/auth/SocialLoginButtons';
 import PantallaAulaQR from '../components/compartir/PantallaAulaQR';
+import webauthnService from '../services/webauthnService';
 
 const Home = () => {
   const navigate = useNavigate();
@@ -18,6 +19,19 @@ const Home = () => {
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  // ✅ Login con huella / Face ID
+  const [huellaDisponible, setHuellaDisponible] = useState(false);
+  const [cargandoHuella, setCargandoHuella] = useState(false);
+
+  useEffect(() => {
+    let activo = true;
+    webauthnService.disponibleEnDispositivo().then((ok) => {
+      if (activo) setHuellaDisponible(ok);
+    });
+    return () => {
+      activo = false;
+    };
+  }, []);
 
   useEffect(() => {
     // ✅ Mensaje de error devuelto por el login social (OAuth)
@@ -62,6 +76,26 @@ const Home = () => {
       setError('Error al iniciar sesion');
     } finally {
       setLoading(false);
+    }
+  };
+
+  // ✅ Entrar con huella / Face ID (el correo es la pista para buscar tus passkeys)
+  const handleLoginHuella = async () => {
+    const correo = email.trim();
+    if (!correo) {
+      setError('Escribí tu correo y después tocá "Entrar con huella"');
+      return;
+    }
+    setError('');
+    setCargandoHuella(true);
+    try {
+      const data = await webauthnService.login(correo);
+      const rol = data?.user?.rol || authService.getRol();
+      navigate(rol === 'admin' ? '/admin' : rol === 'docente' ? '/docente' : '/estudiante');
+    } catch (e) {
+      setError(e?.message || 'No se pudo entrar con huella / Face ID');
+    } finally {
+      setCargandoHuella(false);
     }
   };
 
@@ -163,6 +197,24 @@ const Home = () => {
 
           {/* Login social (Google / Microsoft) */}
           <SocialLoginButtons onError={setError} />
+
+          {/* ✅ Huella / Face ID (solo si el dispositivo lo soporta) */}
+          {huellaDisponible && (
+            <button
+              type="button"
+              onClick={handleLoginHuella}
+              disabled={cargandoHuella}
+              className="mt-3 w-full py-3 text-sm font-medium rounded-xl border transition-colors flex items-center justify-center gap-2 disabled:opacity-50"
+              style={{ borderColor: '#0f766e', color: '#0f766e' }}
+            >
+              {cargandoHuella ? (
+                <Loader2 className="w-4 h-4 animate-spin" />
+              ) : (
+                <Fingerprint className="w-4 h-4" />
+              )}
+              Entrar con huella / Face ID
+            </button>
+          )}
 
           <div className="mt-6 text-center">
             <p className="text-xs text-gray-400">

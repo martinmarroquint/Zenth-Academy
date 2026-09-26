@@ -24,6 +24,7 @@ from app.models.biblioteca import (
     RecursoBiblioteca, BibliotecaInteraccion, BibliotecaEvento
 )  # ✅ BIBLIOTECA
 from app.models.cupon import Cupon, CuponUso  # ✅ CUPONES
+from app.models.webauthn import CredencialWebAuthn, WebAuthnChallenge  # ✅ PASSKEYS
 
 
 __all__ = [
@@ -45,4 +46,5 @@ __all__ = [
     "IntentoExamen",  # ✅ INTENTOS DE EXAMEN (autoridad de tiempo)
     "RecursoBiblioteca", "BibliotecaInteraccion", "BibliotecaEvento",  # ✅ BIBLIOTECA
     "Cupon", "CuponUso",  # ✅ CUPONES
+    "CredencialWebAuthn", "WebAuthnChallenge",  # ✅ PASSKEYS
 ]

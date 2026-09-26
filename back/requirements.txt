@@ -53,3 +53,8 @@ typing-extensions==4.12.2
 httpx==0.28.1
 python-dateutil==2.9.0
 pytz==2025.1
+
+# =====================================================
+# WEBAUTHN / PASSKEYS (huella, Face ID, Windows Hello)
+# =====================================================
+webauthn==2.0.0

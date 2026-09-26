@@ -21,6 +21,7 @@ from app.api import (
     biblioteca,
     admin,
     cupones,
+    webauthn,
 )
 
 # Configuracion publica de cliente (marca Zenth Academy)
@@ -152,6 +153,15 @@ api_router.include_router(
 )
 
 # =============================================
+# WEBAUTHN / PASSKEYS (huella, Face ID, Windows Hello)
+# =============================================
+api_router.include_router(
+    webauthn.router,
+    prefix="/webauthn",
+    tags=["WebAuthn"]
+)
+
+# =============================================
 # SOLICITUDES DE DOCENTE
 # =============================================
 api_router.include_router(
@@ -206,5 +216,6 @@ __all__ = [
     'biblioteca',
     'admin',
     'cupones',
+    'webauthn',
     'api_router'
 ]

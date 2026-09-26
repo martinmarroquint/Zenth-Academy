@@ -5,9 +5,10 @@ import React, { useState, useEffect } from 'react';
 import {
   User, Bell, Settings, Save, CheckCircle, Lock, Globe,
   Info, Download, LogOut, AlertTriangle, ShieldCheck,
-  Calendar, Clock
+  Calendar, Clock, Fingerprint, Trash2, Plus
 } from 'lucide-react';
 import { authService } from '../../services/authService';
+import webauthnService from '../../services/webauthnService';
 import { Input, Button, Switch, Tabs, Badge, Modal, Dropdown } from '../../components/ui';
 
 // =============================================
@@ -115,6 +116,59 @@ const ConfiguracionPage = () => {
   const [password, setPassword] = useState({ actual: '', nueva: '', confirmar: '' });
   const [guardandoPass, setGuardandoPass] = useState(false);
   const [mensajePass, setMensajePass] = useState('');
+
+  // ===== SEGURIDAD: HUELLA / FACE ID (passkeys) =====
+  const [huellaDisponible, setHuellaDisponible] = useState(false);
+  const [passkeys, setPasskeys] = useState([]);
+  const [cargandoPasskey, setCargandoPasskey] = useState(false);
+  const [mensajePasskey, setMensajePasskey] = useState('');
+
+  useEffect(() => {
+    let activo = true;
+    (async () => {
+      const disponible = await webauthnService.disponibleEnDispositivo();
+      if (activo) setHuellaDisponible(disponible);
+      try {
+        const data = await webauthnService.credenciales();
+        if (activo) setPasskeys(Array.isArray(data) ? data : []);
+      } catch {
+        // Sin passkeys todavía
+      }
+    })();
+    return () => {
+      activo = false;
+    };
+  }, []);
+
+  const activarHuella = async () => {
+    setCargandoPasskey(true);
+    setMensajePasskey('');
+    try {
+      const nombre = `${navigator.platform || 'Dispositivo'} · ${new Date().toLocaleDateString()}`;
+      await webauthnService.registrar(nombre);
+      const data = await webauthnService.credenciales();
+      setPasskeys(Array.isArray(data) ? data : []);
+      setMensajePasskey('Huella / Face ID activado en este dispositivo.');
+    } catch (e) {
+      setMensajePasskey(e?.message || 'No se pudo activar la huella / Face ID');
+    } finally {
+      setCargandoPasskey(false);
+    }
+  };
+
+  const eliminarPasskey = async (id) => {
+    setCargandoPasskey(true);
+    setMensajePasskey('');
+    try {
+      await webauthnService.eliminarCredencial(id);
+      setPasskeys((prev) => prev.filter((p) => p.id !== id));
+      setMensajePasskey('Dispositivo eliminado.');
+    } catch (e) {
+      setMensajePasskey(e?.message || 'No se pudo eliminar el dispositivo');
+    } finally {
+      setCargandoPasskey(false);
+    }
+  };
 
   // ===== NOTIFICACIONES (preferencias locales por ahora) =====
   const [notificaciones, setNotificaciones] = useState(() => {
@@ -480,6 +534,75 @@ const ConfiguracionPage = () => {
             <p className="text-xs text-gray-400">
               Si no reconoces este acceso, cambia tu contraseña inmediatamente.
             </p>
+          </div>
+
+          <div className="bg-white rounded-2xl border border-gray-200/60 p-6 space-y-3">
+            <div className="flex items-center gap-2">
+              <Fingerprint className="w-4 h-4 text-[#0f766e]" />
+              <h3 className="font-semibold text-gray-900">Huella / Face ID</h3>
+            </div>
+
+            {!huellaDisponible ? (
+              <p className="text-xs text-gray-500">
+                Este dispositivo o navegador no ofrece biometría (huella, Face ID o Windows Hello).
+                Probá desde tu celular o una laptop compatible.
+              </p>
+            ) : (
+              <>
+                <p className="text-xs text-gray-500">
+                  Entrá sin contraseña usando la biometría de este dispositivo. La huella nunca
+                  sale del dispositivo: solo se guarda una clave pública.
+                </p>
+
+                {passkeys.length > 0 && (
+                  <div className="space-y-2">
+                    {passkeys.map((p) => (
+                      <div
+                        key={p.id}
+                        className="flex items-center justify-between gap-3 bg-gray-50 border border-gray-200 rounded-xl px-3 py-2"
+                      >
+                        <div className="min-w-0">
+                          <p className="text-xs font-medium text-gray-800 truncate">
+                            {p.nombre || 'Dispositivo'}
+                          </p>
+                          <p className="text-[11px] text-gray-400">
+                            {p.last_used_at
+                              ? `Último uso: ${formatearFechaHora(p.last_used_at)}`
+                              : 'Sin usar todavía'}
+                          </p>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => eliminarPasskey(p.id)}
+                          disabled={cargandoPasskey}
+                          className="p-1.5 rounded-lg text-gray-400 hover:text-red-500 hover:bg-red-50 disabled:opacity-50"
+                          title="Eliminar este dispositivo"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  icon={<Plus className="w-4 h-4" />}
+                  loading={cargandoPasskey}
+                  onClick={activarHuella}
+                >
+                  Activar huella / Face ID en este dispositivo
+                </Button>
+
+                {mensajePasskey && (
+                  <p className="text-xs text-[#0f766e] flex items-center gap-1.5">
+                    <CheckCircle className="w-3.5 h-3.5" />
+                    {mensajePasskey}
+                  </p>
+                )}
+              </>
+            )}
           </div>
         </div>
       )}

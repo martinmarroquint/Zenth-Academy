@@ -185,7 +185,62 @@ def test_estudiante_no_puede_dar_like_a_post_archivado(
 
 
 # =====================================================
-# 3. PUBLICAR EN CURSOS AJENOS (MEDIA 9 / BAJA 11)
+# 3. ME GUSTA EN EL FORO
+# =====================================================
+
+@pytest.mark.integration
+def test_like_toggle_y_liked_by_me(client, db, docente_user, estudiante_headers):
+    """✅ El like alterna y el backend dice si YO ya di like."""
+    post = _crear_post_db(db, docente_user, titulo="Para likear")
+
+    detalle = client.get(f"/api/v1/foro/{post.id}", headers=estudiante_headers).json()
+    assert detalle["likes_count"] == 0
+    assert detalle["liked_by_me"] is False
+
+    resp = client.post(f"/api/v1/foro/{post.id}/like", headers=estudiante_headers)
+    assert resp.status_code == 200, resp.text
+    assert resp.json()["liked"] is True
+    assert resp.json()["likes_count"] == 1
+
+    detalle2 = client.get(f"/api/v1/foro/{post.id}", headers=estudiante_headers).json()
+    assert detalle2["likes_count"] == 1
+    assert detalle2["liked_by_me"] is True
+
+    listado = client.get("/api/v1/foro/", headers=estudiante_headers).json()
+    fila = [p for p in listado if p["id"] == str(post.id)][0]
+    assert fila["likes_count"] == 1
+    assert fila["liked_by_me"] is True
+
+    # Quitar el me gusta
+    resp2 = client.post(f"/api/v1/foro/{post.id}/like", headers=estudiante_headers)
+    assert resp2.status_code == 200, resp2.text
+    assert resp2.json()["liked"] is False
+    assert resp2.json()["likes_count"] == 0
+
+    detalle3 = client.get(f"/api/v1/foro/{post.id}", headers=estudiante_headers).json()
+    assert detalle3["liked_by_me"] is False
+
+
+@pytest.mark.integration
+def test_liked_by_me_es_por_usuario(
+    client, db, docente_user, docente_headers, estudiante_headers
+):
+    """El like de otra persona suma al contador pero no marca el mío."""
+    post = _crear_post_db(db, docente_user, titulo="Compartido")
+
+    client.post(f"/api/v1/foro/{post.id}/like", headers=docente_headers)
+
+    detalle = client.get(f"/api/v1/foro/{post.id}", headers=estudiante_headers).json()
+    assert detalle["likes_count"] == 1
+    assert detalle["liked_by_me"] is False
+
+    # El docente sí ve su propio like
+    detalle_doc = client.get(f"/api/v1/foro/{post.id}", headers=docente_headers).json()
+    assert detalle_doc["liked_by_me"] is True
+
+
+# =====================================================
+# 4. PUBLICAR EN CURSOS AJENOS (MEDIA 9 / BAJA 11)
 # =====================================================
 
 @pytest.mark.security

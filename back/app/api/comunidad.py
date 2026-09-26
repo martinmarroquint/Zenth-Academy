@@ -67,7 +67,9 @@ def _puede_ver_post(db: Session, post: Post, current_user) -> bool:
     return _esta_inscrito(db, str(post.curso_id), str(current_user.id))
 
 
-def _post_to_dict(db: Session, post: Post) -> dict:
+def _post_to_dict(db: Session, post: Post, likes_usuario: Optional[set] = None) -> dict:
+    """`likes_usuario` = set con los post_id que el usuario actual ya likeó
+    (se calcula en bloque para los listados y evita N+1)."""
     return {
         "id": str(post.id),
         "titulo": post.titulo,
@@ -80,11 +82,25 @@ def _post_to_dict(db: Session, post: Post) -> dict:
         "estado": post.estado or "publicado",
         "comentarios_count": post.comentarios_count or 0,
         "likes_count": post.likes_count or 0,
+        # ✅ Para pintar el corazón en el front
+        "liked_by_me": str(post.id) in (likes_usuario or set()),
         "vistas_count": post.vistas_count or 0,
         "tags": post.tags or [],
         "created_at": post.created_at.isoformat() if post.created_at else None,
         "updated_at": post.updated_at.isoformat() if post.updated_at else None,
         "comentarios": []
+    }
+
+
+def _mis_likes(db: Session, usuario_id, post_ids: list) -> set:
+    """✅ post_id que el usuario ya likeó (una sola consulta)."""
+    if not usuario_id or not post_ids:
+        return set()
+    return {
+        str(r[0]) for r in db.query(LikePost.post_id).filter(
+            LikePost.docente_id == str(usuario_id),
+            LikePost.post_id.in_([str(p) for p in post_ids]),
+        ).all()
     }
 
 
@@ -159,7 +175,9 @@ async def listar_posts(
             # Sin filtro de curso: mostrar solo foro global (comportamiento por defecto para compatibilidad)
             query = query.filter(Post.curso_id.is_(None))
         posts = query.order_by(Post.created_at.desc()).offset(offset).limit(limit).all()
-        return [_post_to_dict(db, p) for p in posts]
+        # ✅ Likes del usuario actual para todos los posts del listado
+        mis_likes = _mis_likes(db, current_user.id, [p.id for p in posts])
+        return [_post_to_dict(db, p, mis_likes) for p in posts]
     except HTTPException:
         raise
     except Exception as e:
@@ -187,7 +205,7 @@ async def obtener_post(
         post.vistas_count = (post.vistas_count or 0) + 1
         db.commit()
         comentarios = db.query(Comentario).filter(Comentario.post_id == id).order_by(Comentario.created_at.asc()).all()
-        data = _post_to_dict(db, post)
+        data = _post_to_dict(db, post, _mis_likes(db, current_user.id, [post.id]))
         data["comentarios"] = [{
             "id": str(c.id),
             "post_id": str(c.post_id),

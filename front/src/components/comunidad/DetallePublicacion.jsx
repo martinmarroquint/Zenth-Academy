@@ -18,6 +18,7 @@ const DetallePublicacion = ({ publicacionId, onVolver, onEditarPublicacion }) =>
   const [error, setError] = useState('');
   const [comentario, setComentario] = useState('');
   const [enviando, setEnviando] = useState(false);
+  const [dandoLike, setDandoLike] = useState(false);
 
   const cargarPublicacion = useCallback(async () => {
     if (!publicacionId) return;
@@ -57,13 +58,46 @@ const DetallePublicacion = ({ publicacionId, onVolver, onEditarPublicacion }) =>
     }
   };
 
+  // ✅ Me gusta: actualización inmediata con la respuesta del backend
+  // (antes recargaba la publicación, lo que además sumaba una vista).
   const handleLike = async () => {
+    if (!publicacion || dandoLike) return;
+    const anterior = {
+      liked: !!publicacion.liked_by_me,
+      count: publicacion.likes_count || 0,
+    };
+
+    setDandoLike(true);
+    setPublicacion((prev) =>
+      prev
+        ? {
+            ...prev,
+            liked_by_me: !anterior.liked,
+            likes_count: Math.max(0, anterior.count + (anterior.liked ? -1 : 1)),
+          }
+        : prev
+    );
+
     try {
-      await foroService.like(publicacionId);
-      await cargarPublicacion();
+      const res = await foroService.like(publicacionId);
+      setPublicacion((prev) =>
+        prev
+          ? {
+              ...prev,
+              liked_by_me: !!res?.liked,
+              likes_count: res?.likes_count ?? prev.likes_count,
+            }
+          : prev
+      );
     } catch (e) {
+      // Si falla, volvemos al estado anterior
+      setPublicacion((prev) =>
+        prev ? { ...prev, liked_by_me: anterior.liked, likes_count: anterior.count } : prev
+      );
       console.error('Error dando like:', e);
-      toast.error(e.message || 'No se pudo dar like');
+      toast.error(e.message || 'No se pudo dar "me gusta"');
+    } finally {
+      setDandoLike(false);
     }
   };
 
@@ -135,10 +169,14 @@ const DetallePublicacion = ({ publicacionId, onVolver, onEditarPublicacion }) =>
         <div className="mt-4 flex items-center gap-4 text-sm text-gray-400">
           <button
             onClick={handleLike}
-            className="flex items-center gap-1 hover:text-red-500 transition-colors"
+            disabled={dandoLike}
+            title={publicacion.liked_by_me ? 'Quitar me gusta' : 'Me gusta'}
+            className={`flex items-center gap-1 transition-colors disabled:opacity-60 ${
+              publicacion.liked_by_me ? 'text-red-500' : 'hover:text-red-500'
+            }`}
           >
-            <Heart className="w-4 h-4" />
-            {publicacion.likes_count || 0} Likes
+            <Heart className={`w-4 h-4 ${publicacion.liked_by_me ? 'fill-current' : ''}`} />
+            {publicacion.likes_count || 0} Me gusta
           </button>
           <span className="flex items-center gap-1"><MessageSquare className="w-4 h-4" />{publicacion.comentarios_count || 0} Comentarios</span>
           <span className="flex items-center gap-1"><Eye className="w-4 h-4" />{publicacion.vistas_count || 0} Vistas</span>

@@ -53,6 +53,8 @@ class PostResponse(BaseModel):
     estado: str
     comentarios_count: int
     likes_count: int
+    # ✅ True si el usuario que consulta ya dio "me gusta"
+    liked_by_me: bool = False
     vistas_count: int
     tags: Optional[List]
     created_at: Optional[datetime]

@@ -166,7 +166,10 @@ const PanelForo = ({ onCrearPublicacion, onVerPublicacion }) => {
               </div>
               <div className="mt-3 flex items-center gap-4 text-xs text-gray-400">
                 <span className="flex items-center gap-1"><MessageSquare className="w-3 h-3" />{pub.comentarios_count || 0}</span>
-                <span className="flex items-center gap-1"><Heart className="w-3 h-3" />{pub.likes_count || 0}</span>
+                <span className="flex items-center gap-1">
+                  <Heart className={`w-3 h-3 ${pub.liked_by_me ? 'text-red-500 fill-current' : ''}`} />
+                  {pub.likes_count || 0}
+                </span>
                 <span className="flex items-center gap-1"><Eye className="w-3 h-3" />{pub.vistas_count || 0}</span>
               </div>
             </div>

@@ -2,7 +2,7 @@
 # VERSIÓN COMPLETA - CON SISTEMA DE SOLICITUDES Y ACCESO
 # CORREGIDO: EvaluacionLeccion usa Base (SQLAlchemy), no BaseModel (Pydantic)
 
-from sqlalchemy import Column, String, Integer, Boolean, DateTime, Text, JSON, Numeric, Enum
+from sqlalchemy import Column, String, Integer, Float, Boolean, DateTime, Text, JSON, Numeric, Enum
 from app.database import Base
 from datetime import datetime, timezone
 import uuid
@@ -96,6 +96,11 @@ class SolicitudAccesoCurso(Base):
     comentario_docente = Column(Text, nullable=True)
     metodo_pago = Column(String(20), nullable=True)
     referencia_pago = Column(String(100), nullable=True)
+    # ✅ CUPONES: descuento aplicado a la solicitud
+    cupon_codigo = Column(String(40), nullable=True)
+    monto_base = Column(Float, nullable=True)
+    monto_descuento = Column(Float, nullable=True)
+    monto_final = Column(Float, nullable=True)
     created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
     updated_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
 

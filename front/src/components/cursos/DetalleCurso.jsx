@@ -12,13 +12,14 @@ import {
   Settings, GraduationCap, MessageSquare,
   BarChart3, Eye, Download, ThumbsUp,
   Pause, FolderOpen, User, X, Layers,
-  ChevronLeft, ChevronRight, Sparkles,
+  ChevronLeft, ChevronRight, Sparkles, Ticket,
   Globe, Target, Star, EyeOff, Info, Edit3
 } from 'lucide-react';
 import cursosService from '../../services/cursosService';
 import certificadosService from '../../services/certificadosService';
 import examenesService from '../../services/examenesService';
 import { authService } from '../../services/authService';
+import cuponesService from '../../services/cuponesService';
 import { useModo } from '../../hooks/useModo';
 import { Badge, Button } from '../ui';
 import ForoCurso from './ForoCurso';
@@ -73,6 +74,10 @@ const DetalleCurso = ({
   const [estaInscrito, setEstaInscrito] = useState(false);
   const [solicitando, setSolicitando] = useState(false);
   const [mensajeSolicitud, setMensajeSolicitud] = useState('');
+  // ✅ CUPÓN en la solicitud de acceso
+  const [cuponCodigo, setCuponCodigo] = useState('');
+  const [cuponInfo, setCuponInfo] = useState(null);
+  const [validandoCupon, setValidandoCupon] = useState(false);
   const [mostrarFormularioSolicitud, setMostrarFormularioSolicitud] = useState(false);
 
   const [leccionActual, setLeccionActual] = useState(null);
@@ -587,16 +592,38 @@ const DetalleCurso = ({
     setSolicitando(true);
     try {
       await cursosService.solicitarAcceso(cursoId, {
-        mensaje_estudiante: mensajeSolicitud
+        mensaje_estudiante: mensajeSolicitud,
+        cupon_codigo: cuponInfo?.valido ? cuponCodigo.trim().toUpperCase() : null,
       });
       setTieneSolicitudPendiente(true);
       setMostrarFormularioSolicitud(false);
       setMensajeSolicitud('');
+      setCuponCodigo('');
+      setCuponInfo(null);
       toast.success('Solicitud enviada.');
     } catch (e) {
       toast.error(e.message || 'No se pudo enviar la solicitud');
     } finally {
       setSolicitando(false);
+    }
+  };
+
+  // ✅ Validar el cupón (muestra el precio final antes de enviar)
+  const handleValidarCupon = async () => {
+    if (!cuponCodigo.trim()) return;
+    setValidandoCupon(true);
+    try {
+      const data = await cuponesService.validar(cuponCodigo.trim(), cursoId);
+      setCuponInfo(data);
+      if (data?.valido) {
+        toast.success('Cupón aplicado');
+      } else {
+        toast.warning(data?.motivo || 'Cupón inválido');
+      }
+    } catch (e) {
+      toast.error(e?.message || 'No se pudo validar el cupón');
+    } finally {
+      setValidandoCupon(false);
     }
   };
 
@@ -1577,6 +1604,46 @@ const DetalleCurso = ({
                   rows={3}
                   className="w-full px-4 py-2.5 text-sm border border-gray-200 rounded-lg outline-none focus:border-[#0f766e] focus:ring-2 focus:ring-[#0f766e]/20 transition-all resize-none bg-white"
                 />
+                <div className="flex items-center gap-2">
+                  <input
+                    value={cuponCodigo}
+                    onChange={(e) => {
+                      setCuponCodigo(e.target.value.toUpperCase());
+                      setCuponInfo(null);
+                    }}
+                    placeholder="CÓDIGO DE CUPÓN (opcional)"
+                    className="flex-1 px-4 py-2 text-sm border border-gray-200 rounded-lg outline-none focus:border-[#0f766e] focus:ring-2 focus:ring-[#0f766e]/20 transition-all bg-white font-mono"
+                  />
+                  <button
+                    onClick={handleValidarCupon}
+                    disabled={validandoCupon || !cuponCodigo.trim()}
+                    className="px-3 py-2 text-xs font-medium text-[#0f766e] border border-[#0f766e]/30 rounded-lg hover:bg-[#0f766e]/5 transition-colors disabled:opacity-50 flex items-center gap-1.5"
+                  >
+                    {validandoCupon ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Ticket className="w-3.5 h-3.5" />}
+                    Aplicar
+                  </button>
+                </div>
+
+                {cuponInfo && (
+                  <div
+                    className={`text-xs rounded-lg px-3 py-2 ${
+                      cuponInfo.valido
+                        ? 'bg-emerald-50 border border-emerald-200 text-emerald-700'
+                        : 'bg-amber-50 border border-amber-200 text-amber-700'
+                    }`}
+                  >
+                    {cuponInfo.valido ? (
+                      <span>
+                        Cupón <strong>{cuponInfo.codigo}</strong> aplicado: {curso?.moneda || 'S/'}{' '}
+                        {cuponInfo.monto_base} → <strong>{curso?.moneda || 'S/'} {cuponInfo.monto_final}</strong>{' '}
+                        (ahorras {cuponInfo.monto_descuento})
+                      </span>
+                    ) : (
+                      <span>{cuponInfo.motivo}</span>
+                    )}
+                  </div>
+                )}
+
                 <div className="flex items-center gap-2">
                   <button
                     onClick={handleSolicitarAcceso}

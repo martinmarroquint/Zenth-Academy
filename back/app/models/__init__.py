@@ -23,6 +23,7 @@ from app.models.intento_examen import IntentoExamen  # ✅ INTENTOS DE EXAMEN (a
 from app.models.biblioteca import (
     RecursoBiblioteca, BibliotecaInteraccion, BibliotecaEvento
 )  # ✅ BIBLIOTECA
+from app.models.cupon import Cupon, CuponUso  # ✅ CUPONES
 
 
 __all__ = [
@@ -43,4 +44,5 @@ __all__ = [
     "RefreshToken",  # ✅ REFRESH TOKENS (JWT)
     "IntentoExamen",  # ✅ INTENTOS DE EXAMEN (autoridad de tiempo)
     "RecursoBiblioteca", "BibliotecaInteraccion", "BibliotecaEvento",  # ✅ BIBLIOTECA
+    "Cupon", "CuponUso",  # ✅ CUPONES
 ]

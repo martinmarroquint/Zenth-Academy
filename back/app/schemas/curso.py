@@ -226,6 +226,8 @@ class SolicitudAccesoCreate(BaseModel):
     mensaje_estudiante: Optional[str] = None
     metodo_pago: Optional[str] = None
     referencia_pago: Optional[str] = None
+    # ✅ Cupón opcional para aplicar descuento al precio del curso
+    cupon_codigo: Optional[str] = None
 
 
 class SolicitudAccesoUpdate(BaseModel):
@@ -246,6 +248,11 @@ class SolicitudAccesoResponse(BaseModel):
     metodo_pago: Optional[str]
     referencia_pago: Optional[str]
     curso_titulo: Optional[str]
+    # ✅ Cupón aplicado
+    cupon_codigo: Optional[str] = None
+    monto_base: Optional[float] = None
+    monto_descuento: Optional[float] = None
+    monto_final: Optional[float] = None
     created_at: Optional[datetime]
     updated_at: Optional[datetime]
 

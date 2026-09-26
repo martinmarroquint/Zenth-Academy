@@ -20,6 +20,7 @@ from app.api import (
     media,
     biblioteca,
     admin,
+    cupones,
 )
 
 # Configuracion publica de cliente (marca Zenth Academy)
@@ -142,6 +143,15 @@ api_router.include_router(
 )
 
 # =============================================
+# CUPONES Y PROMOCIONES
+# =============================================
+api_router.include_router(
+    cupones.router,
+    prefix="/cupones",
+    tags=["Cupones"]
+)
+
+# =============================================
 # SOLICITUDES DE DOCENTE
 # =============================================
 api_router.include_router(
@@ -195,5 +205,6 @@ __all__ = [
     'compartir',
     'biblioteca',
     'admin',
+    'cupones',
     'api_router'
 ]

@@ -507,6 +507,13 @@ async def startup_event():
                 "pantalla_user_agent": "TEXT",
                 "pantalla_revocada_en": "TIMESTAMP",
             },
+            # ✅ CUPONES: descuentos aplicados a las solicitudes de acceso
+            "solicitudes_acceso_curso": {
+                "cupon_codigo": "VARCHAR(40)",
+                "monto_base": "FLOAT",
+                "monto_descuento": "FLOAT",
+                "monto_final": "FLOAT",
+            },
         }
         insp2 = _insp2(_eng2)
         tablas_actuales = set(insp2.get_table_names())

@@ -9,13 +9,14 @@ import {
   MessageCircle, Award, FolderOpen, LayoutDashboard,
   DollarSign, Tag, Percent, Calendar, TrendingUp,
   Settings, Shield, Bell, Mail, CreditCard, Building,
-  Library, Activity, RefreshCw
+  Library, Activity, RefreshCw, BadgePercent
 } from 'lucide-react';
 import { 
   Button, Input, Modal, Badge, Tabs, Switch, Dropdown 
 } from '../components/ui';
 import { authService } from '../services/authService';
 import adminService from '../services/adminService';
+import PanelCupones from '../components/admin/PanelCupones';
 import { useFeedback } from '../hooks/useFeedback';
 
 // =============================================
@@ -27,7 +28,7 @@ const AdminTabs = ({ activeTab, onChange }) => {
     { id: 'usuarios', label: 'Usuarios', icon: <Users className="w-4 h-4" /> },
     { id: 'cursos', label: 'Cursos', icon: <BookOpen className="w-4 h-4" /> },
     { id: 'pagos', label: 'Pagos', icon: <DollarSign className="w-4 h-4" /> },
-    { id: 'promociones', label: 'Promociones', icon: <Tag className="w-4 h-4" /> },
+    { id: 'cupones', label: 'Cupones', icon: <BadgePercent className="w-4 h-4" /> },
     { id: 'configuracion', label: 'Configuración', icon: <Settings className="w-4 h-4" /> },
   ];
 
@@ -823,25 +824,6 @@ const AdminPagos = () => {
 };
 
 // =============================================
-// COMPONENTE: PROMOCIONES
-// =============================================
-const AdminPromociones = () => {
-  // ✅ NOTA: no existe backend de promociones/cupones.
-  // Antes este módulo mostraba promociones INVENTADAS (ZENTHACADEMY2024, 2X1CURSOS).
-  return (
-    <div className="bg-white rounded-2xl border border-gray-200/60 p-10 text-center">
-      <div className="w-14 h-14 rounded-2xl bg-[#e6f4f2] flex items-center justify-center mx-auto mb-4">
-        <Tag className="w-7 h-7 text-[#0f766e]" />
-      </div>
-      <h3 className="text-base font-semibold text-gray-800">Sin promociones</h3>
-      <p className="text-sm text-gray-500 mt-1.5 max-w-md mx-auto">
-        El sistema de cupones y descuentos aún no está disponible.
-      </p>
-    </div>
-  );
-};
-
-// =============================================
 // COMPONENTE: CONFIGURACIÓN
 // =============================================
 const AdminConfiguracion = () => {
@@ -973,8 +955,8 @@ const DashboardAdmin = () => {
         return <AdminCursos />;
       case 'pagos':
         return <AdminPagos />;
-      case 'promociones':
-        return <AdminPromociones />;
+      case 'cupones':
+        return <PanelCupones />;
       case 'configuracion':
         return <AdminConfiguracion />;
       default:

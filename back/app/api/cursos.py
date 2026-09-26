@@ -742,7 +742,26 @@ async def solicitar_acceso_curso(
         
         if _tiene_solicitud_pendiente(db, id, str(current_user.id)):
             raise HTTPException(status_code=400, detail="Ya tienes una solicitud pendiente para este curso")
-        
+
+        # ✅ CUPONES: validar y consumir el cupón (si viene) antes de crear la solicitud
+        cupon_codigo = (data.cupon_codigo or "").strip().upper() or None
+        monto_base = float(curso.precio_monto or 0)
+        monto_descuento = 0.0
+        monto_final = monto_base
+        if cupon_codigo:
+            from app.api.cupones import calcular_cupon
+            resultado_cupon = calcular_cupon(
+                db, cupon_codigo, curso, str(current_user.id),
+                consumir=True, usuario=current_user,
+            )
+            if not resultado_cupon.get("valido"):
+                raise HTTPException(
+                    status_code=400,
+                    detail=resultado_cupon.get("motivo") or "Cupón inválido",
+                )
+            monto_descuento = resultado_cupon["monto_descuento"]
+            monto_final = resultado_cupon["monto_final"]
+
         solicitud = SolicitudAccesoCurso(
             id=str(uuid.uuid4()),
             curso_id=id,
@@ -753,6 +772,10 @@ async def solicitar_acceso_curso(
             mensaje_estudiante=data.mensaje_estudiante,
             metodo_pago=data.metodo_pago,
             referencia_pago=data.referencia_pago,
+            cupon_codigo=cupon_codigo,
+            monto_base=monto_base,
+            monto_descuento=monto_descuento,
+            monto_final=monto_final,
             estado="pendiente"
         )
         db.add(solicitud)
@@ -775,6 +798,10 @@ async def solicitar_acceso_curso(
             "metodo_pago": solicitud.metodo_pago,
             "referencia_pago": solicitud.referencia_pago,
             "curso_titulo": curso.titulo,
+            "cupon_codigo": solicitud.cupon_codigo,
+            "monto_base": solicitud.monto_base,
+            "monto_descuento": solicitud.monto_descuento,
+            "monto_final": solicitud.monto_final,
             "created_at": solicitud.created_at,
             "updated_at": solicitud.updated_at,
         }

@@ -8,12 +8,14 @@ import {
   BookOpen, FileText, ClipboardList, PenTool,
   MessageCircle, Award, FolderOpen, LayoutDashboard,
   DollarSign, Tag, Percent, Calendar, TrendingUp,
-  Settings, Shield, Bell, Mail, CreditCard, Building
+  Settings, Shield, Bell, Mail, CreditCard, Building,
+  Library, Activity, RefreshCw
 } from 'lucide-react';
 import { 
   Button, Input, Modal, Badge, Tabs, Switch, Dropdown 
 } from '../components/ui';
 import { authService } from '../services/authService';
+import adminService from '../services/adminService';
 import { useFeedback } from '../hooks/useFeedback';
 
 // =============================================
@@ -21,6 +23,7 @@ import { useFeedback } from '../hooks/useFeedback';
 // =============================================
 const AdminTabs = ({ activeTab, onChange }) => {
   const tabs = [
+    { id: 'resumen', label: 'Resumen', icon: <LayoutDashboard className="w-4 h-4" /> },
     { id: 'usuarios', label: 'Usuarios', icon: <Users className="w-4 h-4" /> },
     { id: 'cursos', label: 'Cursos', icon: <BookOpen className="w-4 h-4" /> },
     { id: 'pagos', label: 'Pagos', icon: <DollarSign className="w-4 h-4" /> },
@@ -458,6 +461,341 @@ const AdminUsuarios = () => {
 };
 
 // =============================================
+// HELPERS DE ANALÍTICA
+// =============================================
+const fmtFecha = (iso) => {
+  if (!iso) return '';
+  try {
+    return new Date(iso).toLocaleString();
+  } catch {
+    return '';
+  }
+};
+
+const KpiCard = ({ icono: Icono, label, valor, detalle, color = 'text-gray-900' }) => (
+  <div className="bg-white rounded-xl border border-gray-200 p-4">
+    <div className="flex items-center gap-2 text-gray-400 mb-1.5">
+      <Icono className="w-4 h-4" />
+      <span className="text-[11px] uppercase tracking-wider">{label}</span>
+    </div>
+    <p className={`text-2xl font-bold ${color}`}>{valor}</p>
+    {detalle && <p className="text-[11px] text-gray-400 mt-1 leading-snug">{detalle}</p>}
+  </div>
+);
+
+// =============================================
+// COMPONENTE: RESUMEN (analítica REAL del sistema)
+// =============================================
+const AdminResumen = ({ stats, cargando, error, onReintentar }) => {
+  if (cargando) {
+    return (
+      <div className="text-center py-16">
+        <Loader2 className="w-8 h-8 animate-spin mx-auto text-gray-400" />
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="text-center py-12 bg-white rounded-xl border border-gray-200">
+        <AlertCircle className="w-12 h-12 text-red-400 mx-auto mb-3" />
+        <p className="text-sm text-red-500">{error}</p>
+        <Button variant="secondary" size="sm" onClick={onReintentar} className="mt-3">
+          <RefreshCw className="w-4 h-4 mr-1" />
+          Reintentar
+        </Button>
+      </div>
+    );
+  }
+
+  if (!stats) return null;
+
+  const {
+    usuarios, cursos, examenes, materiales, biblioteca, certificados,
+    solicitudes, alumnos, grupos, ingresos, comunidad,
+    top_cursos: topCursos, top_docentes: topDocentes,
+    actividad_reciente: actividad,
+  } = stats;
+
+  return (
+    <div className="space-y-6">
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
+        <KpiCard
+          icono={Users}
+          label="Usuarios"
+          valor={usuarios.total}
+          detalle={`${usuarios.docente} docentes · ${usuarios.estudiante} estudiantes`}
+        />
+        <KpiCard
+          icono={BookOpen}
+          label="Cursos"
+          valor={cursos.total}
+          detalle={`${cursos.publicados} publicados · ${cursos.borradores} borradores`}
+          color="text-blue-600"
+        />
+        <KpiCard
+          icono={ClipboardList}
+          label="Inscripciones"
+          valor={cursos.inscripciones}
+          detalle={`${cursos.inscripciones_30d} en los últimos 30 días`}
+          color="text-emerald-600"
+        />
+        <KpiCard
+          icono={DollarSign}
+          label="Ingresos verificados"
+          valor={`S/ ${ingresos.verificados}`}
+          detalle={ingresos.nota}
+          color="text-[#0f766e]"
+        />
+      </div>
+
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
+        <KpiCard
+          icono={FileText}
+          label="Exámenes"
+          valor={examenes.total}
+          detalle={`${examenes.publicados} publicados · ${examenes.resultados} resultados`}
+        />
+        <KpiCard
+          icono={TrendingUp}
+          label="Promedio global"
+          valor={examenes.promedio ?? '—'}
+          detalle={
+            examenes.tasa_aprobacion != null
+              ? `${examenes.tasa_aprobacion}% de aprobación`
+              : 'Sin resultados todavía'
+          }
+          color="text-amber-600"
+        />
+        <KpiCard
+          icono={Library}
+          label="Biblioteca"
+          valor={biblioteca.recursos}
+          detalle={`${biblioteca.tareas} tareas · ${biblioteca.descargas} descargas`}
+        />
+        <KpiCard
+          icono={Award}
+          label="Certificados"
+          valor={certificados.emitidos}
+          detalle={`${certificados.cancelados} cancelados`}
+        />
+      </div>
+
+      {(solicitudes.acceso_pendientes > 0 || solicitudes.docente_pendientes > 0) && (
+        <div className="bg-amber-50 border border-amber-200 rounded-xl p-4">
+          <p className="text-sm text-amber-800">
+            Pendientes de revisar: <strong>{solicitudes.acceso_pendientes}</strong> solicitud(es)
+            de acceso a cursos y <strong>{solicitudes.docente_pendientes}</strong> postulación(es)
+            de docente.
+          </p>
+        </div>
+      )}
+
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+        <div className="bg-white rounded-xl border border-gray-200 p-4">
+          <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-3">
+            Contenido del sistema
+          </h3>
+          <ul className="space-y-2 text-sm text-gray-700">
+            <li className="flex justify-between gap-2">
+              <span>Materiales</span>
+              <span className="font-semibold">{materiales.total}</span>
+            </li>
+            <li className="flex justify-between gap-2">
+              <span>Visitas a materiales</span>
+              <span className="font-semibold">{materiales.visitas}</span>
+            </li>
+            <li className="flex justify-between gap-2">
+              <span>Alumnos en catálogo</span>
+              <span className="font-semibold">{alumnos.total}</span>
+            </li>
+            <li className="flex justify-between gap-2">
+              <span>Grupos</span>
+              <span className="font-semibold">{grupos.total}</span>
+            </li>
+            <li className="flex justify-between gap-2">
+              <span>Foro (posts / comentarios)</span>
+              <span className="font-semibold">
+                {comunidad.posts} / {comunidad.comentarios}
+              </span>
+            </li>
+            <li className="flex justify-between gap-2">
+              <span>Pizarras</span>
+              <span className="font-semibold">{comunidad.pizarras}</span>
+            </li>
+            <li className="flex justify-between gap-2">
+              <span>Salas de clase</span>
+              <span className="font-semibold">{comunidad.salas_compartir}</span>
+            </li>
+            <li className="flex justify-between gap-2">
+              <span>Alumnos activos en biblioteca</span>
+              <span className="font-semibold">{biblioteca.alumnos_activos}</span>
+            </li>
+          </ul>
+        </div>
+
+        <div className="bg-white rounded-xl border border-gray-200 p-4">
+          <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-3">
+            Cursos con más alumnos
+          </h3>
+          {topCursos.length === 0 ? (
+            <p className="text-sm text-gray-400">Todavía no hay cursos.</p>
+          ) : (
+            <div className="space-y-2">
+              {topCursos.slice(0, 7).map((c) => (
+                <div key={c.id} className="flex items-center justify-between gap-2 text-sm">
+                  <span className="min-w-0 truncate text-gray-700">{c.titulo}</span>
+                  <span className="text-xs text-gray-400 whitespace-nowrap">
+                    {c.inscritos} alumno(s)
+                  </span>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
+        <div className="bg-white rounded-xl border border-gray-200 p-4">
+          <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-3">
+            Docentes con más cursos
+          </h3>
+          {topDocentes.length === 0 ? (
+            <p className="text-sm text-gray-400">Todavía no hay docentes con cursos.</p>
+          ) : (
+            <div className="space-y-2">
+              {topDocentes.map((d) => (
+                <div key={d.id} className="flex items-center justify-between gap-2 text-sm">
+                  <span className="min-w-0 truncate text-gray-700">{d.nombre}</span>
+                  <span className="text-xs text-gray-400 whitespace-nowrap">
+                    {d.cursos} curso(s) · {d.inscritos}
+                  </span>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+
+      <div className="bg-white rounded-xl border border-gray-200 p-4">
+        <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-3 flex items-center gap-2">
+          <Activity className="w-3.5 h-3.5" />
+          Actividad reciente
+        </h3>
+        {actividad.length === 0 ? (
+          <p className="text-sm text-gray-400">Sin actividad registrada.</p>
+        ) : (
+          <div className="space-y-2">
+            {actividad.map((a, i) => (
+              <div key={`${a.tipo}-${i}`} className="flex items-center justify-between gap-3 text-sm">
+                <span className="min-w-0 truncate text-gray-700">{a.titulo}</span>
+                <span className="text-[11px] text-gray-400 whitespace-nowrap">
+                  {fmtFecha(a.fecha)}
+                </span>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+};
+
+// =============================================
+// COMPONENTE: CURSOS (listado real con inscriptos)
+// =============================================
+const AdminCursos = () => {
+  const [cursos, setCursos] = useState([]);
+  const [cargando, setCargando] = useState(true);
+  const [error, setError] = useState('');
+  const [recarga, setRecarga] = useState(0);
+
+  useEffect(() => {
+    let activo = true;
+    (async () => {
+      try {
+        const data = await adminService.cursos();
+        if (activo) {
+          setCursos(Array.isArray(data) ? data : []);
+          setError('');
+        }
+      } catch (e) {
+        if (activo) setError(e?.message || 'No se pudieron cargar los cursos');
+      } finally {
+        if (activo) setCargando(false);
+      }
+    })();
+    return () => {
+      activo = false;
+    };
+  }, [recarga]);
+
+  if (cargando) {
+    return (
+      <div className="text-center py-16">
+        <Loader2 className="w-8 h-8 animate-spin mx-auto text-gray-400" />
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="text-center py-12 bg-white rounded-xl border border-gray-200">
+        <AlertCircle className="w-12 h-12 text-red-400 mx-auto mb-3" />
+        <p className="text-sm text-red-500">{error}</p>
+        <Button variant="secondary" size="sm" onClick={() => setRecarga((n) => n + 1)} className="mt-3">
+          Reintentar
+        </Button>
+      </div>
+    );
+  }
+
+  if (cursos.length === 0) {
+    return (
+      <div className="text-center py-12 bg-white rounded-xl border border-gray-200">
+        <BookOpen className="w-12 h-12 text-gray-300 mx-auto mb-3" />
+        <p className="text-sm text-gray-500">Todavía no hay cursos en la plataforma</p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
+      <div className="overflow-x-auto">
+        <table className="w-full text-sm">
+          <thead>
+            <tr className="bg-gray-50 border-b border-gray-200">
+              <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Curso</th>
+              <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Docente</th>
+              <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Estado</th>
+              <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Precio</th>
+              <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Inscriptos</th>
+              <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Creado</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-gray-100">
+            {cursos.map((c) => (
+              <tr key={c.id} className="hover:bg-gray-50/50 transition-colors">
+                <td className="px-4 py-3 font-medium text-gray-800">{c.titulo}</td>
+                <td className="px-4 py-3 text-gray-500">{c.docente_nombre || '—'}</td>
+                <td className="px-4 py-3">
+                  <Badge variant={String(c.estado).toUpperCase() === 'PUBLICADO' ? 'success' : 'default'}>
+                    {c.estado}
+                  </Badge>
+                </td>
+                <td className="px-4 py-3 text-gray-500">
+                  {c.precio_tipo === 'pago' ? `S/ ${c.precio_monto ?? 0}` : 'Gratis'}
+                </td>
+                <td className="px-4 py-3 text-right font-semibold text-gray-700">{c.inscritos}</td>
+                <td className="px-4 py-3 text-right text-xs text-gray-400">{fmtFecha(c.created_at)}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+};
+
+// =============================================
 // COMPONENTE: GESTIÓN DE PAGOS
 // =============================================
 const AdminPagos = () => {
@@ -591,14 +929,48 @@ const AdminConfiguracion = () => {
 // COMPONENTE PRINCIPAL
 // =============================================
 const DashboardAdmin = () => {
-  const [activeTab, setActiveTab] = useState('usuarios');
+  const [activeTab, setActiveTab] = useState('resumen');
+  const [stats, setStats] = useState(null);
+  const [cargandoStats, setCargandoStats] = useState(true);
+  const [errorStats, setErrorStats] = useState('');
+  const [recargaStats, setRecargaStats] = useState(0);
+
+  // ✅ Analítica REAL del sistema (nada hardcodeado)
+  useEffect(() => {
+    let activo = true;
+    (async () => {
+      try {
+        const data = await adminService.estadisticas();
+        if (activo) {
+          setStats(data);
+          setErrorStats('');
+        }
+      } catch (e) {
+        if (activo) setErrorStats(e?.message || 'No se pudo cargar la analítica');
+      } finally {
+        if (activo) setCargandoStats(false);
+      }
+    })();
+    return () => {
+      activo = false;
+    };
+  }, [recargaStats]);
 
   const renderContent = () => {
     switch (activeTab) {
+      case 'resumen':
+        return (
+          <AdminResumen
+            stats={stats}
+            cargando={cargandoStats}
+            error={errorStats}
+            onReintentar={() => setRecargaStats((n) => n + 1)}
+          />
+        );
       case 'usuarios':
         return <AdminUsuarios />;
       case 'cursos':
-        return <div className="text-center py-12 text-gray-500">Gestión de cursos (próximamente)</div>;
+        return <AdminCursos />;
       case 'pagos':
         return <AdminPagos />;
       case 'promociones':
@@ -620,13 +992,19 @@ const DashboardAdmin = () => {
             Panel de Administración
           </h1>
           <p className="text-sm text-gray-400 mt-0.5">
-            Gestiona usuarios, pagos, promociones y configuración del sistema
+            Analítica real del sistema: usuarios, cursos, exámenes, biblioteca y más
           </p>
         </div>
-        <div className="flex items-center gap-3 text-sm text-gray-500">
-          <Badge variant="primary">1,234 usuarios</Badge>
-          <Badge variant="info">45 cursos</Badge>
-          <Badge variant="success">S/. 2,847 ingresos</Badge>
+        <div className="flex flex-wrap items-center gap-2 text-sm text-gray-500">
+          <Badge variant="primary">
+            {cargandoStats ? '…' : `${stats?.usuarios?.total ?? 0} usuarios`}
+          </Badge>
+          <Badge variant="info">
+            {cargandoStats ? '…' : `${stats?.cursos?.total ?? 0} cursos`}
+          </Badge>
+          <Badge variant="success">
+            {cargandoStats ? '…' : `S/ ${stats?.ingresos?.verificados ?? 0} verificados`}
+          </Badge>
         </div>
       </div>
 

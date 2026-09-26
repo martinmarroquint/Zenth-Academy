@@ -19,6 +19,7 @@ from app.api import (
     geo_analytics,
     media,
     biblioteca,
+    admin,
 )
 
 # Configuracion publica de cliente (marca Zenth Academy)
@@ -132,6 +133,15 @@ api_router.include_router(
 )
 
 # =============================================
+# ADMINISTRACIÓN (analítica global, solo admin)
+# =============================================
+api_router.include_router(
+    admin.router,
+    prefix="/admin",
+    tags=["Admin"]
+)
+
+# =============================================
 # SOLICITUDES DE DOCENTE
 # =============================================
 api_router.include_router(
@@ -184,5 +194,6 @@ __all__ = [
     'materiales',
     'compartir',
     'biblioteca',
+    'admin',
     'api_router'
 ]

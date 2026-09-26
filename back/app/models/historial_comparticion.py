@@ -26,6 +26,9 @@ class HistorialComparticion(Base):
     # ✅ QR EXPIRACIÓN
     qr_token = Column(String, nullable=True)
     qr_expira = Column(DateTime, nullable=True)
+    # ✅ Cuántas veces se renovó el QR (tras N rotaciones queda FIJO, estilo
+    # WhatsApp: deja de cambiar y espera a que lo escaneen)
+    qr_renovaciones = Column(Integer, default=0)
 
     # ✅ EMPAREJAMIENTO DE PANTALLA (QR estilo WhatsApp Web)
     # El equipo que muestra (PC del aula, sin login) genera un secreto EN MEMORIA

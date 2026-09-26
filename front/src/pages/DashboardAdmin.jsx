@@ -1,7 +1,7 @@
 // front/src/pages/DashboardAdmin.jsx
 // DASHBOARD DEL ADMINISTRADOR - CON COMPONENTES UI
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { 
   Users, Search, Loader2, AlertCircle, CheckCircle, XCircle,
   Plus, X, Save, Edit3, Key, Eye, EyeOff,
@@ -45,13 +45,19 @@ const AdminTabs = ({ activeTab, onChange }) => {
 // =============================================
 // COMPONENTE: GESTIÓN DE USUARIOS
 // =============================================
+const POR_PAGINA = 25;
+
 const AdminUsuarios = () => {
   const { toast, confirmar } = useFeedback();
   const [usuarios, setUsuarios] = useState([]);
+  const [total, setTotal] = useState(0);
+  const [stats, setStats] = useState({ total: 0, admin: 0, docente: 0, estudiante: 0 });
   const [cargando, setCargando] = useState(true);
   const [error, setError] = useState('');
   const [busqueda, setBusqueda] = useState('');
+  const [busquedaAplicada, setBusquedaAplicada] = useState('');
   const [filtroRol, setFiltroRol] = useState('');
+  const [pagina, setPagina] = useState(1);
   const [mostrarModal, setMostrarModal] = useState(false);
   const [modoEdicion, setModoEdicion] = useState(false);
   const [usuarioEditando, setUsuarioEditando] = useState(null);
@@ -66,19 +72,59 @@ const AdminUsuarios = () => {
     plan: 'basico'
   });
 
-  const cargarUsuarios = async () => {
+  // ✅ Búsqueda con debounce (el filtrado es server-side)
+  useEffect(() => {
+    const id = setTimeout(() => {
+      setBusquedaAplicada(busqueda);
+      setPagina(1);
+    }, 400);
+    return () => clearTimeout(id);
+  }, [busqueda]);
+
+  // ✅ Paginación REAL en el servidor (limit/offset + total)
+  const cargarUsuarios = useCallback(async () => {
     setCargando(true);
     try {
-      const data = await authService.listarUsuarios();
+      const data = await authService.listarUsuarios({
+        rol: filtroRol || undefined,
+        busqueda: busquedaAplicada || undefined,
+        limit: POR_PAGINA,
+        offset: (pagina - 1) * POR_PAGINA,
+      });
       setUsuarios(data?.usuarios || []);
+      setTotal(data?.total || 0);
+      setError('');
     } catch (err) {
       setError(err.message || 'Error cargando usuarios');
     } finally {
       setCargando(false);
     }
-  };
+  }, [filtroRol, busquedaAplicada, pagina]);
 
-  useEffect(() => { cargarUsuarios(); }, []);
+  // ✅ Totales reales por rol (no solo de la página visible)
+  const cargarStats = useCallback(async () => {
+    try {
+      const [todos, admins, docentes, estudiantes] = await Promise.all([
+        authService.listarUsuarios({ limit: 1 }),
+        authService.listarUsuarios({ limit: 1, rol: 'admin' }),
+        authService.listarUsuarios({ limit: 1, rol: 'docente' }),
+        authService.listarUsuarios({ limit: 1, rol: 'estudiante' }),
+      ]);
+      setStats({
+        total: todos?.total || 0,
+        admin: admins?.total || 0,
+        docente: docentes?.total || 0,
+        estudiante: estudiantes?.total || 0,
+      });
+    } catch {
+      // Los totales son informativos
+    }
+  }, []);
+
+  useEffect(() => { cargarUsuarios(); }, [cargarUsuarios]);
+  useEffect(() => { cargarStats(); }, [cargarStats]);
+
+  const totalPaginas = Math.max(1, Math.ceil(total / POR_PAGINA));
 
   const handleCrearUsuario = async (e) => {
     e.preventDefault();
@@ -91,6 +137,7 @@ const AdminUsuarios = () => {
       setMostrarModal(false);
       resetFormulario();
       await cargarUsuarios();
+      cargarStats();
     } catch (err) {
       toast.error(err.message || 'Error al crear usuario');
     } finally {
@@ -112,6 +159,7 @@ const AdminUsuarios = () => {
       if (Object.keys(data).length > 0) {
         await authService.actualizarUsuario(usuarioEditando.id, data);
         await cargarUsuarios();
+        cargarStats();
       }
       setMostrarModal(false);
       resetFormulario();
@@ -133,6 +181,7 @@ const AdminUsuarios = () => {
     try {
       await authService.eliminarUsuario(id);
       await cargarUsuarios();
+      cargarStats();
     } catch {
       toast.error('Error al desactivar usuario');
     }
@@ -165,21 +214,7 @@ const AdminUsuarios = () => {
     setMostrarPassword(false);
   };
 
-  const usuariosFiltrados = usuarios.filter(u => {
-    const matchBusqueda = 
-      (u.nombres || '').toLowerCase().includes(busqueda.toLowerCase()) ||
-      (u.apellidos || '').toLowerCase().includes(busqueda.toLowerCase()) ||
-      (u.email || '').toLowerCase().includes(busqueda.toLowerCase());
-    const matchRol = filtroRol ? u.rol === filtroRol : true;
-    return matchBusqueda && matchRol;
-  });
-
-  const stats = {
-    total: usuarios.length,
-    admin: usuarios.filter(u => u.rol === 'admin').length,
-    docente: usuarios.filter(u => u.rol === 'docente').length,
-    estudiante: usuarios.filter(u => u.rol === 'estudiante').length,
-  };
+  const usuariosFiltrados = usuarios;
 
   const planes = {
     gratis: { label: 'Gratis', variant: 'default' },
@@ -242,7 +277,7 @@ const AdminUsuarios = () => {
             { value: 'estudiante', label: 'Estudiante' },
           ]}
           value={filtroRol}
-          onChange={setFiltroRol}
+          onChange={(val) => { setFiltroRol(val); setPagina(1); }}
           placeholder="Filtrar por rol"
           size="sm"
           className="w-full sm:w-auto sm:min-w-[180px]"
@@ -359,6 +394,37 @@ const AdminUsuarios = () => {
                 ))}
               </tbody>
             </table>
+          </div>
+        </div>
+      )}
+
+      {/* ✅ Paginación real (server-side) */}
+      {!cargando && !error && total > 0 && (
+        <div className="flex flex-col sm:flex-row items-center justify-between gap-3 mt-4">
+          <p className="text-xs text-gray-500">
+            Mostrando <strong>{(pagina - 1) * POR_PAGINA + 1}</strong>–
+            <strong>{Math.min(pagina * POR_PAGINA, total)}</strong> de <strong>{total}</strong> usuarios
+          </p>
+          <div className="flex items-center gap-2">
+            <Button
+              variant="secondary"
+              size="sm"
+              disabled={pagina <= 1}
+              onClick={() => setPagina((p) => Math.max(1, p - 1))}
+            >
+              Anterior
+            </Button>
+            <span className="text-xs text-gray-500">
+              Página {pagina} de {totalPaginas}
+            </span>
+            <Button
+              variant="secondary"
+              size="sm"
+              disabled={pagina >= totalPaginas}
+              onClick={() => setPagina((p) => Math.min(totalPaginas, p + 1))}
+            >
+              Siguiente
+            </Button>
           </div>
         </div>
       )}

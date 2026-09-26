@@ -506,6 +506,7 @@ async def startup_event():
                 "pantalla_ip": "VARCHAR(50)",
                 "pantalla_user_agent": "TEXT",
                 "pantalla_revocada_en": "TIMESTAMP",
+                "qr_renovaciones": "INTEGER DEFAULT 0",
             },
             # ✅ CUPONES: descuentos aplicados a las solicitudes de acceso
             "solicitudes_acceso_curso": {
@@ -578,6 +579,25 @@ async def startup_event():
                 except Exception as _e_pan:
                     logger.debug(f"historial_comparticiones.docente_id ya era nullable: {_e_pan}")
                 _conn_pan.commit()
+
+        # 3c) ✅ GEOLOCALIZACIÓN: limpiar ubicaciones FALSAS de IPs locales que se
+        # guardaban antes ("Local" / "localhost" / lat 0). El panel debe mostrar
+        # SIEMPRE datos reales; el login se conserva pero sin ubicación.
+        if "login_geo_log" in tablas_actuales:
+            try:
+                with _eng2.connect() as _conn_geo:
+                    _res_geo = _conn_geo.execute(_text2(
+                        "UPDATE login_geo_log SET pais = NULL, pais_code = NULL, "
+                        "region = NULL, ciudad = NULL, lat = NULL, lon = NULL, isp = NULL "
+                        "WHERE pais_code = 'LOCAL' OR ciudad = 'localhost' OR isp = 'Local';"
+                    ))
+                    _conn_geo.commit()
+                    if getattr(_res_geo, "rowcount", 0):
+                        logger.info(
+                            f"✅ {_res_geo.rowcount} registro(s) geográficos locales limpiados"
+                        )
+            except Exception as _e_geo:
+                logger.warning(f"No se pudieron limpiar los registros geográficos locales: {_e_geo}")
 
         # 4) ✅ FLUJO SECUENCIAL POR DEFECTO (estilo Platzi): cada lección se
         # desbloquea solo al completar la anterior. Los cursos sin bloqueo

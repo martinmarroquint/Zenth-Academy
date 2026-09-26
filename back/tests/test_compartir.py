@@ -364,6 +364,38 @@ def test_vincular_sin_sesion_pide_iniciar_sesion(client):
 
 
 @pytest.mark.integration
+def test_qr_rota_mientras_es_joven(client, docente_headers):
+    """Mientras no se escanea, el QR se renueva cada 30s (no es estable)."""
+    sala = _crear_sala(client, docente_headers)
+
+    estado = client.get(f"/api/v1/compartir/{sala['codigo']}").json()
+    assert estado["qr_estable"] is False, estado
+    assert estado["qr_restante"] > 0, estado
+
+
+@pytest.mark.integration
+def test_qr_queda_fijo_tras_varias_rotaciones(client, db, docente_headers):
+    """✅ Tras N rotaciones el QR deja de cambiar y espera a que lo escaneen."""
+    from app.api.compartir import QR_RENOVACIONES_MAX
+
+    sala = _crear_sala(client, docente_headers)
+    fila = _fila_sala(db, sala["codigo"])
+    fila.qr_renovaciones = QR_RENOVACIONES_MAX
+    fila.qr_expira = datetime.now(timezone.utc) - timedelta(seconds=60)
+    db.commit()
+
+    estado = client.get(f"/api/v1/compartir/{sala['codigo']}").json()
+    assert estado["qr_estable"] is True, estado
+    token_fijo = estado["qr_token"]
+    assert token_fijo, estado
+
+    # No vuelve a rotar: el mismo token sigue vigente
+    estado2 = client.get(f"/api/v1/compartir/{sala['codigo']}").json()
+    assert estado2["qr_token"] == token_fijo, estado2
+    assert estado2["qr_estable"] is True, estado2
+
+
+@pytest.mark.integration
 def test_pantalla_nace_pendiente_con_qr(client):
     """Sin sesión: la pantalla nace pendiente y muestra un QR para escanear."""
     resp = _crear_pantalla(client)

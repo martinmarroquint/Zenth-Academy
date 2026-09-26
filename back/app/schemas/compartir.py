@@ -36,6 +36,8 @@ class SalaEstadoResponse(BaseModel):
     qr_token: Optional[str] = None
     qr_expira: Optional[str] = None
     qr_restante: Optional[int] = 0
+    # ✅ True cuando el QR dejó de rotar y quedó fijo esperando escaneo
+    qr_estable: bool = False
     # ✅ True solo mientras hay una pantalla emparejada con sesión viva
     pantalla_vinculada: bool = False
     # ✅ Nombre del docente dueño (para que la pantalla muestre a quién está vinculada)
@@ -61,6 +63,7 @@ class SalaDocenteResponse(BaseModel):
     fecha_inicio: Optional[datetime] = None
     qr_token: Optional[str] = None
     qr_expira: Optional[str] = None
+    qr_estable: bool = False
     # ✅ Emparejamiento de pantalla
     pantalla_vinculada: bool = False
     pantalla_vinculada_en: Optional[str] = None

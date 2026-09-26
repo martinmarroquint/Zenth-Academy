@@ -35,6 +35,10 @@ router = APIRouter()
 PUBLIC_BASE_URL = "https://zenthacademy.com"
 ALFABETO_CODIGO = "ABCDEFGHJKMNPQRSTUVWXYZ23456789"
 QR_EXPIRATION_SECONDS = 30
+# ✅ Tras N rotaciones el QR deja de cambiar y queda FIJO (estilo WhatsApp):
+# así el docente puede activarlo manualmente cuando quiera, sin apuro.
+QR_RENOVACIONES_MAX = 10
+QR_ESTABLE_HORAS = 8
 # ✅ Emparejamiento de pantalla: cuánto dura la sesión del equipo que muestra
 PANTALLA_SESION_HORAS = 4
 
@@ -80,16 +84,41 @@ def _qr_expirado(sala: HistorialComparticion, ahora: datetime) -> bool:
     return qr_expira < ahora
 
 
-def _renovar_qr(sala: HistorialComparticion, ahora: datetime) -> dict:
-    """Renueva el QR de una sala."""
+def _renovar_qr(sala: HistorialComparticion, ahora: datetime, *, estable: bool = False) -> dict:
+    """Renueva el QR. Con `estable=True` dura horas y deja de rotar."""
     sala.qr_token = _generar_qr_token()
-    sala.qr_expira = ahora + timedelta(seconds=QR_EXPIRATION_SECONDS)
+    segundos = QR_ESTABLE_HORAS * 3600 if estable else QR_EXPIRATION_SECONDS
+    sala.qr_expira = ahora + timedelta(seconds=segundos)
     sala.actualizado_en = ahora
     return {
         "qr_token": sala.qr_token,
         "qr_expira": sala.qr_expira.isoformat(),
-        "qr_restante": QR_EXPIRATION_SECONDS
+        "qr_restante": segundos
     }
+
+
+def _qr_estable(sala: HistorialComparticion) -> bool:
+    """✅ True cuando el QR ya dejó de rotar (quedó fijo esperando escaneo)."""
+    return int(sala.qr_renovaciones or 0) >= QR_RENOVACIONES_MAX
+
+
+def _asegurar_qr(sala: HistorialComparticion, ahora: datetime, db: Session) -> None:
+    """Genera/renueva el QR si hace falta: rota unas veces y después queda fijo."""
+    if sala.estado == "CERRADO" or _pantalla_bindeada(sala, ahora):
+        return
+    if sala.qr_token is not None and not _qr_expirado(sala, ahora):
+        return
+
+    estable = _qr_estable(sala)
+    _renovar_qr(sala, ahora, estable=estable)
+    if not estable:
+        sala.qr_renovaciones = int(sala.qr_renovaciones or 0) + 1
+    db.commit()
+    db.refresh(sala)
+    logger.info(
+        f"QR {'fijo' if estable else 'renovado'} para sala {sala.session_id} "
+        f"(rotación {sala.qr_renovaciones})"
+    )
 
 
 def _hash_secret(secret: str) -> str:
@@ -185,6 +214,7 @@ def _estado_sala(
         "qr_token": sala.qr_token if incluir_qr else None,
         "qr_expira": sala.qr_expira.isoformat() if (sala.qr_expira and incluir_qr) else None,
         "qr_restante": qr_restante if incluir_qr else 0,
+        "qr_estable": bool(incluir_qr and _qr_estable(sala)),
         "pantalla_vinculada": _pantalla_bindeada(sala, ahora),
         "pantalla_docente_nombre": docente_nombre,
     }
@@ -201,6 +231,7 @@ def _sala_docente_dict(sala: HistorialComparticion, ahora: datetime) -> dict:
         "fecha_inicio": sala.fecha_inicio.isoformat() if sala.fecha_inicio else None,
         "qr_token": sala.qr_token,
         "qr_expira": sala.qr_expira.isoformat() if sala.qr_expira else None,
+        "qr_estable": _qr_estable(sala),
         "pantalla_vinculada": _pantalla_bindeada(sala, ahora),
         "pantalla_vinculada_en": (
             sala.pantalla_vinculada_en.isoformat() if sala.pantalla_vinculada_en else None
@@ -228,11 +259,7 @@ def crear_sala(
         ).first()
         
         if activa:
-            if not _pantalla_bindeada(activa, ahora) and _qr_expirado(activa, ahora):
-                _renovar_qr(activa, ahora)
-                db.commit()
-                db.refresh(activa)
-
+            _asegurar_qr(activa, ahora, db)
             return _sala_docente_dict(activa, ahora)
 
         codigo = _generar_codigo()
@@ -278,12 +305,8 @@ def sala_activa_docente(
         ).first()
         if not activa:
             return None
-        
-        if not _pantalla_bindeada(activa, ahora) and _qr_expirado(activa, ahora):
-            _renovar_qr(activa, ahora)
-            db.commit()
-            db.refresh(activa)
-        
+
+        _asegurar_qr(activa, ahora, db)
         return _sala_docente_dict(activa, ahora)
     except Exception as e:
         raise HTTPException(status_code=500, detail=error_interno(e, "Error obteniendo sala activa"))
@@ -406,16 +429,10 @@ def estado_sala(
             db.refresh(sala)
             logger.info(f"Pantalla de la sala {codigo} expiró")
 
+        # ✅ QR: rota unas veces y después queda FIJO (estilo WhatsApp)
+        _asegurar_qr(sala, ahora, db)
+
         vinculada = _pantalla_bindeada(sala, ahora)
-
-        # ✅ QR de un solo uso: solo se emite si no hay pantalla vinculada
-        if sala.estado != "CERRADO" and not vinculada:
-            if sala.qr_token is None or _qr_expirado(sala, ahora):
-                _renovar_qr(sala, ahora)
-                db.commit()
-                db.refresh(sala)
-                logger.info(f"QR renovado para sala {codigo}")
-
         secret = request.headers.get("X-Pantalla-Secret")
         es_pantalla = _pantalla_secret_valido(sala, secret, ahora)
 

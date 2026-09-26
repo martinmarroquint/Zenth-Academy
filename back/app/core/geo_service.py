@@ -33,18 +33,11 @@ async def resolve_geo_from_ip(ip: str) -> Optional[Dict]:
     Returns:
         dict con datos geograficos o None si falla
     """
-    # Saltar IPs privadas/locales
+    # ✅ Las IPs privadas/locales NO tienen ubicación geográfica real: se
+    # devuelve None para NO inventar datos ("Local"/lat 0). El login igual queda
+    # registrado, pero sin ubicación, y el panel solo muestra datos reales.
     if is_private_ip(ip):
-        return {
-            "pais": "Local",
-            "pais_code": "LOCAL",
-            "region": "Desarrollo",
-            "ciudad": "localhost",
-            "lat": 0.0,
-            "lon": 0.0,
-            "timezone_geo": "UTC",
-            "isp": "Local"
-        }
+        return None
     
     try:
         async with httpx.AsyncClient(timeout=GEO_TIMEOUT) as client:
@@ -122,8 +115,14 @@ async def log_login_geo(
         
         db_session.add(log_entry)
         db_session.commit()
-        
-        logger.info(f"Geo login registrado: {email} -> {geo_data.get('ciudad', '?')}, {geo_data.get('pais', '?')}")
+
+        if geo_data:
+            logger.info(
+                f"Geo login registrado: {email} -> "
+                f"{geo_data.get('ciudad', '?')}, {geo_data.get('pais', '?')}"
+            )
+        else:
+            logger.info(f"Login sin ubicación geográfica (IP local o API sin datos): {email}")
         
     except Exception as e:
         logger.error(f"Error guardando geo log para {email}: {e}")

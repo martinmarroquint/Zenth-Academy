@@ -318,8 +318,8 @@ const PantallaAulaQR = () => {
                 <span className="absolute -bottom-1.5 -left-1.5 w-6 h-6 rounded-bl-2xl border-b-4 border-l-4" style={{ borderColor: '#0f766e' }} />
                 <span className="absolute -bottom-1.5 -right-1.5 w-6 h-6 rounded-br-2xl border-b-4 border-r-4" style={{ borderColor: '#0f766e' }} />
 
-                {/* Aviso de renovación */}
-                {segundos < 5 && (
+                {/* Aviso de renovación (solo mientras el QR rota) */}
+                {segundos < 5 && !estado?.qr_estable && (
                   <div className="absolute inset-0 rounded-3xl bg-white/85 flex items-center justify-center">
                     <span className="inline-flex items-center gap-1.5 bg-gray-900 text-white text-[11px] px-3 py-1.5 rounded-full animate-pulse">
                       <RefreshCw className="w-3 h-3 animate-spin" />
@@ -330,16 +330,23 @@ const PantallaAulaQR = () => {
               </div>
             </div>
 
-            {/* Barra de vigencia del QR */}
-            <div className="w-full max-w-[220px] h-1 rounded-full bg-gray-100 overflow-hidden mb-4">
-              <div
-                className="h-full rounded-full transition-all duration-1000"
-                style={{
-                  width: `${Math.max(0, Math.min(100, (segundos / 30) * 100))}%`,
-                  backgroundColor: segundos < 5 ? '#f59e0b' : '#0f766e',
-                }}
-              />
-            </div>
+            {/* Barra de vigencia (solo mientras el QR rota) */}
+            {!estado?.qr_estable ? (
+              <div className="w-full max-w-[220px] h-1 rounded-full bg-gray-100 overflow-hidden mb-4">
+                <div
+                  className="h-full rounded-full transition-all duration-1000"
+                  style={{
+                    width: `${Math.max(0, Math.min(100, (segundos / 30) * 100))}%`,
+                    backgroundColor: segundos < 5 ? '#f59e0b' : '#0f766e',
+                  }}
+                />
+              </div>
+            ) : (
+              <div className="mb-4 inline-flex items-center gap-1.5 text-[11px] text-emerald-700 bg-emerald-50 border border-emerald-200 px-3 py-1 rounded-full">
+                <CheckCircle2 className="w-3 h-3" />
+                QR fijo: escanealo cuando quieras
+              </div>
+            )}
 
             <div className="flex items-center gap-2 text-sm font-medium text-gray-800 mb-1">
               <Phone className="w-4 h-4" style={{ color: '#0f766e' }} />
@@ -348,15 +355,6 @@ const PantallaAulaQR = () => {
             <p className="text-[11px] text-gray-400 text-center leading-relaxed max-w-[240px]">
               Se vincula esta pantalla a tu carpeta. No tenés que escribir ninguna contraseña acá.
             </p>
-
-            {codigo && (
-              <div className="mt-3 inline-flex items-center gap-2 bg-gray-50 border border-gray-200 rounded-xl px-3 py-1.5">
-                <span className="text-[10px] text-gray-400 uppercase tracking-wider">Sala</span>
-                <code className="text-xs font-mono font-bold text-gray-700 tracking-widest">
-                  {codigo}
-                </code>
-              </div>
-            )}
           </div>
         </div>
       )}

@@ -8,7 +8,7 @@ import {
   PenTool, MessageCircle, Award, LogOut, ChevronLeft,
   ChevronRight, HelpCircle, LayoutDashboard, Send, Settings,
   Home, GraduationCap, Calendar, Bell, UserCircle, Menu, X,
-  PanelLeftClose, PanelLeftOpen, GripVertical, Globe, UserPlus
+  PanelLeftClose, PanelLeftOpen, GripVertical, Globe, UserPlus, Library
 } from 'lucide-react';
 import { authService } from '../../services/authService';
 import { useSolicitudes } from '../../hooks/useSolicitudes';
@@ -33,6 +33,7 @@ const ICONOS_NAV = {
   perfil: UserCircle,
   calendario: Calendar,
   progreso: GraduationCap,
+  biblioteca: Library,
 };
 
 const MENU_POR_ROL = {
@@ -51,6 +52,7 @@ const MENU_POR_ROL = {
       seccion: 'MATERIALES',
       items: [
         { id: 'carpeta', label: 'Mi carpeta', to: 'materiales' },
+        { id: 'biblioteca', label: 'Biblioteca', to: 'biblioteca' },
       ],
     },
     {
@@ -93,6 +95,7 @@ const MENU_POR_ROL = {
       seccion: 'MATERIALES',
       items: [
         { id: 'carpeta', label: 'Mi carpeta', to: 'materiales' },
+        { id: 'biblioteca', label: 'Biblioteca', to: 'biblioteca' },
       ],
     },
     {
@@ -121,6 +124,12 @@ const MENU_POR_ROL = {
       items: [
         { id: 'cursos', label: 'Mis Cursos', to: '', end: true },
         { id: 'certificados', label: 'Certificados', to: 'certificados' },
+      ],
+    },
+    {
+      seccion: 'BIBLIOTECA',
+      items: [
+        { id: 'biblioteca', label: 'Biblioteca', to: 'biblioteca' },
       ],
     },
     {

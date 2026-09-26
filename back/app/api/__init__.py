@@ -18,6 +18,7 @@ from app.api import (
     solicitudes_docente,
     geo_analytics,
     media,
+    biblioteca,
 )
 
 # Configuracion publica de cliente (marca Zenth Academy)
@@ -122,6 +123,15 @@ api_router.include_router(
 )
 
 # =============================================
+# BIBLIOTECA (independiente de cursos: recursos + tareas)
+# =============================================
+api_router.include_router(
+    biblioteca.router,
+    prefix="/biblioteca",
+    tags=["Biblioteca"]
+)
+
+# =============================================
 # SOLICITUDES DE DOCENTE
 # =============================================
 api_router.include_router(
@@ -173,5 +183,6 @@ __all__ = [
     'carpeta_docente',
     'materiales',
     'compartir',
+    'biblioteca',
     'api_router'
 ]

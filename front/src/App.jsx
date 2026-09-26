@@ -49,12 +49,14 @@ const ForoPage = lazy(() => import('./pages/modulos/ForoPage'));
 const CertificadosPage = lazy(() => import('./pages/modulos/CertificadosPage'));
 const ConfiguracionPage = lazy(() => import('./pages/modulos/ConfiguracionPage'));
 const MaterialesPage = lazy(() => import('./pages/modulos/MaterialesPage'));
+const BibliotecaPage = lazy(() => import('./pages/modulos/BibliotecaPage'));
 const EstudianteCursos = lazy(() => import('./pages/EstudianteCursos'));
 const EstudianteCursoDetalle = lazy(() => import('./pages/EstudianteCursoDetalle'));
 const EstudianteCertificados = lazy(() => import('./pages/EstudianteCertificados'));
 const HistorialEstudiante = lazy(() => import('./components/examenes/HistorialEstudiante'));
 const CompartirSala = lazy(() => import('./pages/CompartirSala'));
 const VincularPantalla = lazy(() => import('./pages/VincularPantalla'));
+const BibliotecaRecursoPublico = lazy(() => import('./pages/BibliotecaRecursoPublico'));
 const PanelSolicitudes = lazy(() => import('./components/docente/PanelSolicitudes'));
 
 // =============================================
@@ -78,6 +80,7 @@ const rutasModulos = (
     <Route path="cursos" element={<CursosPage />} />
     <Route path="alumnos" element={<PanelAlumnos />} />
     <Route path="materiales" element={<MaterialesPage />} />
+    <Route path="biblioteca" element={<BibliotecaPage />} />
     <Route path="pizarra" element={<PizarrasPage />} />
     <Route path="foro" element={<ForoPage />} />
     <Route path="certificados" element={<CertificadosPage />} />
@@ -146,6 +149,11 @@ function App() {
           <Route path="/examen/:codigo" element={<ExamenPublicoPage />} />
 
           {/* =============================================
+              BIBLIOTECA — RECURSO PÚBLICO POR LINK (sin login)
+          ============================================= */}
+          <Route path="/biblioteca/recurso/:token" element={<BibliotecaRecursoPublico />} />
+
+          {/* =============================================
               VERIFICACIÓN DE CERTIFICADOS — PÚBLICO (sin login)
           ============================================= */}
           <Route path="/validar" element={<ValidarCertificado />} />
@@ -204,6 +212,7 @@ function App() {
                 <HistorialEstudiante />
               </React.Suspense>
             } />
+            <Route path="biblioteca" element={<BibliotecaPage />} />
             <Route path="foro" element={<ForoPage />} />
             <Route path="certificados" element={<EstudianteCertificados />} />
             <Route path="configuracion" element={<ConfiguracionPage />} />

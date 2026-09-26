@@ -29,6 +29,15 @@ const bibliotecaService = {
 
   // ✅ Link público del recurso (sin login)
   obtenerPublico: async (token) => api.get(`/biblioteca/publico/${token}`),
+
+  // ✅ Rastro de actividad (ruta de los alumnos)
+  registrarEvento: async (id, tipo = 'descarga') =>
+    api.post(`/biblioteca/${id}/evento`, { tipo }),
+  miActividad: async () => api.get('/biblioteca/mi-actividad'),
+
+  // ✅ Analítica del docente (acotada a sus recursos)
+  analitica: async () => api.get('/biblioteca/analitica'),
+  analiticaAlumno: async (usuarioId) => api.get(`/biblioteca/analitica/alumno/${usuarioId}`),
 };
 
 export default bibliotecaService;

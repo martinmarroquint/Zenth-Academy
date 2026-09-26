@@ -101,6 +101,64 @@ class TemaResponse(BaseModel):
     total: int
 
 
+class EventoRequest(BaseModel):
+    """Evento de actividad del alumno: vista | descarga."""
+    tipo: str = "descarga"
+
+
+class EventoResponse(BaseModel):
+    recurso_id: str
+    tipo: str
+    veces: int
+    ultima_vez: Optional[datetime] = None
+
+
+class AnaliticaRecursoResponse(BaseModel):
+    recurso_id: str
+    titulo: str
+    tipo: str
+    visitas: int
+    usuarios_unicos: int
+    descargas: int
+    favoritos: int
+    completados: int
+
+
+class AnaliticaAlumnoResponse(BaseModel):
+    usuario_id: str
+    usuario_nombre: Optional[str]
+    eventos: int
+    vistas: int
+    descargas: int
+    ultima_vez: Optional[datetime]
+
+
+class AnaliticaResponse(BaseModel):
+    total_recursos: int
+    total_visitas: int
+    total_descargas: int
+    alumnos_activos: int
+    top_recursos: List[AnaliticaRecursoResponse]
+    alumnos: List[AnaliticaAlumnoResponse]
+
+
+class ActividadItemResponse(BaseModel):
+    recurso_id: str
+    titulo: str
+    tipo_recurso: str
+    evento: str
+    veces: int
+    primera_vez: Optional[datetime]
+    ultima_vez: Optional[datetime]
+
+
+class ActividadResponse(BaseModel):
+    usuario_id: str
+    usuario_nombre: Optional[str]
+    total_eventos: int
+    items: List[ActividadItemResponse]
+
+
 class MensajeResponse(BaseModel):
     mensaje: str
     ok: bool = True

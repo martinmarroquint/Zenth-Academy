@@ -80,4 +80,24 @@ describe('bibliotecaService', () => {
     expect(api.get).toHaveBeenCalledWith('/biblioteca/r1/completados');
     expect(api.get).toHaveBeenCalledWith('/biblioteca/publico/tok123');
   });
+
+  it('registrarEvento envía el tipo de actividad', async () => {
+    api.post.mockResolvedValue({ veces: 1 });
+
+    await bibliotecaService.registrarEvento('r1', 'descarga');
+
+    expect(api.post).toHaveBeenCalledWith('/biblioteca/r1/evento', { tipo: 'descarga' });
+  });
+
+  it('analítica y ruta del alumno usan los endpoints correctos', async () => {
+    api.get.mockResolvedValue({});
+
+    await bibliotecaService.analitica();
+    await bibliotecaService.analiticaAlumno('u1');
+    await bibliotecaService.miActividad();
+
+    expect(api.get).toHaveBeenCalledWith('/biblioteca/analitica');
+    expect(api.get).toHaveBeenCalledWith('/biblioteca/analitica/alumno/u1');
+    expect(api.get).toHaveBeenCalledWith('/biblioteca/mi-actividad');
+  });
 });

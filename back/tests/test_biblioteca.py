@@ -259,3 +259,145 @@ def test_link_publico_por_token(client, docente_headers):
 def test_link_publico_token_invalido_404(client):
     resp = client.get("/api/v1/biblioteca/publico/token-que-no-existe")
     assert resp.status_code == 404, resp.text
+
+
+# =====================================================
+# 6. ACTIVIDAD Y ANALÍTICA (ruta de los alumnos)
+# =====================================================
+
+@pytest.mark.integration
+def test_ver_recurso_registra_actividad(client, docente_headers, estudiante_headers):
+    """✅ Abrir un recurso deja rastro: quién lo revisó y cuántas veces."""
+    recurso = _crear_recurso(client, docente_headers, titulo="Con rastro")
+
+    client.get(f"/api/v1/biblioteca/{recurso['id']}", headers=estudiante_headers)
+    client.get(f"/api/v1/biblioteca/{recurso['id']}", headers=estudiante_headers)
+
+    analitica = client.get("/api/v1/biblioteca/analitica", headers=docente_headers)
+    assert analitica.status_code == 200, analitica.text
+    data = analitica.json()
+    assert data["total_recursos"] == 1
+    assert data["alumnos_activos"] == 1
+    assert data["total_visitas"] >= 2
+
+    alumno = data["alumnos"][0]
+    assert alumno["vistas"] == 2
+    assert alumno["usuario_nombre"]
+    assert data["top_recursos"][0]["usuarios_unicos"] == 1
+
+
+@pytest.mark.integration
+def test_descarga_registra_evento(client, docente_headers, estudiante_headers):
+    recurso = _crear_recurso(client, docente_headers, titulo="Descargable")
+
+    resp = client.post(
+        f"/api/v1/biblioteca/{recurso['id']}/evento",
+        json={"tipo": "descarga"},
+        headers=estudiante_headers,
+    )
+    assert resp.status_code == 200, resp.text
+    assert resp.json()["veces"] == 1
+
+    client.post(
+        f"/api/v1/biblioteca/{recurso['id']}/evento",
+        json={"tipo": "descarga"},
+        headers=estudiante_headers,
+    )
+
+    analitica = client.get("/api/v1/biblioteca/analitica", headers=docente_headers).json()
+    assert analitica["total_descargas"] == 2
+    assert analitica["top_recursos"][0]["descargas"] == 2
+
+
+@pytest.mark.integration
+def test_ruta_del_alumno(
+    client, docente_headers, estudiante_headers, estudiante_user
+):
+    r1 = _crear_recurso(client, docente_headers, titulo="Uno")
+    r2 = _crear_recurso(client, docente_headers, titulo="Dos")
+
+    client.get(f"/api/v1/biblioteca/{r1['id']}", headers=estudiante_headers)
+    client.post(
+        f"/api/v1/biblioteca/{r2['id']}/evento",
+        json={"tipo": "descarga"},
+        headers=estudiante_headers,
+    )
+
+    ruta = client.get(
+        f"/api/v1/biblioteca/analitica/alumno/{estudiante_user.id}",
+        headers=docente_headers,
+    )
+    assert ruta.status_code == 200, ruta.text
+    data = ruta.json()
+    assert data["usuario_nombre"]
+    assert {i["titulo"] for i in data["items"]} == {"Uno", "Dos"}
+    assert data["total_eventos"] == 2
+
+
+@pytest.mark.integration
+def test_mi_actividad(client, docente_headers, estudiante_headers):
+    recurso = _crear_recurso(client, docente_headers, titulo="Mía")
+
+    client.get(f"/api/v1/biblioteca/{recurso['id']}", headers=estudiante_headers)
+
+    resp = client.get("/api/v1/biblioteca/mi-actividad", headers=estudiante_headers)
+    assert resp.status_code == 200, resp.text
+    data = resp.json()
+    assert data["total_eventos"] == 1
+    assert data["items"][0]["titulo"] == "Mía"
+    assert data["items"][0]["evento"] == "vista"
+
+
+@pytest.mark.security
+@pytest.mark.integration
+def test_analitica_acotada_a_mis_recursos(
+    client, docente_headers, otro_docente_headers, estudiante_headers, estudiante_user
+):
+    """✅ Un docente no ve la actividad de los recursos de otro."""
+    recurso = _crear_recurso(client, docente_headers, titulo="Del otro")
+    client.get(f"/api/v1/biblioteca/{recurso['id']}", headers=estudiante_headers)
+
+    mia = client.get("/api/v1/biblioteca/analitica", headers=docente_headers).json()
+    assert mia["total_recursos"] == 1
+    assert mia["alumnos_activos"] == 1
+
+    ajena = client.get("/api/v1/biblioteca/analitica", headers=otro_docente_headers).json()
+    assert ajena["total_recursos"] == 0
+    assert ajena["alumnos"] == []
+
+    ruta = client.get(
+        f"/api/v1/biblioteca/analitica/alumno/{estudiante_user.id}",
+        headers=otro_docente_headers,
+    )
+    assert ruta.status_code == 200, ruta.text
+    assert ruta.json()["items"] == []
+
+
+@pytest.mark.security
+@pytest.mark.integration
+def test_estudiante_no_accede_a_la_analitica(client, estudiante_headers):
+    resp = client.get("/api/v1/biblioteca/analitica", headers=estudiante_headers)
+    assert resp.status_code == 403, resp.text
+
+
+@pytest.mark.integration
+def test_evento_tipo_invalido_400(client, docente_headers, estudiante_headers):
+    recurso = _crear_recurso(client, docente_headers, titulo="X")
+
+    resp = client.post(
+        f"/api/v1/biblioteca/{recurso['id']}/evento",
+        json={"tipo": "hackear"},
+        headers=estudiante_headers,
+    )
+    assert resp.status_code == 400, resp.text
+
+
+@pytest.mark.integration
+def test_autor_no_se_cuenta_a_si_mismo(client, docente_headers):
+    """✅ Las vistas del propio autor no inflan la ruta de los alumnos."""
+    recurso = _crear_recurso(client, docente_headers, titulo="Propio")
+    client.get(f"/api/v1/biblioteca/{recurso['id']}", headers=docente_headers)
+
+    analitica = client.get("/api/v1/biblioteca/analitica", headers=docente_headers).json()
+    assert analitica["alumnos_activos"] == 0
+    assert analitica["alumnos"] == []

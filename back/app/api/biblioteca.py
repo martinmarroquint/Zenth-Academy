@@ -4,7 +4,7 @@
 # lo publicado y activo. Solo el autor (o admin) gestiona lo suyo.
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
-from sqlalchemy import func, or_
+from sqlalchemy import case, false, func, or_
 from sqlalchemy.orm import Session
 from typing import List, Optional
 import uuid
@@ -17,7 +17,9 @@ from app.core.dependencies import require_docente, get_current_active_user
 from app.core.errors import error_interno
 from app.core.ratelimit import rate_limit
 from app.models.usuario import Usuario
-from app.models.biblioteca import RecursoBiblioteca, BibliotecaInteraccion
+from app.models.biblioteca import (
+    RecursoBiblioteca, BibliotecaInteraccion, BibliotecaEvento
+)
 from app.schemas.biblioteca import (
     RecursoBibliotecaCreate,
     RecursoBibliotecaUpdate,
@@ -27,6 +29,10 @@ from app.schemas.biblioteca import (
     InteraccionResponse,
     CompletadoResponse,
     TemaResponse,
+    EventoRequest,
+    EventoResponse,
+    AnaliticaResponse,
+    ActividadResponse,
 )
 
 logger = logging.getLogger(__name__)
@@ -35,6 +41,7 @@ router = APIRouter()
 TIPOS_VALIDOS = {"articulo", "libro", "video", "documento", "enlace", "tarea"}
 TIPO_FAVORITO = "favorito"
 TIPO_COMPLETADO = "completado"
+EVENTOS_VALIDOS = {"vista", "descarga"}
 
 
 # =============================================
@@ -83,6 +90,87 @@ def _obtener_activo(db: Session, recurso_id: str) -> RecursoBiblioteca:
 def _vencida(recurso: RecursoBiblioteca, ahora: datetime) -> bool:
     limite = _aware_utc(recurso.fecha_limite)
     return bool(limite and limite < ahora)
+
+
+def _registrar_evento(
+    db: Session, recurso_id: str, usuario_id: str, tipo: str
+) -> dict:
+    """✅ Upsert del rastro: una fila por (recurso, usuario, tipo) con contador."""
+    ahora = datetime.now(timezone.utc)
+    fila = db.query(BibliotecaEvento).filter(
+        BibliotecaEvento.recurso_id == recurso_id,
+        BibliotecaEvento.usuario_id == usuario_id,
+        BibliotecaEvento.tipo == tipo,
+    ).first()
+
+    if fila:
+        fila.veces = (fila.veces or 0) + 1
+        fila.ultima_vez = ahora
+    else:
+        fila = BibliotecaEvento(
+            id=str(uuid.uuid4()),
+            recurso_id=recurso_id,
+            usuario_id=usuario_id,
+            tipo=tipo,
+            veces=1,
+            primera_vez=ahora,
+            ultima_vez=ahora,
+        )
+        db.add(fila)
+
+    db.commit()
+    db.refresh(fila)
+    return {
+        "recurso_id": recurso_id,
+        "tipo": tipo,
+        "veces": fila.veces or 0,
+        "ultima_vez": fila.ultima_vez,
+    }
+
+
+def _recursos_del_autor(db: Session, current_user: Usuario) -> List[str]:
+    """✅ La analítica se acota: el docente ve solo SUS recursos (admin: todos)."""
+    query = db.query(RecursoBiblioteca.id)
+    if current_user.rol != "admin":
+        query = query.filter(RecursoBiblioteca.autor_id == str(current_user.id))
+    return [str(r[0]) for r in query.all()]
+
+
+def _ruta_de(
+    db: Session, usuario_id: str, recursos_ids: Optional[List[str]] = None
+) -> dict:
+    """Ruta de actividad de un alumno (opcionalmente acotada a ciertos recursos)."""
+    query = db.query(BibliotecaEvento, RecursoBiblioteca).join(
+        RecursoBiblioteca, RecursoBiblioteca.id == BibliotecaEvento.recurso_id
+    ).filter(BibliotecaEvento.usuario_id == usuario_id)
+
+    if recursos_ids is not None:
+        query = query.filter(
+            BibliotecaEvento.recurso_id.in_(recursos_ids) if recursos_ids else false()
+        )
+
+    filas = query.order_by(BibliotecaEvento.ultima_vez.desc()).all()
+    usuario = db.query(Usuario).filter(Usuario.id == usuario_id).first()
+
+    items = [
+        {
+            "recurso_id": str(ev.recurso_id),
+            "titulo": rec.titulo,
+            "tipo_recurso": rec.tipo or "articulo",
+            "evento": ev.tipo,
+            "veces": ev.veces or 0,
+            "primera_vez": ev.primera_vez,
+            "ultima_vez": ev.ultima_vez,
+        }
+        for ev, rec in filas
+    ]
+
+    return {
+        "usuario_id": str(usuario_id),
+        "usuario_nombre": usuario.nombre_completo if usuario else None,
+        "total_eventos": sum(i["veces"] for i in items),
+        "items": items,
+    }
 
 
 def _recurso_a_dict(
@@ -187,6 +275,173 @@ def obtener_recurso_publico(
     except Exception as e:
         db.rollback()
         raise HTTPException(status_code=500, detail=error_interno(e, "Error obteniendo el recurso"))
+
+
+# =============================================
+# ACTIVIDAD Y ANALÍTICA (rutas estáticas ANTES de /{recurso_id})
+# =============================================
+
+@router.post("/{recurso_id}/evento", response_model=EventoResponse)
+def registrar_evento(
+    recurso_id: str,
+    data: EventoRequest,
+    db: Session = Depends(get_db),
+    current_user: Usuario = Depends(get_current_active_user),
+):
+    """✅ Registra que el alumno abrió/descargó el recurso (ruta de aprendizaje)."""
+    try:
+        tipo = (data.tipo or "").lower()
+        if tipo not in EVENTOS_VALIDOS:
+            raise HTTPException(status_code=400, detail="Tipo de evento inválido")
+        _obtener_activo(db, recurso_id)
+        return _registrar_evento(db, recurso_id, str(current_user.id), tipo)
+    except HTTPException:
+        raise
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=error_interno(e, "Error registrando la actividad"))
+
+
+@router.get("/mi-actividad", response_model=ActividadResponse)
+def mi_actividad(
+    db: Session = Depends(get_db),
+    current_user: Usuario = Depends(get_current_active_user),
+):
+    """Ruta propia: lo que el usuario revisó y descargó de la biblioteca."""
+    try:
+        return _ruta_de(db, str(current_user.id), None)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=error_interno(e, "Error obteniendo la actividad"))
+
+
+@router.get("/analitica", response_model=AnaliticaResponse)
+def obtener_analitica(
+    db: Session = Depends(get_db),
+    current_user: Usuario = Depends(require_docente),
+):
+    """Resumen de uso de MIS recursos: visitas, descargas, alumnos y top."""
+    try:
+        ids = _recursos_del_autor(db, current_user)
+        if not ids:
+            return {
+                "total_recursos": 0,
+                "total_visitas": 0,
+                "total_descargas": 0,
+                "alumnos_activos": 0,
+                "top_recursos": [],
+                "alumnos": [],
+            }
+
+        total_visitas = int(
+            db.query(func.coalesce(func.sum(RecursoBiblioteca.visitas), 0)).filter(
+                RecursoBiblioteca.id.in_(ids)
+            ).scalar() or 0
+        )
+
+        eventos = db.query(
+            BibliotecaEvento.usuario_id,
+            func.sum(BibliotecaEvento.veces),
+            func.sum(case((BibliotecaEvento.tipo == "vista", BibliotecaEvento.veces), else_=0)),
+            func.sum(case((BibliotecaEvento.tipo == "descarga", BibliotecaEvento.veces), else_=0)),
+            func.max(BibliotecaEvento.ultima_vez),
+        ).filter(
+            BibliotecaEvento.recurso_id.in_(ids)
+        ).group_by(BibliotecaEvento.usuario_id).all()
+
+        total_descargas = sum(int(e[3] or 0) for e in eventos)
+        usuarios_ids = [str(e[0]) for e in eventos]
+        nombres = {}
+        if usuarios_ids:
+            nombres = {
+                str(u.id): u.nombre_completo
+                for u in db.query(Usuario).filter(Usuario.id.in_(usuarios_ids)).all()
+            }
+
+        alumnos = [
+            {
+                "usuario_id": str(e[0]),
+                "usuario_nombre": nombres.get(str(e[0])),
+                "eventos": int(e[1] or 0),
+                "vistas": int(e[2] or 0),
+                "descargas": int(e[3] or 0),
+                "ultima_vez": e[4],
+            }
+            for e in eventos
+        ]
+        alumnos.sort(key=lambda a: a["eventos"], reverse=True)
+
+        top = db.query(RecursoBiblioteca).filter(
+            RecursoBiblioteca.id.in_(ids)
+        ).order_by(RecursoBiblioteca.visitas.desc()).limit(10).all()
+
+        descargas_por_recurso = {
+            str(r[0]): int(r[1] or 0) for r in db.query(
+                BibliotecaEvento.recurso_id, func.sum(BibliotecaEvento.veces)
+            ).filter(
+                BibliotecaEvento.recurso_id.in_(ids),
+                BibliotecaEvento.tipo == "descarga",
+            ).group_by(BibliotecaEvento.recurso_id).all()
+        }
+        usuarios_por_recurso = {
+            str(r[0]): int(r[1] or 0) for r in db.query(
+                BibliotecaEvento.recurso_id,
+                func.count(func.distinct(BibliotecaEvento.usuario_id)),
+            ).filter(
+                BibliotecaEvento.recurso_id.in_(ids)
+            ).group_by(BibliotecaEvento.recurso_id).all()
+        }
+        favoritos_por_recurso = {
+            str(r[0]): int(r[1] or 0) for r in db.query(
+                BibliotecaInteraccion.recurso_id, func.count(BibliotecaInteraccion.id)
+            ).filter(
+                BibliotecaInteraccion.recurso_id.in_(ids),
+                BibliotecaInteraccion.tipo == TIPO_FAVORITO,
+            ).group_by(BibliotecaInteraccion.recurso_id).all()
+        }
+        completados_por_recurso = {
+            str(r[0]): int(r[1] or 0) for r in db.query(
+                BibliotecaInteraccion.recurso_id, func.count(BibliotecaInteraccion.id)
+            ).filter(
+                BibliotecaInteraccion.recurso_id.in_(ids),
+                BibliotecaInteraccion.tipo == TIPO_COMPLETADO,
+            ).group_by(BibliotecaInteraccion.recurso_id).all()
+        }
+
+        return {
+            "total_recursos": len(ids),
+            "total_visitas": total_visitas,
+            "total_descargas": total_descargas,
+            "alumnos_activos": len(usuarios_ids),
+            "top_recursos": [
+                {
+                    "recurso_id": str(r.id),
+                    "titulo": r.titulo,
+                    "tipo": r.tipo or "articulo",
+                    "visitas": r.visitas or 0,
+                    "usuarios_unicos": usuarios_por_recurso.get(str(r.id), 0),
+                    "descargas": descargas_por_recurso.get(str(r.id), 0),
+                    "favoritos": favoritos_por_recurso.get(str(r.id), 0),
+                    "completados": completados_por_recurso.get(str(r.id), 0),
+                }
+                for r in top
+            ],
+            "alumnos": alumnos,
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=error_interno(e, "Error calculando la analítica"))
+
+
+@router.get("/analitica/alumno/{usuario_id}", response_model=ActividadResponse)
+def ruta_de_alumno(
+    usuario_id: str,
+    db: Session = Depends(get_db),
+    current_user: Usuario = Depends(require_docente),
+):
+    """✅ Ruta de un alumno, acotada a MIS recursos (admin: todos)."""
+    try:
+        return _ruta_de(db, usuario_id, _recursos_del_autor(db, current_user))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=error_interno(e, "Error obteniendo la ruta"))
 
 
 # =============================================
@@ -342,6 +597,11 @@ def obtener_recurso(
         db.refresh(recurso)
 
         usuario_id = str(current_user.id)
+
+        # ✅ Rastro de actividad: el autor no se cuenta a sí mismo
+        if str(recurso.autor_id) != usuario_id:
+            _registrar_evento(db, recurso_id, usuario_id, "vista")
+
         favorito = db.query(BibliotecaInteraccion).filter(
             BibliotecaInteraccion.recurso_id == recurso_id,
             BibliotecaInteraccion.usuario_id == usuario_id,

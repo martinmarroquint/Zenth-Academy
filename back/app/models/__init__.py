@@ -20,7 +20,9 @@ from app.models.solicitud_docente import SolicitudDocente  # ✅ SOLICITUDES DOC
 from app.models.login_geo_log import LoginGeoLog  # ✅ GEOLOCALIZACION
 from app.models.refresh_token import RefreshToken  # ✅ REFRESH TOKENS (JWT)
 from app.models.intento_examen import IntentoExamen  # ✅ INTENTOS DE EXAMEN (autoridad de tiempo)
-from app.models.biblioteca import RecursoBiblioteca, BibliotecaInteraccion  # ✅ BIBLIOTECA
+from app.models.biblioteca import (
+    RecursoBiblioteca, BibliotecaInteraccion, BibliotecaEvento
+)  # ✅ BIBLIOTECA
 
 
 __all__ = [
@@ -40,5 +42,5 @@ __all__ = [
     "LoginGeoLog",  # ✅ GEOLOCALIZACION
     "RefreshToken",  # ✅ REFRESH TOKENS (JWT)
     "IntentoExamen",  # ✅ INTENTOS DE EXAMEN (autoridad de tiempo)
-    "RecursoBiblioteca", "BibliotecaInteraccion",  # ✅ BIBLIOTECA
+    "RecursoBiblioteca", "BibliotecaInteraccion", "BibliotecaEvento",  # ✅ BIBLIOTECA
 ]

@@ -67,3 +67,32 @@ class BibliotecaInteraccion(Base):
     # ✅ Respuesta del alumno en una tarea
     comentario = Column(Text, nullable=True)
     created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+
+
+class BibliotecaEvento(Base):
+    """✅ RASTRO DE ACTIVIDAD: quién revisó / descargó cada recurso y cuándo.
+
+    Una fila por (recurso, usuario, tipo) con contador: sirve para la analítica
+    del docente y para reconstruir la ruta de cada alumno sin inflar la tabla.
+    """
+
+    __tablename__ = "biblioteca_eventos"
+    __table_args__ = (
+        UniqueConstraint(
+            "recurso_id", "usuario_id", "tipo", name="uq_biblioteca_evento"
+        ),
+        {'extend_existing': True},
+    )
+
+    id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
+    recurso_id = Column(String, nullable=False, index=True)
+    usuario_id = Column(String, nullable=False, index=True)
+    # tipo: vista | descarga
+    tipo = Column(String(20), nullable=False)
+    veces = Column(Integer, default=1)
+    primera_vez = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+    ultima_vez = Column(
+        DateTime,
+        default=lambda: datetime.now(timezone.utc),
+        onupdate=lambda: datetime.now(timezone.utc),
+    )

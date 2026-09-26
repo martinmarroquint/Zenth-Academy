@@ -6,12 +6,13 @@ import React, { useState, useEffect } from 'react';
 import {
   BookOpen, Search, Star, Check, Plus, Loader2, ExternalLink, FileText,
   Video, Link2, ClipboardList, Trash2, Edit, Users, CalendarClock,
-  ChevronDown, ChevronUp, StarOff,
+  ChevronDown, ChevronUp, StarOff, ChartColumn, History,
 } from 'lucide-react';
 import bibliotecaService from '../../services/bibliotecaService';
 import { authService } from '../../services/authService';
 import { Button, Input, Badge } from '../../components/ui';
 import ModalRecurso from '../../components/biblioteca/ModalRecurso';
+import ModalAnaliticas from '../../components/biblioteca/ModalAnaliticas';
 import { useFeedback } from '../../hooks/useFeedback';
 
 const TIPOS = [
@@ -65,6 +66,7 @@ const BibliotecaPage = () => {
   const [completados, setCompletados] = useState({});
   const [modal, setModal] = useState(null);
   const [guardando, setGuardando] = useState(false);
+  const [analiticas, setAnaliticas] = useState(null);
 
   // ✅ Búsqueda con debounce (setState dentro del timeout: no rompe la regla de hooks)
   useEffect(() => {
@@ -208,12 +210,21 @@ const BibliotecaPage = () => {
             Recursos y tareas abiertos para todos los alumnos
           </p>
         </div>
-        {esStaff && (
-          <Button variant="primary" onClick={() => setModal({ recurso: null })}>
-            <Plus className="w-4 h-4" />
-            Publicar
+        <div className="flex flex-wrap items-center gap-2">
+          <Button
+            variant="secondary"
+            onClick={() => setAnaliticas(esStaff ? 'docente' : 'alumno')}
+          >
+            {esStaff ? <ChartColumn className="w-4 h-4" /> : <History className="w-4 h-4" />}
+            {esStaff ? 'Analíticas' : 'Mi actividad'}
           </Button>
-        )}
+          {esStaff && (
+            <Button variant="primary" onClick={() => setModal({ recurso: null })}>
+              <Plus className="w-4 h-4" />
+              Publicar
+            </Button>
+          )}
+        </div>
       </div>
 
       {/* Filtros */}
@@ -399,6 +410,14 @@ const BibliotecaPage = () => {
                           href={recurso.url}
                           target="_blank"
                           rel="noopener noreferrer"
+                          onClick={() => {
+                            // ✅ Rastro: el autor no se cuenta a sí mismo
+                            if (!recurso.es_autor) {
+                              bibliotecaService
+                                .registrarEvento(recurso.id, 'descarga')
+                                .catch(() => null);
+                            }
+                          }}
                           className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl text-white text-sm font-semibold"
                           style={{ backgroundColor: '#0f766e' }}
                         >
@@ -518,6 +537,10 @@ const BibliotecaPage = () => {
           onGuardar={guardar}
           guardando={guardando}
         />
+      )}
+
+      {analiticas && (
+        <ModalAnaliticas modo={analiticas} onCerrar={() => setAnaliticas(null)} />
       )}
     </div>
   );

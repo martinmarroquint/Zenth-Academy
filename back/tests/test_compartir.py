@@ -376,6 +376,32 @@ def test_pantalla_nace_pendiente_con_qr(client):
 
 
 @pytest.mark.integration
+def test_pantallas_pendientes_viejas_se_limpian(client, db, docente_headers):
+    """✅ Las pantallas que nadie reclamó no se acumulan para siempre."""
+    vieja = HistorialComparticion(
+        id="pantalla-vieja",
+        docente_id=None,
+        session_id="VIEJA001",
+        qr_token="tok-viejo",
+        qr_expira=datetime.now(timezone.utc) - timedelta(days=1),
+        estado="ESPERANDO",
+        recursos_compartidos=[],
+        cantidad_recursos=0,
+        fecha_inicio=datetime.now(timezone.utc) - timedelta(hours=12),
+    )
+    db.add(vieja)
+    db.commit()
+
+    # Al crear una pantalla nueva, la vieja (pendiente y de hace 12 h) se borra
+    _crear_pantalla(client)
+
+    db.expire_all()
+    assert db.query(HistorialComparticion).filter(
+        HistorialComparticion.session_id == "VIEJA001"
+    ).first() is None
+
+
+@pytest.mark.integration
 def test_docente_reclama_la_pantalla_escaneando(client, docente_headers):
     """El docente que escanea el QR reclama la pantalla pendiente."""
     pantalla = _crear_pantalla(client).json()

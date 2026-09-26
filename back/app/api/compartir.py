@@ -310,6 +310,19 @@ def crear_pantalla(
         ahora = _ahora_utc()
         payload = data or PantallaCreateRequest()
 
+        # ✅ Limpieza: pantallas PENDIENTES que nadie reclamó (cada visita al
+        # login crea una). Se comparan como naive porque la columna no guarda tz.
+        try:
+            corte = (ahora - timedelta(hours=6)).replace(tzinfo=None)
+            db.query(HistorialComparticion).filter(
+                HistorialComparticion.docente_id.is_(None),
+                HistorialComparticion.fecha_inicio < corte,
+            ).delete(synchronize_session=False)
+            db.commit()
+        except Exception as e_limpieza:
+            db.rollback()
+            logger.warning(f"No se pudieron limpiar pantallas pendientes: {e_limpieza}")
+
         codigo = _generar_codigo()
         while _buscar_sala(db, codigo):
             codigo = _generar_codigo()

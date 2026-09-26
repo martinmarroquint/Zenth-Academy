@@ -185,6 +185,92 @@ def test_login_iniciar_devuelve_challenge_y_credenciales(
 
 
 @pytest.mark.integration
+def test_rp_id_se_deriva_del_origen_del_front(client, db, estudiante_user):
+    """✅ El rpId debe ser el dominio del SITIO (frontend), no el del backend.
+
+    Si se usara el host del backend, en producción (API en otro dominio) el
+    navegador rechazaría la ceremonia con SecurityError.
+    """
+    _crear_credencial(db, estudiante_user, credential_id="Y3JlZC1ycC0x")
+
+    resp = client.post(
+        "/api/v1/webauthn/login/iniciar",
+        json={"email": estudiante_user.email},
+        headers={"Origin": "http://localhost:5173"},
+    )
+    assert resp.status_code == 200, resp.text
+    assert resp.json()["rpId"] == "localhost", resp.json()
+
+    resp_prod = client.post(
+        "/api/v1/webauthn/login/iniciar",
+        json={"email": estudiante_user.email},
+        headers={"Origin": "https://zenthacademy.com"},
+    )
+    assert resp_prod.status_code == 200, resp_prod.text
+    assert resp_prod.json()["rpId"] == "zenthacademy.com", resp_prod.json()
+
+
+@pytest.mark.integration
+def test_login_usernameless_sin_email(client, db):
+    """✅ Sin correo: el navegador mostrará el selector de passkeys."""
+    resp = client.post("/api/v1/webauthn/login/iniciar", json={})
+    assert resp.status_code == 200, resp.text
+    data = resp.json()
+
+    assert data.get("challenge"), data
+    assert data.get("challenge_id"), data
+    assert data.get("allowCredentials") == [], data
+    assert data["userVerification"] == "required"
+
+    # El challenge queda sin usuario hasta que el dispositivo firme
+    fila = db.query(WebAuthnChallenge).filter(
+        WebAuthnChallenge.id == data["challenge_id"]
+    ).first()
+    assert fila is not None
+    assert fila.usuario_id == ""
+
+
+@pytest.mark.integration
+def test_login_usernameless_resuelve_por_credencial(client, db, estudiante_user):
+    """Sin correo, el usuario se resuelve por la credencial firmada."""
+    _crear_credencial(db, estudiante_user, credential_id="cred-userless-1")
+    opciones = client.post("/api/v1/webauthn/login/iniciar", json={}).json()
+
+    resp = client.post(
+        "/api/v1/webauthn/login/completar",
+        json={
+            "challenge_id": opciones["challenge_id"],
+            "credential": {
+                "id": "cred-userless-1",
+                "rawId": "cred-userless-1",
+                "type": "public-key",
+                "response": {
+                    "clientDataJSON": "aW52YWxpZG8",
+                    "authenticatorData": "aW52YWxpZG8",
+                    "signature": "aW52YWxpZG8",
+                },
+            },
+        },
+    )
+    # La credencial se encuentra, pero la firma inválida no autentica
+    assert resp.status_code == 401, resp.text
+
+
+@pytest.mark.integration
+def test_login_credencial_desconocida_400(client):
+    opciones = client.post("/api/v1/webauthn/login/iniciar", json={}).json()
+
+    resp = client.post(
+        "/api/v1/webauthn/login/completar",
+        json={
+            "challenge_id": opciones["challenge_id"],
+            "credential": {"id": "no-existe", "type": "public-key", "response": {}},
+        },
+    )
+    assert resp.status_code == 400, resp.text
+
+
+@pytest.mark.integration
 def test_login_completar_con_challenge_invalido_400(client, db, estudiante_user):
     _crear_credencial(db, estudiante_user, credential_id="cred-login-2")
 

@@ -16,7 +16,9 @@ class RegistroCompletarRequest(BaseModel):
 
 
 class LoginIniciarRequest(BaseModel):
-    email: str
+    """Con `email` se limita a las passkeys de esa cuenta; sin `email` el
+    navegador muestra el selector de passkeys (usernameless)."""
+    email: Optional[str] = None
 
 
 class LoginCompletarRequest(BaseModel):

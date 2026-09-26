@@ -44,18 +44,17 @@ describe('webauthnService', () => {
     expect(api.delete).toHaveBeenCalledWith('/webauthn/credenciales/cred-1');
   });
 
-  it('login/iniciar pide el challenge con el correo', async () => {
-    api.post.mockResolvedValue({
-      challenge: 'Y2hhbGxlbmdl',
-      challenge_id: 'ch-1',
-      allowCredentials: [],
-      userVerification: 'required',
-    });
-    // Sin autenticador disponible, la ceremonia falla pero la llamada inicial ya salió
-    await expect(webauthnService.login('ana@zenth.test')).rejects.toBeTruthy();
+  it('login avisa claramente si el navegador no soporta WebAuthn', async () => {
+    // jsdom no expone PublicKeyCredential → debe avisar y NO llamar a la API
+    await expect(webauthnService.login('ana@zenth.test')).rejects.toThrow(
+      /no soporta|HTTPS/i
+    );
+    expect(api.post).not.toHaveBeenCalled();
+  });
 
-    expect(api.post).toHaveBeenCalledWith('/webauthn/login/iniciar', {
-      email: 'ana@zenth.test',
-    });
+  it('motivoNoDisponible explica por qué no se puede usar', () => {
+    const motivo = webauthnService.motivoNoDisponible();
+    expect(typeof motivo).toBe('string');
+    expect(motivo.length).toBeGreaterThan(0);
   });
 });

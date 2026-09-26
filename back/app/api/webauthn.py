@@ -15,6 +15,7 @@ import uuid
 import json
 import logging
 from datetime import datetime, timezone, timedelta
+from urllib.parse import urlparse
 
 from webauthn import (
     generate_registration_options,
@@ -66,10 +67,30 @@ def _aware(dt):
 
 
 def _rp_id(request: Request) -> str:
-    """RP ID = dominio sin puerto. Se toma de la config o del host de la petición."""
+    """✅ RP ID = dominio del SITIO (el frontend), sin puerto.
+
+    Regla de WebAuthn: el `rpId` debe ser igual al dominio del origen o un
+    sufijo registrable de él. Por eso se toma del header `Origin` que envía el
+    navegador (el del frontend), NO del host del backend: en producción el API
+    vive en otro dominio y usar el host del backend hacía que el navegador
+    rechazara la ceremonia con `SecurityError`.
+    """
     configurado = (settings.WEBAUTHN_RP_ID or "").strip()
     if configurado and configurado != "localhost":
         return configurado
+
+    origen = request.headers.get("origin")
+    if origen:
+        host = urlparse(origen).hostname
+        if host:
+            return host
+
+    referer = request.headers.get("referer")
+    if referer:
+        host = urlparse(referer).hostname
+        if host:
+            return host
+
     host = (request.headers.get("host") or "localhost").split(":")[0]
     return host or "localhost"
 
@@ -116,6 +137,20 @@ def _cred_a_dict(cred: CredencialWebAuthn) -> dict:
         "created_at": cred.created_at,
         "last_used_at": cred.last_used_at,
     }
+
+
+def _descriptor(credential_id: str):
+    """Descriptor seguro para las opciones: si el id guardado estuviera corrupto
+    se ignora (con aviso) en lugar de romper todo el login."""
+    try:
+        return PublicKeyCredentialDescriptor(id=base64url_to_bytes(str(credential_id)))
+    except Exception:
+        logger.warning(f"Credencial con id inválido ignorada: {credential_id!r}")
+        return None
+
+
+def _descriptores(credenciales: List[CredencialWebAuthn]) -> List[PublicKeyCredentialDescriptor]:
+    return [d for d in (_descriptor(c.credential_id) for c in credenciales) if d]
 
 
 # =============================================
@@ -188,10 +223,7 @@ def registro_iniciar(
             user_id=str(current_user.id).encode("utf-8"),
             user_name=current_user.email,
             user_display_name=current_user.nombre_completo or current_user.email,
-            exclude_credentials=[
-                PublicKeyCredentialDescriptor(id=base64url_to_bytes(c.credential_id))
-                for c in credenciales
-            ],
+            exclude_credentials=_descriptores(credenciales),
             authenticator_selection=AuthenticatorSelectionCriteria(
                 user_verification=UserVerificationRequirement.REQUIRED,
                 resident_key=ResidentKeyRequirement.PREFERRED,
@@ -284,9 +316,30 @@ def login_iniciar(
     db: Session = Depends(get_db),
     _rate_limited=Depends(rate_limit(20, 60)),
 ):
-    """Genera el challenge de login para la cuenta indicada."""
+    """Genera el challenge de login.
+
+    - Con `email`: busca las passkeys de esa cuenta (flujo clásico).
+    - Sin `email`: **sin usuario** (usernameless): el navegador muestra el
+      selector de passkeys y el usuario se resuelve en `login/completar` desde
+      el `userHandle` que firma el dispositivo.
+    """
     try:
         email = (data.email or "").strip().lower()
+
+        if not email:
+            # ✅ Usernameless: no sabemos quién es hasta que firma
+            opciones = generate_authentication_options(
+                rp_id=_rp_id(request),
+                allow_credentials=[],
+                user_verification=UserVerificationRequirement.REQUIRED,
+            )
+            challenge_id = _guardar_challenge(
+                db, "", bytes_to_base64url(opciones.challenge), "login"
+            )
+            payload = json.loads(options_to_json(opciones))
+            payload["challenge_id"] = challenge_id
+            return payload
+
         usuario = db.query(Usuario).filter(
             func.lower(Usuario.email) == email,
             Usuario.activo == True,  # noqa: E712
@@ -300,7 +353,8 @@ def login_iniciar(
         credenciales = db.query(CredencialWebAuthn).filter(
             CredencialWebAuthn.usuario_id == str(usuario.id)
         ).all()
-        if not credenciales:
+        descriptores = _descriptores(credenciales)
+        if not descriptores:
             raise HTTPException(
                 status_code=400,
                 detail="Esta cuenta todavía no tiene huella/Face ID registrado",
@@ -308,10 +362,7 @@ def login_iniciar(
 
         opciones = generate_authentication_options(
             rp_id=_rp_id(request),
-            allow_credentials=[
-                PublicKeyCredentialDescriptor(id=base64url_to_bytes(c.credential_id))
-                for c in credenciales
-            ],
+            allow_credentials=descriptores,
             user_verification=UserVerificationRequirement.REQUIRED,
         )
 
@@ -348,23 +399,45 @@ def login_completar(
                 detail="La solicitud expiró. Intentá de nuevo.",
             )
 
-        usuario = db.query(Usuario).filter(
-            Usuario.id == fila.usuario_id,
-            Usuario.activo == True,  # noqa: E712
-        ).first()
-        if not usuario:
-            raise HTTPException(status_code=404, detail="Usuario no encontrado")
-
         credential_id = str(data.credential.get("id") or "")
-        cred = db.query(CredencialWebAuthn).filter(
-            CredencialWebAuthn.usuario_id == str(usuario.id),
-            CredencialWebAuthn.credential_id == credential_id,
-        ).first()
+        if not credential_id:
+            raise HTTPException(status_code=400, detail="Credencial inválida")
+
+        # ✅ Con email: la credencial debe ser de ese usuario.
+        # ✅ Sin email (usernameless): se busca por la credencial firmada.
+        if fila.usuario_id:
+            cred = db.query(CredencialWebAuthn).filter(
+                CredencialWebAuthn.usuario_id == str(fila.usuario_id),
+                CredencialWebAuthn.credential_id == credential_id,
+            ).first()
+        else:
+            cred = db.query(CredencialWebAuthn).filter(
+                CredencialWebAuthn.credential_id == credential_id
+            ).first()
+
         if not cred:
             raise HTTPException(
                 status_code=400,
                 detail="Esta credencial no está registrada en tu cuenta",
             )
+
+        # ✅ Si el dispositivo devuelve userHandle, debe coincidir con el dueño
+        user_handle_b64 = (data.credential.get("response") or {}).get("userHandle")
+        if user_handle_b64:
+            try:
+                user_handle_id = base64url_to_bytes(str(user_handle_b64)).decode("utf-8")
+            except Exception:
+                user_handle_id = None
+            if user_handle_id and str(user_handle_id) != str(cred.usuario_id):
+                logger.warning("userHandle no coincide con el dueño de la credencial")
+                raise HTTPException(status_code=401, detail="Credencial rechazada")
+
+        usuario = db.query(Usuario).filter(
+            Usuario.id == cred.usuario_id,
+            Usuario.activo == True,  # noqa: E712
+        ).first()
+        if not usuario:
+            raise HTTPException(status_code=404, detail="Usuario no encontrado")
 
         try:
             verificacion = verify_authentication_response(

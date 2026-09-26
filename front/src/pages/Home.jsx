@@ -14,24 +14,15 @@ import webauthnService from '../services/webauthnService';
 const Home = () => {
   const navigate = useNavigate();
 
-  const [email, setEmail] = useState('');
+  const [email, setEmail] = useState(() => webauthnService.emailRecordado());
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
-  // ✅ Login con huella / Face ID
-  const [huellaDisponible, setHuellaDisponible] = useState(false);
+  // ✅ Login con huella / Face ID (se calcula en el render: no necesita efecto)
+  const motivoHuella = webauthnService.motivoNoDisponible();
+  const huellaDisponible = !motivoHuella;
   const [cargandoHuella, setCargandoHuella] = useState(false);
-
-  useEffect(() => {
-    let activo = true;
-    webauthnService.disponibleEnDispositivo().then((ok) => {
-      if (activo) setHuellaDisponible(ok);
-    });
-    return () => {
-      activo = false;
-    };
-  }, []);
 
   useEffect(() => {
     // ✅ Mensaje de error devuelto por el login social (OAuth)
@@ -60,6 +51,8 @@ const Home = () => {
     try {
       const result = await authService.login(email, password);
       if (result.success) {
+        // ✅ Recordamos el correo para el próximo acceso (y para la huella)
+        webauthnService.guardarEmail(email);
         const rol = authService.getRol();
 
         if (rol === 'admin') {
@@ -79,17 +72,14 @@ const Home = () => {
     }
   };
 
-  // ✅ Entrar con huella / Face ID (el correo es la pista para buscar tus passkeys)
+  // ✅ Entrar con huella / Face ID.
+  // Si escribiste tu correo se usan tus passkeys; si lo dejás vacío, el
+  // dispositivo muestra el selector de passkeys (usernameless).
   const handleLoginHuella = async () => {
-    const correo = email.trim();
-    if (!correo) {
-      setError('Escribí tu correo y después tocá "Entrar con huella"');
-      return;
-    }
     setError('');
     setCargandoHuella(true);
     try {
-      const data = await webauthnService.login(correo);
+      const data = await webauthnService.login(email);
       const rol = data?.user?.rol || authService.getRol();
       navigate(rol === 'admin' ? '/admin' : rol === 'docente' ? '/docente' : '/estudiante');
     } catch (e) {
@@ -198,22 +188,31 @@ const Home = () => {
           {/* Login social (Google / Microsoft) */}
           <SocialLoginButtons onError={setError} />
 
-          {/* ✅ Huella / Face ID (solo si el dispositivo lo soporta) */}
-          {huellaDisponible && (
-            <button
-              type="button"
-              onClick={handleLoginHuella}
-              disabled={cargandoHuella}
-              className="mt-3 w-full py-3 text-sm font-medium rounded-xl border transition-colors flex items-center justify-center gap-2 disabled:opacity-50"
-              style={{ borderColor: '#0f766e', color: '#0f766e' }}
-            >
-              {cargandoHuella ? (
-                <Loader2 className="w-4 h-4 animate-spin" />
-              ) : (
-                <Fingerprint className="w-4 h-4" />
-              )}
-              Entrar con huella / Face ID
-            </button>
+          {/* ✅ Huella / Face ID */}
+          {huellaDisponible ? (
+            <>
+              <button
+                type="button"
+                onClick={handleLoginHuella}
+                disabled={cargandoHuella}
+                className="mt-3 w-full py-3 text-sm font-medium rounded-xl border transition-colors flex items-center justify-center gap-2 disabled:opacity-50"
+                style={{ borderColor: '#0f766e', color: '#0f766e' }}
+              >
+                {cargandoHuella ? (
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                ) : (
+                  <Fingerprint className="w-4 h-4" />
+                )}
+                Entrar con huella / Face ID
+              </button>
+              <p className="mt-2 text-[11px] text-gray-400 text-center leading-relaxed">
+                Podés dejar el correo vacío: el dispositivo te mostrará tus accesos guardados.
+              </p>
+            </>
+          ) : (
+            <p className="mt-3 text-[11px] text-gray-400 text-center leading-relaxed">
+              Huella / Face ID no disponible: {motivoHuella}
+            </p>
           )}
 
           <div className="mt-6 text-center">

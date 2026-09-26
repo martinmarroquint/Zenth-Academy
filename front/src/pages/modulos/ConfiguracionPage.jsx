@@ -118,7 +118,9 @@ const ConfiguracionPage = () => {
   const [mensajePass, setMensajePass] = useState('');
 
   // ===== SEGURIDAD: HUELLA / FACE ID (passkeys) =====
-  const [huellaDisponible, setHuellaDisponible] = useState(false);
+  // El soporte se calcula en el render (no necesita efecto)
+  const motivoHuella = webauthnService.motivoNoDisponible();
+  const huellaDisponible = !motivoHuella;
   const [passkeys, setPasskeys] = useState([]);
   const [cargandoPasskey, setCargandoPasskey] = useState(false);
   const [mensajePasskey, setMensajePasskey] = useState('');
@@ -126,8 +128,6 @@ const ConfiguracionPage = () => {
   useEffect(() => {
     let activo = true;
     (async () => {
-      const disponible = await webauthnService.disponibleEnDispositivo();
-      if (activo) setHuellaDisponible(disponible);
       try {
         const data = await webauthnService.credenciales();
         if (activo) setPasskeys(Array.isArray(data) ? data : []);
@@ -544,8 +544,7 @@ const ConfiguracionPage = () => {
 
             {!huellaDisponible ? (
               <p className="text-xs text-gray-500">
-                Este dispositivo o navegador no ofrece biometría (huella, Face ID o Windows Hello).
-                Probá desde tu celular o una laptop compatible.
+                Huella / Face ID no disponible: <span className="text-gray-700">{motivoHuella}</span>
               </p>
             ) : (
               <>

@@ -4,11 +4,14 @@
 # de lecciones, calificaciones manuales, gestión de accesos, progreso
 # detallado y desinscripción por parte del docente.
 
+import csv
+import io
 import uuid
 from datetime import datetime, timedelta, timezone
 
 import pytest
 
+from app.models.alumno import Alumno
 from app.models.curso import (
     AccesoCurso,
     Curso,
@@ -16,6 +19,7 @@ from app.models.curso import (
     InscripcionCurso,
     ProgresoLeccion,
 )
+from app.models.examen import Examen
 from app.models.resultado_examen import ResultadoExamen
 
 
@@ -75,6 +79,29 @@ MODULOS_CON_BLOQUE_EXAMEN = [
                         "id": "b2",
                         "tipo": "examen",
                         "contenido": {"examen_id": "examen-bloque-test"},
+                    },
+                ],
+            },
+        ],
+    }
+]
+
+# Lección con calificación manual (0-20) + lección con bloque-examen (0-100)
+MODULOS_MANUAL_Y_EXAMEN = [
+    {
+        "id": "m1",
+        "titulo": "M\u00f3dulo 1",
+        "lecciones": [
+            {"id": "l1", "titulo": "Lecci\u00f3n manual", "tipo": "texto"},
+            {
+                "id": "l2",
+                "titulo": "Lecci\u00f3n con examen",
+                "tipo": "texto",
+                "bloques": [
+                    {
+                        "id": "b1",
+                        "tipo": "examen",
+                        "contenido": {"examen_id": "examen-csv-test"},
                     },
                 ],
             },
@@ -1232,6 +1259,126 @@ def test_docente_exporta_estudiantes_csv(
     assert resp.status_code == 200, resp.text
     assert "text/csv" in resp.headers["content-type"]
     assert "estudiante_id" in resp.text
+
+
+def _filas_csv(resp) -> list:
+    """Lee el CSV del export (tolerante al BOM de Excel)."""
+    return list(csv.DictReader(io.StringIO(resp.text.lstrip("\ufeff"))))
+
+
+@pytest.mark.integration
+def test_csv_export_incluye_identidad_y_notas(
+    client, db, docente_user, estudiante_user, docente_headers, estudiante_headers
+):
+    """El CSV trae identidad (DNI/email), nota de lección (0-20) y mejor nota
+    de examen (0-100) en columnas separadas, con el umbral del propio examen."""
+    curso = _crear_curso(db, docente_user, modulos=MODULOS_MANUAL_Y_EXAMEN)
+    _inscribir(client, curso.id, estudiante_headers)
+
+    # Identidad de catálogo: para los autorregistrados Alumno.id == usuario.id
+    db.add(
+        Alumno(
+            id=str(estudiante_user.id),
+            usuario_id=str(estudiante_user.id),
+            nombres="Ana",
+            apellidos="P\u00e9rez",
+            dni="12345678",
+            grado="5\u00b0",
+        )
+    )
+    db.add(
+        Examen(
+            id="examen-csv-test",
+            codigo="CSV-TEST",
+            titulo="Examen del CSV",
+            tiempo_limite=30,
+            puntaje_aprobacion=80.0,
+            estado="PUBLICADO",
+            docente_id=str(docente_user.id),
+        )
+    )
+    db.commit()
+
+    # Nota manual de lección (escala 0-20)
+    resp = client.put(
+        f"/api/v1/cursos/{curso.id}/calificaciones/{estudiante_user.id}/l1",
+        json={"nota": 15},
+        headers=docente_headers,
+    )
+    assert resp.status_code == 200, resp.text
+
+    # Nota de examen (escala 0-100) referenciada por la lección l2
+    db.add(
+        ResultadoExamen(
+            id=str(uuid.uuid4()),
+            examen_id="examen-csv-test",
+            alumno_id=str(estudiante_user.id),
+            alumno_id_unificado=str(estudiante_user.id),
+            alumno_nombre="Ana P\u00e9rez",
+            respuestas={},
+            calificacion=75.0,
+            correctas=3,
+            total_preguntas=4,
+            estado="COMPLETADO",
+        )
+    )
+    db.commit()
+
+    resp = client.get(
+        f"/api/v1/cursos/{curso.id}/estudiantes/exportar",
+        headers=docente_headers,
+    )
+
+    assert resp.status_code == 200, resp.text
+    filas = _filas_csv(resp)
+    assert len(filas) == 1
+    fila = filas[0]
+
+    # Identidad trazable
+    assert fila["estudiante_id"] == str(estudiante_user.id)
+    assert fila["dni"] == "12345678"
+    assert fila["grado"] == "5\u00b0"
+    assert fila["cuenta_registrada"] == "SI"
+
+    # Nota de lección: solo la manual, nunca mezclada con la del examen
+    assert float(fila["promedio_notas_leccion"]) == 15.0
+    assert fila["notas_registradas"] == "1"
+
+    # Nota de examen: escala 0-100 y aprobado según puntaje_aprobacion (80)
+    assert float(fila["mejor_nota_examen"]) == 75.0
+    assert fila["examenes_rendidos"] == "1"
+    assert fila["examen_aprobado"] == "NO"
+
+
+@pytest.mark.integration
+def test_csv_export_incluye_alumno_inscrito_sin_acceso(
+    client, db, docente_user, estudiante_user, docente_headers
+):
+    """Un alumno inscrito pero SIN fila de AccesoCurso no desaparece del
+    reporte (antes solo se iteraban los accesos activos)."""
+    curso = _crear_curso(db, docente_user, modulos=MODULOS_2_LECCIONES)
+    db.add(
+        InscripcionCurso(
+            id=str(uuid.uuid4()),
+            curso_id=str(curso.id),
+            estudiante_id=str(estudiante_user.id),
+            estudiante_nombre="Alumno Sin Acceso",
+        )
+    )
+    db.commit()
+
+    resp = client.get(
+        f"/api/v1/cursos/{curso.id}/estudiantes/exportar",
+        headers=docente_headers,
+    )
+
+    assert resp.status_code == 200, resp.text
+    filas = _filas_csv(resp)
+    assert len(filas) == 1
+    assert filas[0]["estudiante_id"] == str(estudiante_user.id)
+    assert filas[0]["estudiante_nombre"] == "Alumno Sin Acceso"
+    assert filas[0]["tipo_acceso"] == "inscripcion"
+    assert filas[0]["cuenta_registrada"] == "SI"
 
 
 @pytest.mark.integration

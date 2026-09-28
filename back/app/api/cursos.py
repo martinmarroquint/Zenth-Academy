@@ -28,6 +28,7 @@ from app.models.curso import (
 from app.models.certificado import Certificado
 from app.core.certificado_firma import calcular_firma
 from app.models.resultado_examen import ResultadoExamen
+from app.models.alumno import Alumno
 from app.models.examen import Examen
 from app.models.comentario_leccion import ComentarioLeccion, LikeComentarioLeccion
 from app.schemas.curso import (
@@ -1184,7 +1185,7 @@ async def listar_estudiantes_curso(
             estudiante_id = str(acceso.estudiante_id)
             insc = inscripcion_por_estudiante.get(estudiante_id)
             completadas = completadas_por_estudiante.get(estudiante_id, 0)
-            progreso_calculado = int((completadas / total_lecciones) * 100) if total_lecciones > 0 else (insc.progreso if insc else 0)
+            progreso_calculado = int((completadas / total_lecciones) * 100) if total_lecciones > 0 else ((insc.progreso or 0) if insc else 0)
             
             estudiantes.append({
                 "estudiante_id": estudiante_id,
@@ -1214,13 +1215,48 @@ async def listar_estudiantes_curso(
         raise HTTPException(status_code=500, detail=error_interno(e, "Error listando estudiantes del curso"))
 
 
+def _lecciones_de_tipo_examen(curso: Curso) -> set:
+    """Ids de lecciones que evalúan con un examen (contenido.examen_id o
+    bloque-examen). Su nota proviene de ResultadoExamen en escala 0-100, así
+    que no deben mezclarse con el promedio manual de lecciones (0-20)."""
+    ids = set()
+    for modulo in curso.modulos or []:
+        for leccion in modulo.get("lecciones") or []:
+            leccion_id = leccion.get("id")
+            contenido = leccion.get("contenido") or {}
+            es_examen = bool(contenido.get("examen_id")) or any(
+                (bloque or {}).get("tipo") == "examen"
+                for bloque in (leccion.get("bloques") or [])
+            )
+            if es_examen and leccion_id:
+                ids.add(str(leccion_id))
+    return ids
+
+
+def _examenes_ids_del_curso(curso: Curso) -> set:
+    """Ids de exámenes referenciados por las lecciones del curso (misma
+    lógica que _examenes_accesibles_estudiante)."""
+    ids = set()
+    for modulo in curso.modulos or []:
+        for leccion in modulo.get("lecciones") or []:
+            contenido = leccion.get("contenido") or {}
+            if contenido.get("examen_id"):
+                ids.add(str(contenido["examen_id"]))
+            for bloque in leccion.get("bloques") or []:
+                if (bloque or {}).get("tipo") == "examen":
+                    eid = (bloque.get("contenido") or {}).get("examen_id")
+                    if eid:
+                        ids.add(str(eid))
+    return ids
+
+
 @router.get("/{id}/estudiantes/exportar")
 async def exportar_estudiantes_csv(
     id: str,
     db: Session = Depends(get_db),
     current_user: Usuario = Depends(require_docente)
 ):
-    """Docente: Exporta los estudiantes del curso a CSV (con progreso y notas)"""
+    """Docente: Exporta los estudiantes del curso a CSV (identidad, progreso y notas)"""
     try:
         curso = db.query(Curso).filter(Curso.id == id).first()
         if not curso:
@@ -1232,56 +1268,159 @@ async def exportar_estudiantes_csv(
                 detail="No tienes permiso para exportar los estudiantes de este curso"
             )
 
-        accesos = db.query(AccesoCurso).filter(
-            AccesoCurso.curso_id == id,
-            AccesoCurso.activo == True
-        ).all()
-
+        # ✅ TRAZABILIDAD: el roster es inscripciones ∪ accesos activos.
+        # Antes solo se iteraban los accesos: un alumno inscrito sin fila de
+        # acceso (o con el acceso desactivado) desaparecía del reporte.
         inscripciones = db.query(InscripcionCurso).filter(
             cast(InscripcionCurso.curso_id, String) == id
         ).all()
         inscripcion_por_estudiante = {str(ins.estudiante_id): ins for ins in inscripciones}
 
-        # Progreso completo (todas las lecciones con nota) para el detalle de calificaciones
-        progresos = db.query(ProgresoLeccion).filter(
-            cast(ProgresoLeccion.curso_id, String) == id,
-            ProgresoLeccion.completado == True
+        accesos = db.query(AccesoCurso).filter(
+            AccesoCurso.curso_id == id,
+            AccesoCurso.activo == True
         ).all()
+        acceso_por_estudiante = {str(acc.estudiante_id): acc for acc in accesos}
+
+        estudiantes_ids = sorted(set(inscripcion_por_estudiante) | set(acceso_por_estudiante))
+        conjunto_ids = set(estudiantes_ids)
+
+        # Lecciones que son exámenes: su nota vive en ResultadoExamen (0-100),
+        # no en la escala 0-20 de las lecciones con calificación manual.
+        lecciones_examen_ids = _lecciones_de_tipo_examen(curso)
+        examen_ids = _examenes_ids_del_curso(curso)
+
+        # Progreso y notas de lección de TODAS las lecciones (antes solo se
+        # consultaban las completadas, con lo que se perdían las notas).
+        progresos = (
+            db.query(ProgresoLeccion).filter(
+                cast(ProgresoLeccion.curso_id, String) == id,
+                ProgresoLeccion.estudiante_id.in_(estudiantes_ids)
+            ).all()
+            if estudiantes_ids else []
+        )
         completadas_por_estudiante = {}
+        notas_leccion_por_estudiante = {}
         for p in progresos:
-            completadas_por_estudiante[str(p.estudiante_id)] = completadas_por_estudiante.get(str(p.estudiante_id), 0) + 1
+            clave = str(p.estudiante_id)
+            if p.completado:
+                completadas_por_estudiante[clave] = completadas_por_estudiante.get(clave, 0) + 1
+            if p.nota is not None and str(p.leccion_id) not in lecciones_examen_ids:
+                notas_leccion_por_estudiante.setdefault(clave, []).append(float(p.nota))
+
+        # Identidad: fila de catálogo resuelta por Alumno.id O Alumno.usuario_id
+        # (las altas por Google no crean fila Alumno, así que también se mira Usuario).
+        alumnos = (
+            db.query(Alumno).filter(
+                or_(Alumno.id.in_(estudiantes_ids), Alumno.usuario_id.in_(estudiantes_ids))
+            ).all()
+            if estudiantes_ids else []
+        )
+        alumno_por_estudiante = {}
+        for al in alumnos:
+            for clave in (str(al.id), str(al.usuario_id) if al.usuario_id else None):
+                if clave in conjunto_ids and clave not in alumno_por_estudiante:
+                    alumno_por_estudiante[clave] = al
+        usuarios = {
+            str(u.id): u
+            for u in db.query(Usuario).filter(Usuario.id.in_(estudiantes_ids)).all()
+        } if estudiantes_ids else {}
+
+        # ✅ Notas de examen del curso (escala 0-100, excluye TRAMPA y los
+        # centinelas 'publico'/'anonimo' porque no pertenecen a ningún alumno).
+        # Ojo: ResultadoExamen NO guarda "aprobado", se deriva del
+        # puntaje_aprobacion (60 por defecto) del examen correspondiente.
+        umbrales_examen = {
+            str(ex.id): float(ex.puntaje_aprobacion or 60)
+            for ex in db.query(Examen).filter(Examen.id.in_(list(examen_ids))).all()
+        } if examen_ids else {}
+        mejor_examen_por_estudiante = {}
+        examenes_rendidos_por_estudiante = {}
+        if examen_ids and estudiantes_ids:
+            resultados = db.query(ResultadoExamen).filter(
+                ResultadoExamen.examen_id.in_(list(examen_ids)),
+                or_(
+                    ResultadoExamen.alumno_id.in_(estudiantes_ids),
+                    ResultadoExamen.alumno_id_unificado.in_(estudiantes_ids)
+                )
+            ).all()
+            for res in resultados:
+                if res.estado == "TRAMPA" or res.calificacion is None:
+                    continue
+                clave = str(res.alumno_id)
+                if clave not in conjunto_ids:
+                    clave = str(res.alumno_id_unificado)
+                if clave not in conjunto_ids:
+                    continue
+                examenes_rendidos_por_estudiante[clave] = examenes_rendidos_por_estudiante.get(clave, 0) + 1
+                actual = mejor_examen_por_estudiante.get(clave)
+                if actual is None or float(res.calificacion) > float(actual.calificacion or 0):
+                    mejor_examen_por_estudiante[clave] = res
 
         total_lecciones = sum(len(m.get("lecciones", [])) for m in (curso.modulos or []))
 
         # Filas CSV
         filas = []
-        for acceso in accesos:
-            estudiante_id = str(acceso.estudiante_id)
+        for estudiante_id in estudiantes_ids:
+            acceso = acceso_por_estudiante.get(estudiante_id)
             insc = inscripcion_por_estudiante.get(estudiante_id)
+            alumno = alumno_por_estudiante.get(estudiante_id)
+            usuario = usuarios.get(estudiante_id)
             completadas = completadas_por_estudiante.get(estudiante_id, 0)
-            progreso_calculado = int((completadas / total_lecciones) * 100) if total_lecciones > 0 else (insc.progreso if insc else 0)
+            progreso_calculado = int((completadas / total_lecciones) * 100) if total_lecciones > 0 else ((insc.progreso or 0) if insc else 0)
+
+            notas = notas_leccion_por_estudiante.get(estudiante_id) or []
+            promedio = round(sum(notas) / len(notas), 2) if notas else None
+            mejor = mejor_examen_por_estudiante.get(estudiante_id)
+            umbral_examen = 60.0
+            if mejor is not None:
+                umbral_examen = umbrales_examen.get(str(mejor.examen_id), 60.0)
+
+            nombre = (
+                (acceso.estudiante_nombre if acceso else None)
+                or (insc.estudiante_nombre if insc else None)
+                or (alumno.nombre_corto if alumno else None)
+                or (f"{usuario.nombres} {usuario.apellidos}".strip() if usuario else "")
+                or "Sin nombre"
+            )
 
             filas.append({
                 "estudiante_id": estudiante_id,
-                "estudiante_nombre": (acceso.estudiante_nombre or (insc.estudiante_nombre if insc else "") or "Sin nombre"),
-                "tipo_acceso": acceso.tipo_acceso or "",
+                "estudiante_nombre": nombre,
+                "dni": (alumno.dni if alumno else None) or "",
+                "email": (alumno.email if alumno and alumno.email else None) or (usuario.email if usuario else "") or "",
+                "grado": (alumno.grado if alumno else None) or "",
+                "grupo": (alumno.grupo if alumno else None) or "",
+                "cuenta_registrada": "SI" if usuario else "NO",
+                "tipo_acceso": (acceso.tipo_acceso if acceso else None) or ("inscripcion" if insc else ""),
                 "fecha_inscripcion": (insc.fecha_inscripcion.strftime("%Y-%m-%d") if insc and insc.fecha_inscripcion else ""),
-                "ultimo_acceso": (acceso.ultimo_acceso.strftime("%Y-%m-%d %H:%M") if acceso.ultimo_acceso else ""),
+                "ultimo_acceso": (acceso.ultimo_acceso.strftime("%Y-%m-%d %H:%M") if acceso and acceso.ultimo_acceso else ""),
                 "lecciones_completadas": completadas,
                 "lecciones_totales": total_lecciones,
                 "progreso_porcentaje": min(progreso_calculado, 100),
                 "completado": "SI" if (insc.completado if insc else (completadas >= total_lecciones > 0)) else "NO",
+                "notas_registradas": len(notas),
+                "promedio_notas_leccion": promedio if promedio is not None else "",
+                "examenes_rendidos": examenes_rendidos_por_estudiante.get(estudiante_id, 0),
+                "mejor_nota_examen": float(mejor.calificacion) if mejor else "",
+                "examen_aprobado": (
+                    ("SI" if float(mejor.calificacion or 0) >= umbral_examen else "NO")
+                    if mejor else ""
+                ),
             })
 
-        # Construir CSV
+        # Construir CSV (UTF-8 con BOM para que Excel abra tildes y ñ)
         buffer = io.StringIO()
         writer = csv.DictWriter(
             buffer,
             fieldnames=[
-                "estudiante_id", "estudiante_nombre", "tipo_acceso",
+                "estudiante_id", "estudiante_nombre", "dni", "email", "grado", "grupo",
+                "cuenta_registrada", "tipo_acceso",
                 "fecha_inscripcion", "ultimo_acceso",
                 "lecciones_completadas", "lecciones_totales",
-                "progreso_porcentaje", "completado"
+                "progreso_porcentaje", "completado",
+                "notas_registradas", "promedio_notas_leccion",
+                "examenes_rendidos", "mejor_nota_examen", "examen_aprobado"
             ]
         )
         writer.writeheader()
@@ -1289,7 +1428,8 @@ async def exportar_estudiantes_csv(
 
         nombre_archivo = f"estudiantes_{id}.csv"
         return Response(
-            content=buffer.getvalue(),
+            # BOM: Excel necesita UTF-8 BOM para abrir tildes y ñ correctamente
+            content="\ufeff" + buffer.getvalue(),
             media_type="text/csv; charset=utf-8",
             headers={
                 "Content-Disposition": f'attachment; filename="{nombre_archivo}"',

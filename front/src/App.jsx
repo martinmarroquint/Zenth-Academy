@@ -43,6 +43,7 @@ const GeographicAnalytics = lazy(() => import('./components/admin/GeographicAnal
 // =============================================
 const PanelAdminExamenes = lazy(() => import('./components/examenes/PanelAdminExamenes'));
 const PanelAlumnos = lazy(() => import('./components/alumnos/PanelAlumnos'));
+const FichaAlumno = lazy(() => import('./pages/FichaAlumno'));
 const CursosPage = lazy(() => import('./pages/modulos/CursosPage'));
 const PizarrasPage = lazy(() => import('./pages/modulos/PizarrasPage'));
 const ForoPage = lazy(() => import('./pages/modulos/ForoPage'));
@@ -79,6 +80,7 @@ const rutasModulos = (
     <Route path="examenes" element={<PanelAdminExamenes />} />
     <Route path="cursos" element={<CursosPage />} />
     <Route path="alumnos" element={<PanelAlumnos />} />
+    <Route path="alumnos/:id" element={<FichaAlumno />} />
     <Route path="materiales" element={<MaterialesPage />} />
     <Route path="biblioteca" element={<BibliotecaPage />} />
     <Route path="pizarra" element={<PizarrasPage />} />

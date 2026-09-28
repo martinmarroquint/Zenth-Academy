@@ -16,6 +16,10 @@ from datetime import datetime, timezone
 from app.database import get_db
 from app.core.dependencies import get_current_active_user, require_docente, require_admin
 from app.core.errors import error_interno
+from app.core.curso_utils import (
+    lecciones_de_tipo_examen,
+    examenes_ids_del_curso,
+)
 from app.core.cache import (
     cache, invalidar_cursos, invalidar_solicitudes,
     CLAVE_CATALOGO_CURSOS, CLAVE_SOLICITUDES,
@@ -1215,41 +1219,6 @@ async def listar_estudiantes_curso(
         raise HTTPException(status_code=500, detail=error_interno(e, "Error listando estudiantes del curso"))
 
 
-def _lecciones_de_tipo_examen(curso: Curso) -> set:
-    """Ids de lecciones que evalúan con un examen (contenido.examen_id o
-    bloque-examen). Su nota proviene de ResultadoExamen en escala 0-100, así
-    que no deben mezclarse con el promedio manual de lecciones (0-20)."""
-    ids = set()
-    for modulo in curso.modulos or []:
-        for leccion in modulo.get("lecciones") or []:
-            leccion_id = leccion.get("id")
-            contenido = leccion.get("contenido") or {}
-            es_examen = bool(contenido.get("examen_id")) or any(
-                (bloque or {}).get("tipo") == "examen"
-                for bloque in (leccion.get("bloques") or [])
-            )
-            if es_examen and leccion_id:
-                ids.add(str(leccion_id))
-    return ids
-
-
-def _examenes_ids_del_curso(curso: Curso) -> set:
-    """Ids de exámenes referenciados por las lecciones del curso (misma
-    lógica que _examenes_accesibles_estudiante)."""
-    ids = set()
-    for modulo in curso.modulos or []:
-        for leccion in modulo.get("lecciones") or []:
-            contenido = leccion.get("contenido") or {}
-            if contenido.get("examen_id"):
-                ids.add(str(contenido["examen_id"]))
-            for bloque in leccion.get("bloques") or []:
-                if (bloque or {}).get("tipo") == "examen":
-                    eid = (bloque.get("contenido") or {}).get("examen_id")
-                    if eid:
-                        ids.add(str(eid))
-    return ids
-
-
 @router.get("/{id}/estudiantes/exportar")
 async def exportar_estudiantes_csv(
     id: str,
@@ -1287,8 +1256,8 @@ async def exportar_estudiantes_csv(
 
         # Lecciones que son exámenes: su nota vive en ResultadoExamen (0-100),
         # no en la escala 0-20 de las lecciones con calificación manual.
-        lecciones_examen_ids = _lecciones_de_tipo_examen(curso)
-        examen_ids = _examenes_ids_del_curso(curso)
+        lecciones_examen_ids = lecciones_de_tipo_examen(curso)
+        examen_ids = examenes_ids_del_curso(curso)
 
         # Progreso y notas de lección de TODAS las lecciones (antes solo se
         # consultaban las completadas, con lo que se perdían las notas).

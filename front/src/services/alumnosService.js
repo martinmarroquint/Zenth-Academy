@@ -26,6 +26,17 @@ const alumnosService = {
     }
   },
 
+  // Ficha trazable del alumno: identidad + cursos + exámenes + certificados.
+  // Acepta el id del catálogo (Alumno.id) o el de la cuenta (Usuario.id).
+  ficha: async (id) => {
+    try {
+      return await api.get(`/alumnos/${id}/ficha`);
+    } catch (error) {
+      console.error('Error obteniendo la ficha del alumno:', error);
+      throw error;
+    }
+  },
+
   crear: async (data) => {
     try {
       return await api.post('/alumnos', data);

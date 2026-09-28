@@ -87,6 +87,7 @@ const MENU_POR_ROL = {
       seccion: 'CURSOS',
       items: [
         { id: 'cursos', label: 'Mis Cursos', to: 'cursos' },
+        { id: 'alumnos', label: 'Alumnos', to: 'alumnos' },
         { id: 'solicitudes', label: 'Solicitudes', to: 'solicitudes' },
         { id: 'certificados', label: 'Certificados', to: 'certificados' },
       ],

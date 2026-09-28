@@ -21,6 +21,7 @@ import {
 } from 'lucide-react';
 // ✅ CORREGIDO: usar '../../services' en lugar de '../services'
 import cursosService from '../../services/cursosService';
+import { useNavigate } from 'react-router-dom';
 
 // ============================================================
 // COMPONENTE DE TOAST NOTIFICATIONS
@@ -103,6 +104,7 @@ const ConfirmModal = ({ isOpen, onClose, onConfirm, title, message, confirmText 
 // COMPONENTE PRINCIPAL
 // ============================================================
 const EstudiantesCurso = ({ cursoId }) => {
+  const navigate = useNavigate();
   const [data, setData] = useState(null);
   const [cargando, setCargando] = useState(true);
   const [error, setError] = useState('');
@@ -650,6 +652,17 @@ const EstudiantesCurso = ({ cursoId }) => {
 
                     {/* Acciones */}
                     <div className="flex items-center gap-0.5 flex-shrink-0">
+                      <button
+                        onClick={() =>
+                          navigate(
+                            `${window.location.pathname.startsWith('/admin') ? '/admin' : '/docente'}/alumnos/${est.estudiante_id}`
+                          )
+                        }
+                        title="Ver ficha completa del alumno"
+                        className="p-2.5 hover:bg-teal-50 rounded-lg text-gray-400 hover:text-[#0f766e] transition-colors min-w-[44px] min-h-[44px] flex items-center justify-center"
+                      >
+                        <Eye className="w-4 h-4" />
+                      </button>
                       <button
                         onClick={() => handleDesinscribir(est.estudiante_id, est.estudiante_nombre)}
                         disabled={desinscribiendo === est.estudiante_id}

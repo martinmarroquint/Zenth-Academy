@@ -2,9 +2,10 @@
 // PANEL DE GESTIÓN DE ALUMNOS - INDEPENDIENTE
 
 import React, { useState, useEffect } from 'react';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { 
   Users, Search, Upload, Trash2, UserPlus, Loader2,
-  X, AlertCircle, Download, Filter, Plus, ChevronLeft
+  X, AlertCircle, Download, Filter, Plus, ChevronLeft, Eye
 } from 'lucide-react';
 import alumnosService from '../../services/alumnosService';
 import CargarAlumnos from './CargarAlumnos';
@@ -13,6 +14,12 @@ import { useFeedback } from '../../hooks/useFeedback';
 
 const PanelAlumnos = ({ onVolver, onSeleccionar, seleccionInicial = [] }) => {
   const { confirmar, toast } = useFeedback();
+  const navigate = useNavigate();
+  const { pathname } = useLocation();
+  // El panel se monta en /docente/alumnos y en /admin/alumnos: la ficha
+  // siempre se abre dentro del mismo panel para no sacar al usuario de su rol.
+  const verFicha = (idAlumno) =>
+    navigate(`${pathname.startsWith('/admin') ? '/admin' : '/docente'}/alumnos/${idAlumno}`);
   const [alumnos, setAlumnos] = useState([]);
   const [cargando, setCargando] = useState(true);
   const [error, setError] = useState('');
@@ -330,6 +337,13 @@ const PanelAlumnos = ({ onVolver, onSeleccionar, seleccionInicial = [] }) => {
                     </div>
                     {!modoSeleccion && (
                       <div className="col-span-1 flex items-center justify-end gap-1">
+                        <button
+                          onClick={() => verFicha(alumno.id)}
+                          title="Ver ficha del alumno"
+                          className="p-1 hover:bg-teal-50 rounded text-gray-400 hover:text-[#0f766e] transition-colors"
+                        >
+                          <Eye className="w-4 h-4" />
+                        </button>
                         <button
                           onClick={() => handleEliminarAlumno(alumno.id)}
                           className="p-1 hover:bg-red-50 rounded text-gray-400 hover:text-red-500 transition-colors"

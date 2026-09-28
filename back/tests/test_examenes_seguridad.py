@@ -708,6 +708,57 @@ def test_publico_no_atribuye_ids_de_usuarios_reales(client, db, docente_user):
     assert fila.alumno_id == "publico", fila.alumno_id
 
 
+@pytest.mark.integration
+def test_publico_anonimo_guarda_resultado(client, db, docente_user):
+    """Modo anónimo: el resultado se guarda sin identidad (alumno_id=None)."""
+    from app.models.resultado_examen import ResultadoExamen
+
+    examen = _crear_examen(
+        db, docente_user, estado="PUBLICADO",
+        configuracion={"acceso_publico": True, "anonimo": True},
+        preguntas=[_pregunta_om()],
+    )
+    it = client.post(f"/api/v1/examenes/publico/{examen.codigo}/intentos", json={})
+    resp = client.post(
+        f"/api/v1/examenes/publico/{examen.codigo}/resultado",
+        json={"alumno_nombre": "Ana", "respuestas": {"0": 1}, "intento_id": it.json()["intento_id"]},
+    )
+    assert resp.status_code == 201, resp.text
+
+    db.expire_all()
+    fila = db.query(ResultadoExamen).filter(ResultadoExamen.examen_id == str(examen.id)).first()
+    assert fila is not None, "no se guardó el resultado anónimo"
+    assert fila.alumno_id == "anonimo", fila.alumno_id
+    assert fila.alumno_nombre == "Anonimo", fila.alumno_nombre
+
+
+@pytest.mark.integration
+def test_publico_conteo_de_intentos_por_participante(client, db, docente_user, docente_headers):
+    """Dos participantes públicos no deben contarse como el mismo alumno."""
+    examen = _crear_examen(
+        db, docente_user, estado="PUBLICADO",
+        configuracion={"acceso_publico": True},
+        intentos_permitidos=2,
+        preguntas=[_pregunta_om()],
+    )
+    for nombre in ("Ana", "Luis"):
+        it = client.post(f"/api/v1/examenes/publico/{examen.codigo}/intentos", json={})
+        r = client.post(
+            f"/api/v1/examenes/publico/{examen.codigo}/resultado",
+            json={"alumno_nombre": nombre, "respuestas": {"0": 1}, "intento_id": it.json()["intento_id"]},
+        )
+        assert r.status_code == 201, r.text
+
+    resp = client.get(
+        f"/api/v1/examenes/resultados/{examen.id}", headers=docente_headers
+    )
+    assert resp.status_code == 200, resp.text
+    filas = resp.json()
+    assert len(filas) == 2, filas
+    # Cada participante tiene su propio conteo (1 de 2), no el total (2 de 2).
+    assert sorted(f["intentos_usados"] for f in filas) == [1, 1], filas
+
+
 # =====================================================
 # 9. SEGURIDAD: RESULTADOS Y REVISIÓN (MEDIA 4 / MEDIA 5)
 # =====================================================

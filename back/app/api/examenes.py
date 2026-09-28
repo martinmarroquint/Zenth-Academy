@@ -341,6 +341,19 @@ def _aware_utc(dt):
     return dt
 
 
+def _clave_conteo(resultado) -> str:
+    """Clave para contar intentos por participante.
+
+    ✅ Los flujos públicos comparten un centinela ('publico'/'anonimo') en
+    alumno_id: agrupar por ahí mezclaría a todos los participantes (p. ej.
+    "30/1" en cada fila). Para esos casos se agrupa por nombre, la misma
+    identidad con la que el servidor aplica el límite de intentos.
+    """
+    if str(resultado.alumno_id) in ("publico", "anonimo"):
+        return f"pub:{resultado.alumno_nombre}"
+    return str(resultado.alumno_id)
+
+
 def _enriquecer_resultados(resultados, examen, db):
     """Agrega campos calculados a una lista de ResultadoExamen para el frontend."""
     if not examen or not resultados:
@@ -350,13 +363,13 @@ def _enriquecer_resultados(resultados, examen, db):
     # Contar intentos por alumno
     conteo_por_alumno = {}
     for r in resultados:
-        key = str(r.alumno_id)
+        key = _clave_conteo(r)
         conteo_por_alumno[key] = conteo_por_alumno.get(key, 0) + 1
     for r in resultados:
         r.aprobado = (r.calificacion or 0) >= puntaje_aprobacion
         r.puntaje_aprobacion = puntaje_aprobacion
         r.intentos_permitidos = intentos_permitidos
-        r.intentos_usados = conteo_por_alumno.get(str(r.alumno_id), 0)
+        r.intentos_usados = conteo_por_alumno.get(_clave_conteo(r), 0)
 
 
 def _intento_a_dict(intento: IntentoExamen, examen: Examen, intentos_usados: int) -> dict:
@@ -2478,7 +2491,10 @@ def guardar_resultado_publico(
     # Antes se guardaba data.alumno_id tal cual: con el id de una víctima se
     # agotaban sus intentos en el conteo autenticado y se le inflaba la nota
     # de curso (_nota_confiable_desde_examen matchea por alumno_id).
-    alumno_id_final = None if es_anonimo else 'publico'
+    # ✅ FIX: se usan centinelas (como ya hacía el flujo con nombre). `None`
+    # rompía el INSERT: ResultadoExamen.alumno_id es nullable=False →
+    # IntegrityError (500) al entregar el modo anónimo.
+    alumno_id_final = 'anonimo' if es_anonimo else 'publico'
 
     # ✅ SEGURIDAD (ALTA 3): los exámenes públicos con límite de intentos lo
     # respetan (antes no había NINGÚN conteo), contados por nombre de

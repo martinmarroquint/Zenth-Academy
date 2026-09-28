@@ -45,6 +45,8 @@ const PizarraInteractiva = ({
   const elementosCargadosRef = useRef(null);
   const cargandoInicialRef = useRef(false);
   const autosaveRef = useRef(null);
+  // ✅ Para avisar solo una vez cuando el autoguardado empieza a fallar.
+  const avisadoAutoguardadoRef = useRef(false);
   const pizarraIdRef = useRef(initialPizarraId);
 
   // Mantener ref sincronizada
@@ -77,13 +79,20 @@ const PizarraInteractiva = ({
       })
       .catch((e) => {
         console.error('Error creando pizarra automáticamente:', e);
+        // ✅ Sin esto, pizarraId nunca se seteaba y "Guardar" respondía para
+        // siempre "la pizarra aún se está creando" (imposible guardar).
+        toast.error(
+          e?.status
+            ? e.message || 'No se pudo crear la pizarra'
+            : 'No se pudo crear la pizarra. Revisa tu conexión y recarga.'
+        );
       })
       .finally(() => {
         if (activo) setCreandoPizarra(false);
       });
 
     return () => { activo = false; };
-  }, [pizarraId, creandoPizarra, titulo, usuario]);
+  }, [pizarraId, creandoPizarra, titulo, usuario, toast]);
 
   // =============================================
   // HANDLERS
@@ -114,11 +123,19 @@ const PizarraInteractiva = ({
     if (!currentId) return;
     if (autosaveRef.current) clearTimeout(autosaveRef.current);
     autosaveRef.current = setTimeout(() => {
-      pizarraService.actualizarElementos(currentId, elements).catch((e) => {
-        console.warn('Error en autoguardado de la pizarra:', e);
-      });
+      pizarraService.actualizarElementos(currentId, elements)
+        .then(() => { avisadoAutoguardadoRef.current = false; })
+        .catch((e) => {
+          console.warn('Error en autoguardado de la pizarra:', e);
+          // ✅ Avisar UNA vez por bloque de fallos: el debounce dispara cada
+          // 1,5 s y no tenía ningún sentido repetir el toast.
+          if (!avisadoAutoguardadoRef.current) {
+            avisadoAutoguardadoRef.current = true;
+            toast.error('No se pudo autoguardar. Usa el botón "Guardar" o revisa tu conexión.');
+          }
+        });
     }, 1500);
-  }, []);
+  }, [toast]);
 
   // =============================================
   // ACCIONES
@@ -144,8 +161,9 @@ const PizarraInteractiva = ({
       URL.revokeObjectURL(url);
     } catch (error) {
       console.error('Error exportando:', error);
+      toast.error('No se pudo exportar la imagen');
     }
-  }, [excalidrawAPI, pizarraId]);
+  }, [excalidrawAPI, pizarraId, toast]);
 
   const saveBoard = useCallback(async () => {
     if (!excalidrawAPI) return;
@@ -196,26 +214,43 @@ const PizarraInteractiva = ({
         await pizarraService.actualizarElementos(pizarraIdRef.current, elements);
       } catch (error) {
         console.error('Error guardando antes de cerrar:', error);
+        // ✅ Antes seguía cerrando igual: el docente perdía el dibujo completo
+        // sin enterarse. Ahora decide si salir igual.
+        toast.error(error.message || 'No se pudieron guardar los últimos cambios');
+        const salir = await confirmar({
+          titulo: 'Cambios sin guardar',
+          mensaje: 'No se pudieron guardar los últimos cambios. ¿Salir de todos modos?',
+          confirmText: 'Salir igual',
+          variant: 'danger',
+        });
+        if (!salir) return;
       }
     }
     if (onCerrar) onCerrar();
-  }, [excalidrawAPI, onCerrar]);
+  }, [excalidrawAPI, onCerrar, toast, confirmar]);
 
   // Guardar título editado
   const guardarTitulo = useCallback(async () => {
     const nuevoTitulo = tituloTemp.trim() || 'Pizarra sin título';
-    setEditandoTitulo(false);
-    setTitulo(nuevoTitulo);
-
     const currentId = pizarraIdRef.current;
+
     if (currentId) {
       try {
         await pizarraService.actualizar(currentId, { titulo: nuevoTitulo });
+        setEditandoTitulo(false);
+        setTitulo(nuevoTitulo);
       } catch (e) {
         console.warn('Error actualizando título:', e);
+        // ✅ Antes se cambiaba el título ANTES del await: el usuario veía el
+        // título nuevo pero no se guardaba. Ahora solo se aplica si salió bien.
+        toast.error('No se pudo guardar el título');
       }
+      return;
     }
-  }, [tituloTemp]);
+    // Pizarra aún sin crear: solo se refleja localmente (lo usará la creación).
+    setEditandoTitulo(false);
+    setTitulo(nuevoTitulo);
+  }, [tituloTemp, toast]);
 
   // =============================================
   // EFECTOS

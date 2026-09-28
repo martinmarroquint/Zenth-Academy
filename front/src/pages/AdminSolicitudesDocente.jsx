@@ -49,7 +49,7 @@ const AdminSolicitudesDocente = () => {
       setSolicitudSeleccionada(null);
     } catch (e) {
       console.error('Error:', e);
-      toast.error(e?.response?.data?.detail || 'No se pudo marcar en revisión');
+      toast.error(e?.message || 'No se pudo marcar en revisión');
     }
   };
 
@@ -63,7 +63,7 @@ const AdminSolicitudesDocente = () => {
       setComentario('');
     } catch (e) {
       console.error('Error:', e);
-      toast.error(e?.response?.data?.detail || 'No se pudo aprobar la solicitud');
+      toast.error(e?.message || 'No se pudo aprobar la solicitud');
     } finally {
       setProcesando(false);
     }
@@ -83,7 +83,7 @@ const AdminSolicitudesDocente = () => {
       setComentario('');
     } catch (e) {
       console.error('Error:', e);
-      toast.error(e?.response?.data?.detail || 'No se pudo rechazar la solicitud');
+      toast.error(e?.message || 'No se pudo rechazar la solicitud');
     } finally {
       setProcesando(false);
     }

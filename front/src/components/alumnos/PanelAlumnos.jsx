@@ -12,7 +12,7 @@ import SelectorAlumnos from './SelectorAlumnos';
 import { useFeedback } from '../../hooks/useFeedback';
 
 const PanelAlumnos = ({ onVolver, onSeleccionar, seleccionInicial = [] }) => {
-  const { confirmar } = useFeedback();
+  const { confirmar, toast } = useFeedback();
   const [alumnos, setAlumnos] = useState([]);
   const [cargando, setCargando] = useState(true);
   const [error, setError] = useState('');
@@ -44,14 +44,32 @@ const PanelAlumnos = ({ onVolver, onSeleccionar, seleccionInicial = [] }) => {
     }
   };
 
+  // ✅ Un error con `status` viene del SERVIDOR (p. ej. 422 de validación).
+  // Antes TODOS los errores caían en un "modo offline" que pintaba la lista
+  // como si hubiera guardado/borrado → el usuario lo veía, recargaba y todo
+  // volvía como estaba, sin ningún aviso.
+  const esErrorDeServidor = (err) => !!err?.status;
+
   const handleGuardarAlumnos = async (nuevosAlumnos) => {
+    const sinNombre = nuevosAlumnos.filter(
+      (a) => !String(a.nombres || '').trim() || !String(a.apellidos || '').trim()
+    );
+    if (sinNombre.length) {
+      toast.error(`${sinNombre.length} alumno(s) sin nombres o apellidos. Completa o elimínalos.`);
+      return;
+    }
     try {
       await alumnosService.guardarMasivo(nuevosAlumnos);
       await cargarAlumnos();
     } catch (error) {
+      if (esErrorDeServidor(error)) {
+        toast.error(error.message || 'No se pudieron guardar los alumnos');
+        return;
+      }
       console.warn('Guardando alumnos en modo offline:', error);
       localStorage.setItem('alumnos', JSON.stringify(nuevosAlumnos));
       setAlumnos(nuevosAlumnos);
+      toast.warning('Sin conexión: quedaron guardados solo en este dispositivo');
     }
     setVista('lista');
   };
@@ -68,9 +86,15 @@ const PanelAlumnos = ({ onVolver, onSeleccionar, seleccionInicial = [] }) => {
       await alumnosService.eliminar(id);
       await cargarAlumnos();
     } catch (error) {
+      if (esErrorDeServidor(error)) {
+        toast.error(error.message || 'No se pudo eliminar el alumno');
+        return;
+      }
       console.warn('Eliminando alumno en modo offline:', error);
-      setAlumnos(alumnos.filter(a => a.id !== id));
-      localStorage.setItem('alumnos', JSON.stringify(alumnos.filter(a => a.id !== id)));
+      const restantes = alumnos.filter(a => a.id !== id);
+      setAlumnos(restantes);
+      localStorage.setItem('alumnos', JSON.stringify(restantes));
+      toast.warning('Sin conexión: se ocultó solo en este dispositivo');
     }
   };
 
@@ -83,17 +107,23 @@ const PanelAlumnos = ({ onVolver, onSeleccionar, seleccionInicial = [] }) => {
       variant: 'danger',
     });
     if (!ok) return;
-    
+
+    let fallidos = 0;
     for (const id of seleccionados) {
       try {
         await alumnosService.eliminar(id);
       } catch (error) {
         console.warn('Error eliminando alumno:', error);
+        fallidos++;
       }
     }
+    const total = seleccionados.length;
     setSeleccionados([]);
     setModoSeleccion(false);
     await cargarAlumnos();
+    if (fallidos) {
+      toast.error(`No se pudieron eliminar ${fallidos} de ${total} alumno(s)`);
+    }
   };
 
   const handleSeleccionar = () => {

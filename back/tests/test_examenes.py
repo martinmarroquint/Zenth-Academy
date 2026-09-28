@@ -638,3 +638,43 @@ def test_revision_resultado_inexistente_404(client, db, docente_user, docente_he
     )
 
     assert resp.status_code == 404, resp.text
+
+
+@pytest.mark.integration
+def test_resultado_sin_alumno_id_usa_al_usuario_autenticado(
+    client, db, docente_user, estudiante_user, estudiante_headers
+):
+    """✅ El front manda alumno_id=null cuando no resuelve el alumno.
+
+    Antes: 422 (schema lo exigía) o IntegrityError si pasaba el schema, y el
+    alumno veía nota 0 sin aviso. Ahora el servidor completa con la identidad
+    verificada del usuario autenticado.
+    """
+    from app.models.resultado_examen import ResultadoExamen
+
+    examen = _crear_examen(
+        db, docente_user, estado="PUBLICADO", preguntas=[_opcion_multiple()]
+    )
+    intento_id = _iniciar_intento(client, examen, estudiante_headers)
+
+    resp = client.post(
+        "/api/v1/examenes/resultados",
+        json={
+            "examen_id": str(examen.id),
+            "alumno_id": None,
+            "alumno_nombre": "Alumno Test",
+            "respuestas": {"0": 1},
+            "intento_id": intento_id,
+        },
+        headers=estudiante_headers,
+    )
+    assert resp.status_code == 201, resp.text
+
+    db.expire_all()
+    fila = (
+        db.query(ResultadoExamen)
+        .filter(ResultadoExamen.examen_id == str(examen.id))
+        .first()
+    )
+    assert fila is not None, "no se guardó el resultado"
+    assert fila.alumno_id == str(estudiante_user.id), fila.alumno_id

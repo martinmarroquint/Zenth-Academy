@@ -187,7 +187,22 @@ export const apiClient = {
         let errorMessage = `Error ${response.status}`;
         try {
           const errorData = await response.json();
-          errorMessage = errorData.detail || errorData.message || errorData.error || errorMessage;
+          const detalle = errorData.detail ?? errorData.message ?? errorData.error;
+          if (Array.isArray(detalle)) {
+            // ✅ En 422 FastAPI devuelve `detail` como LISTA de errores:
+            // antes `new Error(lista)` producía "[object Object]" en los toasts.
+            errorMessage = detalle
+              .map((d) =>
+                typeof d === 'string'
+                  ? d
+                  : d?.loc?.length
+                    ? `${d.loc.join('.')}: ${d.msg}`
+                    : (d?.msg ?? JSON.stringify(d))
+              )
+              .join(' | ');
+          } else if (detalle) {
+            errorMessage = detalle;
+          }
         } catch {
           // Si no se puede parsear JSON, usar texto plano
           errorMessage = await response.text().catch(() => errorMessage);

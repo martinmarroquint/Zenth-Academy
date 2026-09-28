@@ -55,7 +55,7 @@ const CargarAlumnos = ({ alumnos: alumnosIniciales, onGuardar, onVolver }) => {
           grado, 
           nombres, 
           apellidos, 
-          email: '', 
+          email: null, 
           grupo: '' 
         });
       });
@@ -85,7 +85,7 @@ const CargarAlumnos = ({ alumnos: alumnosIniciales, onGuardar, onVolver }) => {
       ...nuevoAlumno, 
       id: Date.now().toString(), 
       dni: '', 
-      email: '', 
+      email: null, 
       grupo: '' 
     }]);
     setNuevoAlumno({ grado: '', nombres: '', apellidos: '' }); 

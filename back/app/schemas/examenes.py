@@ -227,7 +227,10 @@ class ExamenDetailResponse(ExamenResponse):
 # ========== RESULTADO ==========
 class ResultadoCreate(BaseModel):
     examen_id: str
-    alumno_id: str
+    # ✅ Opcional: el front a veces lo manda null cuando no resuelve el alumno.
+    # El servidor lo completa con el usuario autenticado (nunca debe ser None:
+    # ResultadoExamen.alumno_id es nullable=False).
+    alumno_id: Optional[str] = None
     alumno_nombre: str = ""
     alumno_grado: str = ""
     alumno_dni: str = ""

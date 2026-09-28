@@ -192,6 +192,8 @@ const ExamenPublicoPage = () => {
   if (resultado) {
     const mostrarNota =
       config.mostrar_resultados !== false &&
+      // ✅ Si no se guardó, mostrar "0%" sería mentirle al participante.
+      resultado.guardado !== false &&
       resultado.calificacion !== null &&
       resultado.calificacion !== undefined;
     const intentosPermitidos = examen?.intentos_permitidos || 0;
@@ -204,6 +206,16 @@ const ExamenPublicoPage = () => {
           </div>
           <h2 className="text-lg font-semibold text-gray-900 mb-1">Examen entregado</h2>
           <p className="text-sm text-gray-500 mb-4">{examen?.titulo}</p>
+
+          {resultado.guardado === false && (
+            <div className="mb-4 flex items-start gap-2 text-left bg-amber-50 border border-amber-200 text-amber-800 rounded-xl px-3 py-2.5 text-xs">
+              <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5" />
+              <span>
+                <strong>No pudimos guardar tu resultado.</strong> Tu nota no quedó
+                registrada. Intenta de nuevo o avisa a tu docente.
+              </span>
+            </div>
+          )}
 
           {mostrarNota ? (
             <div className="space-y-1 mb-4">

@@ -90,7 +90,7 @@ const SolicitarDocente = () => {
       }
     } catch (e) {
       console.error('Error:', e);
-      setError(e.response?.data?.detail || 'Error al enviar la solicitud');
+      setError(e.message || 'Error al enviar la solicitud');
     } finally {
       setLoading(false);
     }

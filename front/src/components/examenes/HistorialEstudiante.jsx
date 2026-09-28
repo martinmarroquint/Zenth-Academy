@@ -7,8 +7,13 @@ import {
   ChevronDown, ChevronRight, Loader2, AlertCircle
 } from 'lucide-react';
 import examenesService from '../../services/examenesService';
+import { authService } from '../../services/authService';
 
 const HistorialEstudiante = ({ usuarioId }) => {
+  // ✅ La ruta /estudiante/historial lo monta SIN props. Antes `cargaba()`
+  // salía en la primera línea y `cargando` se quedaba en true → spinner
+  // infinito. Ahora cae al usuario de la sesión.
+  const idFinal = usuarioId || authService.getCurrentUser()?.id || null;
   const [resultados, setResultados] = useState([]);
   const [cargando, setCargando] = useState(true);
   const [error, setError] = useState('');
@@ -16,11 +21,15 @@ const HistorialEstudiante = ({ usuarioId }) => {
   const [expandidos, setExpandidos] = useState({});
 
   const cargar = useCallback(async () => {
-    if (!usuarioId) return;
+    if (!idFinal) {
+      setCargando(false);
+      setError('No se encontró tu usuario. Cierra sesión y vuelve a entrar.');
+      return;
+    }
     setCargando(true);
     setError('');
     try {
-      const data = await examenesService.listarResultadosAlumno(usuarioId);
+      const data = await examenesService.listarResultadosAlumno(idFinal);
       setResultados(data || []);
     } catch (e) {
       console.error('Error cargando historial:', e);
@@ -28,7 +37,7 @@ const HistorialEstudiante = ({ usuarioId }) => {
     } finally {
       setCargando(false);
     }
-  }, [usuarioId]);
+  }, [idFinal]);
 
   useEffect(() => { cargar(); }, [cargar]);
 

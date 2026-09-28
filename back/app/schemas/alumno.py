@@ -1,7 +1,7 @@
 # app/schemas/alumno.py
 # ESQUEMAS DE ALUMNO UNIFICADO
 
-from pydantic import BaseModel, EmailStr, Field
+from pydantic import BaseModel, EmailStr, Field, field_validator
 from typing import Optional, List  # ✅ AGREGAR List
 from datetime import datetime
 
@@ -20,6 +20,14 @@ class AlumnoBase(BaseModel):
     direccion: Optional[str] = None
     fecha_nacimiento: Optional[datetime] = None
     genero: Optional[str] = Field(None, max_length=20)
+
+    @field_validator("email", mode="before")
+    @classmethod
+    def _email_vacio_a_none(cls, v):
+        # ✅ FIX: el front y las cargas por CSV mandan '' (no null). `EmailStr`
+        # rechaza '' → 422 en TODA la carga masiva y la UI lo ocultaba como
+        # "modo offline", perdiendo los alumnos sin avisar.
+        return None if isinstance(v, str) and not v.strip() else v
 
 
 class AlumnoCreate(AlumnoBase):

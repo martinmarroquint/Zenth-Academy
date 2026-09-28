@@ -11,7 +11,7 @@ import pizarraService from '../../services/pizarraService';
 import { useFeedback } from '../../hooks/useFeedback';
 
 const PanelPizarras = ({ usuarioId, onAbrirPizarra, onCrearPizarra }) => {
-  const { confirmar } = useFeedback();
+  const { confirmar, toast } = useFeedback();
   const [pizarras, setPizarras] = useState([]);
   const [cargando, setCargando] = useState(true);
   const [busqueda, setBusqueda] = useState('');
@@ -25,10 +25,12 @@ const PanelPizarras = ({ usuarioId, onAbrirPizarra, onCrearPizarra }) => {
       setPizarras(data || []);
     } catch (error) {
       console.error('Error cargando pizarras:', error);
+      // ✅ Sin este aviso la lista quedaba vacía y parecía "no tienes pizarras".
+      toast.error(error.message || 'No se pudieron cargar tus pizarras');
     } finally {
       setCargando(false);
     }
-  }, [usuarioId]);
+  }, [usuarioId, toast]);
 
   useEffect(() => {
     cargarPizarras();
@@ -47,12 +49,17 @@ const PanelPizarras = ({ usuarioId, onAbrirPizarra, onCrearPizarra }) => {
       await cargarPizarras();
     } catch (error) {
       console.error('Error eliminando:', error);
+      // ✅ Antes solo se logueaba: el usuario pulsaba "Eliminar" y no pasaba
+      // nada (ni se borraba ni recibía ningún mensaje).
+      toast.error(error.message || 'No se pudo eliminar la pizarra');
     }
   };
 
   const copiarEnlace = (id) => {
     const url = `${window.location.origin}/pizarra/${id}`;
-    navigator.clipboard.writeText(url);
+    navigator.clipboard.writeText(url)
+      .then(() => toast.success('Enlace copiado'))
+      .catch(() => toast.error('No se pudo copiar el enlace'));
   };
 
   const tipos = ['todos', 'blanca', 'didactica', 'colaborativa', 'presentacion'];

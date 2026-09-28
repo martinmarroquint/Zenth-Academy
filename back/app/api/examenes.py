@@ -1587,6 +1587,13 @@ def guardar_resultado(
                 detail="No puedes enviar resultados a nombre de otro estudiante"
             )
         alumno_id_final = str(current_user.id)
+
+    # ✅ FIX: `alumno_id` ahora es opcional en el schema (el front a veces manda
+    # null). Sin esta línea llegaba None a ResultadoExamen.alumno_id
+    # (nullable=False) → IntegrityError 500. Siempre cae en el usuario
+    # autenticado, que es la identidad verificable.
+    if not alumno_id_final:
+        alumno_id_final = str(current_user.id)
     
     # ✅ CORREGIDO: Verificar que el examen esté publicado
     if examen.estado != 'PUBLICADO':

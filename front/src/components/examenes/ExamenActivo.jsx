@@ -12,6 +12,7 @@ import ModalConfirmarEntrega from './ModalConfirmarEntrega';
 import ModalTrampa from './ModalTrampa';
 import useTemporizador from '../../hooks/useTemporizador';
 import useExamenSeguridad from '../../hooks/useExamenSeguridad';
+import { useFeedback } from '../../hooks/useFeedback';
 import examenesService from '../../services/examenesService';
 import { COLOR_PRIMARIO } from './constantes';
 
@@ -34,6 +35,7 @@ const ExamenActivo = ({
   codigoPublico = null,
   passwordPublico = null
 }) => {
+  const { toast } = useFeedback();
   const [preguntasExamen, setPreguntasExamen] = useState([]);
   const [mapeoOpciones, setMapeoOpciones] = useState({});
   const [preguntaActual, setPreguntaActual] = useState(0);
@@ -411,14 +413,23 @@ const ExamenActivo = ({
       } else {
         resultadoBackend = await examenesService.guardarResultado(datosEnvio);
       }
-    } catch {
-      // Reintento offline solo en modo autenticado (el público no tiene canal alterno).
-      if (!modoPublico) {
-        try {
-          const pendientes = JSON.parse(localStorage.getItem('resultados_pendientes') || '[]');
-          pendientes.push(datosEnvio);
-          localStorage.setItem('resultados_pendientes', JSON.stringify(pendientes));
-        } catch {}
+    } catch (error) {
+      // ✅ Antes este catch estaba VACÍO: cualquier fallo (401/422/500/red) se
+      // tragaba y el alumno veía nota 0 sin ningún aviso de lo que pasó.
+      if (error?.status) {
+        // Rechazo del servidor (validación/permiso): reintentar no ayuda y
+        // encolarlo haría que se reintente en vano. Se avisa al instante.
+        toast.error(error.message || 'No se pudo guardar tu resultado. Avisa a tu docente.');
+      } else {
+        toast.warning('Sin conexión: tu resultado se guardará cuando vuelva la conexión');
+        // Reintento offline solo en modo autenticado (el público no tiene canal alterno).
+        if (!modoPublico) {
+          try {
+            const pendientes = JSON.parse(localStorage.getItem('resultados_pendientes') || '[]');
+            pendientes.push(datosEnvio);
+            localStorage.setItem('resultados_pendientes', JSON.stringify(pendientes));
+          } catch {}
+        }
       }
     }
 
@@ -426,6 +437,8 @@ const ExamenActivo = ({
 
     const resultadoFinal = {
       ...datosEnvio,
+      // ✅ Para que la pantalla de resultados distinga "nota 0" de "no se guardó".
+      guardado: !!resultadoBackend,
       examenId: examen.id,
       examen_id: examen.id,
       alumnoId: alumno?.id,
@@ -449,7 +462,7 @@ const ExamenActivo = ({
 
     setEnviando(false);
     onFinalizar(resultadoFinal);
-  }, [examen, alumno, respuestas, preguntasMarcadas, preguntasExamen, mapeoOpciones, configExamen, temporizador, seguridad, onFinalizar, entregado, enviando, LIMITE_VIOLACIONES, modoPublico, codigoPublico, passwordPublico, nombreAlumno, intentoId]);
+  }, [examen, alumno, respuestas, preguntasMarcadas, preguntasExamen, mapeoOpciones, configExamen, temporizador, seguridad, onFinalizar, entregado, enviando, LIMITE_VIOLACIONES, modoPublico, codigoPublico, passwordPublico, nombreAlumno, intentoId, toast]);
 
   useEffect(() => { finalizarExamenRef.current = finalizarExamen; }, [finalizarExamen]);
 

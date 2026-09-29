@@ -8,7 +8,7 @@ import {
   PenTool, MessageCircle, Award, LogOut, ChevronLeft,
   ChevronRight, HelpCircle, LayoutDashboard, Send, Settings,
   Home, GraduationCap, Calendar, Bell, UserCircle, Menu, X,
-  PanelLeftClose, PanelLeftOpen, GripVertical, Globe, UserPlus, Library
+  PanelLeftClose, PanelLeftOpen, GripVertical, Globe, UserPlus, Library, History
 } from 'lucide-react';
 import { authService } from '../../services/authService';
 import { useSolicitudes } from '../../hooks/useSolicitudes';
@@ -34,6 +34,7 @@ const ICONOS_NAV = {
   calendario: Calendar,
   progreso: GraduationCap,
   biblioteca: Library,
+  historial: History,
 };
 
 const MENU_POR_ROL = {
@@ -124,6 +125,7 @@ const MENU_POR_ROL = {
       seccion: 'CURSOS',
       items: [
         { id: 'cursos', label: 'Mis Cursos', to: '', end: true },
+        { id: 'historial', label: 'Historial', to: 'historial' },
         { id: 'certificados', label: 'Certificados', to: 'certificados' },
       ],
     },

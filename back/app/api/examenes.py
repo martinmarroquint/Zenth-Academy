@@ -1394,6 +1394,99 @@ def _bloqueo_examen_en_cursos(db, examen_id, alumno_id):
     return False, None
 
 
+def _estudiante_puede_rendir_examen(db: Session, examen, estudiante_id):
+    """¿Puede un ESTUDIANTE rendir este examen de forma autenticada?
+
+    ✅ SEGURIDAD (trazabilidad): un examen que está embebido en las lecciones
+    de algún curso solo puede rendirlo quien tenga acceso real a ese curso.
+    Así los resultados no recogen a alumnos que el docente no enseña (las
+    "notas fantasma" que ensucian la lista de resultados y el seguimiento).
+
+    Se conservan TODAS las vías que el propio sistema ya declara legítimas:
+      - examen suelto / compartido por link (no está en ninguna lección),
+      - examen con `configuracion.acceso_publico`,
+      - examen asignado a un grupo al que el alumno pertenece,
+      - alumno que ya tenía resultado (evita cortar reintentos de datos
+        existentes; sin resultado previo el gate se aplica desde el inicio).
+
+    Devuelve (permitido: bool, motivo: str|None).
+    """
+    from app.models.curso import Curso, InscripcionCurso, AccesoCurso
+
+    query = db.query(Curso)
+    if examen.docente_id:
+        query = query.filter(cast(Curso.docente_id, String) == str(examen.docente_id))
+
+    cursos_con_examen = []
+    for curso in query.all():
+        for modulo in curso.modulos or []:
+            for leccion in modulo.get("lecciones") or []:
+                if _leccion_usa_examen(leccion, examen.id):
+                    cursos_con_examen.append(curso)
+                    break
+            else:
+                continue
+            break
+
+    # Examen suelto o compartido por link: no pertenece a ningún curso
+    if not cursos_con_examen:
+        return True, None
+
+    if (examen.configuracion or {}).get("acceso_publico"):
+        return True, None
+
+    # Acceso real al curso: inscripción normal o acceso directo activo
+    for curso in cursos_con_examen:
+        base = cast(Curso.id, String) == str(curso.id)
+        inscrito = db.query(InscripcionCurso).filter(
+            base,
+            cast(InscripcionCurso.estudiante_id, String) == str(estudiante_id),
+        ).first()
+        if inscrito:
+            return True, None
+        acceso = db.query(AccesoCurso).filter(
+            base,
+            cast(AccesoCurso.estudiante_id, String) == str(estudiante_id),
+            AccesoCurso.activo == True,  # noqa: E712
+        ).first()
+        if acceso:
+            return True, None
+
+    # Examen asignado a un grupo: sus alumnos sí pueden rendirlo
+    if examen.grupo_id:
+        grupo = db.query(Grupo).filter(Grupo.id == str(examen.grupo_id)).first()
+        if grupo:
+            ids = {str(a.get("id")) for a in (grupo.alumnos or []) if a.get("id")}
+            ids.update(
+                str(a.get("usuario_id"))
+                for a in (grupo.alumnos or [])
+                if a.get("usuario_id")
+            )
+            if str(estudiante_id) in ids:
+                return True, None
+
+    # Datos previos al gate: no cortar reintentos de quien ya rindió o ya
+    # tenía un intento abierto (cubre además el despliegue del gate)
+    previo = db.query(ResultadoExamen).filter(
+        ResultadoExamen.examen_id == str(examen.id),
+        or_(
+            cast(ResultadoExamen.alumno_id, String) == str(estudiante_id),
+            cast(ResultadoExamen.alumno_id_unificado, String) == str(estudiante_id),
+        ),
+    ).first()
+    if previo:
+        return True, None
+
+    intento_previo = db.query(IntentoExamen).filter(
+        IntentoExamen.examen_id == str(examen.id),
+        cast(IntentoExamen.usuario_id, String) == str(estudiante_id),
+    ).first()
+    if intento_previo:
+        return True, None
+
+    return False, "No estás inscrito en el curso de este examen"
+
+
 def _actualizar_progreso_por_examen(db, examen_id, alumno_id, calificacion):
     """
     Cuando un alumno rinde un examen asociado a una lección de curso,
@@ -1575,6 +1668,14 @@ def iniciar_intento(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail=f"Lección bloqueada: {razon or 'Aún no puedes rendir este examen'}",
             )
+        # ✅ SEGURIDAD (trazabilidad): un examen embebido en un curso solo se
+        # rinde si ese curso es realmente suyo. Evita que cualquiera que
+        # adivine el id deje "notas fantasma" en resultados de un docente.
+        permitido, motivo = _estudiante_puede_rendir_examen(
+            db, examen, str(current_user.id)
+        )
+        if not permitido:
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=motivo)
         if examen.intentos_permitidos and examen.intentos_permitidos > 0 and usados >= examen.intentos_permitidos:
             raise HTTPException(status_code=400, detail="Límite de intentos alcanzado")
 
@@ -1627,6 +1728,14 @@ def guardar_resultado(
     # ✅ CORREGIDO: Verificar que el examen esté publicado
     if examen.estado != 'PUBLICADO':
         raise HTTPException(status_code=400, detail="El examen no está disponible para entregar respuestas")
+
+    # ✅ SEGURIDAD (trazabilidad): mismo criterio que al iniciar el intento.
+    # El docente/admin puede registrar a mano; un estudiante solo entrega en
+    # un curso al que realmente tiene acceso (sin notas fantasma).
+    if current_user.rol == 'estudiante':
+        permitido, motivo = _estudiante_puede_rendir_examen(db, examen, alumno_id_final)
+        if not permitido:
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=motivo)
     
     # ✅ CORREGIDO: Verificar ventana de fechas
     config = examen.configuracion or {}

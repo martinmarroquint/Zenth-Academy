@@ -837,3 +837,79 @@ def test_reintento_peor_no_pisa_la_nota_de_la_leccion(
     )
     assert progreso.aprobado is True
     assert int(progreso.intentos or 0) == 2
+
+
+@pytest.mark.security
+@pytest.mark.integration
+def test_estudiante_sin_acceso_al_curso_no_puede_rendir_el_examen(
+    client, db, docente_user, estudiante_user, estudiante_headers
+):
+    """✅ SINCRONIZACIÓN: un examen embebido en las lecciones de un curso solo
+    puede rendirlo quien tenga acceso real a ese curso.
+
+    Antes cualquier estudiante que adivinara el id podía iniciar un intento y
+    dejar un resultado en la lista de resultados de un docente al que no le
+    da clases (nota fantasma, seguimiento contaminado).
+    """
+    examen = _crear_examen(
+        db, docente_user, estado="PUBLICADO", preguntas=[_opcion_multiple()]
+    )
+    _curso_con_examen(db, docente_user, examen.id, "Curso ajeno al alumno")
+    db.expire_all()
+
+    intento = client.post(
+        f"/api/v1/examenes/{examen.id}/intentos", headers=estudiante_headers
+    )
+    assert intento.status_code == 403, intento.text
+    assert "inscrito" in intento.json()["detail"]
+
+    entrega = client.post(
+        "/api/v1/examenes/resultados",
+        json=_payload_resultado(examen, estudiante_user.id, {"0": 1}),
+        headers=estudiante_headers,
+    )
+    assert entrega.status_code == 403, entrega.text
+
+    db.expire_all()
+    assert (
+        db.query(ResultadoExamen)
+        .filter(ResultadoExamen.examen_id == str(examen.id))
+        .first()
+        is None
+    ), "no debe quedar ningún resultado si no tiene acceso al curso"
+
+
+@pytest.mark.security
+@pytest.mark.integration
+def test_acceso_directo_al_curso_permite_rendir_el_examen(
+    client, db, docente_user, estudiante_user, estudiante_headers
+):
+    """El alumno con acceso directo (sin fila de inscripción) también cuenta
+    como parte del curso: es parte del mismo criterio que usa el roster."""
+    from app.models.curso import AccesoCurso
+
+    examen = _crear_examen(
+        db, docente_user, estado="PUBLICADO", preguntas=[_opcion_multiple()]
+    )
+    curso = _curso_con_examen(db, docente_user, examen.id, "Curso con acceso directo")
+    db.add(
+        AccesoCurso(
+            id=str(uuid.uuid4()),
+            curso_id=str(curso.id),
+            estudiante_id=str(estudiante_user.id),
+            estudiante_nombre="Alumno Test",
+            tipo_acceso="directo",
+            activo=True,
+        )
+    )
+    db.commit()
+    db.expire_all()
+
+    intento = _iniciar_intento(client, examen, estudiante_headers)
+    resp = client.post(
+        "/api/v1/examenes/resultados",
+        json=_payload_resultado(examen, estudiante_user.id, {"0": 1}, intento_id=intento),
+        headers=estudiante_headers,
+    )
+    assert resp.status_code == 201, resp.text
+    assert resp.json()["calificacion"] == pytest.approx(100.0)

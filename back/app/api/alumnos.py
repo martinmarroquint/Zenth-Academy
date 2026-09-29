@@ -82,7 +82,11 @@ async def listar_alumnos(
     try:
         logger.info(f"🔍 Listando alumnos - usuario: {current_user.id}")
         
-        query = db.query(Alumno)
+        # ✅ SEGURIDAD: un docente solo ve a SUS alumnos (DNI/email/teléfono
+        # son PII). El admin ve el catálogo completo.
+        query = _acotar_a_mis_alumnos(
+            db.query(Alumno), _ids_visibles_para(db, current_user)
+        )
         
         if busqueda:
             query = query.filter(
@@ -127,7 +131,9 @@ async def buscar_alumnos(
     """Busca alumnos por nombre, apellido o DNI (solo docente/admin)."""
     try:
         logger.info(f"🔍 Buscando alumnos: {q}")
-        query = db.query(Alumno).filter(
+        query = _acotar_a_mis_alumnos(
+            db.query(Alumno), _ids_visibles_para(db, current_user)
+        ).filter(
             (Alumno.nombres.ilike(f"%{q}%")) |
             (Alumno.apellidos.ilike(f"%{q}%")) |
             (Alumno.dni.ilike(f"%{q}%"))
@@ -150,11 +156,27 @@ async def obtener_alumno(
     db: Session = Depends(get_db),
     current_user: Usuario = Depends(require_docente)
 ):
-    """Obtiene un alumno por ID (solo docente/admin)."""
+    """Obtiene un alumno por ID (solo docente/admin).
+
+    ✅ SEGURIDAD: el DNI/email/teléfono es PII; un docente solo puede leer
+    fichas de sus propios alumnos (mismo criterio que el listado y la ficha).
+    """
     try:
         alumno = db.query(Alumno).filter(Alumno.id == id).first()
         if not alumno:
             raise HTTPException(status_code=404, detail="Alumno no encontrado")
+
+        visibles = _ids_visibles_para(db, current_user)
+        if visibles is not None:
+            es_mio = (
+                str(alumno.id) in visibles
+                or (alumno.usuario_id is not None and str(alumno.usuario_id) in visibles)
+            )
+            if not es_mio:
+                raise HTTPException(
+                    status_code=403,
+                    detail="No tienes permiso para ver este alumno",
+                )
         return _alumno_to_dict(alumno)
     
     except HTTPException:
@@ -221,6 +243,31 @@ def _estudiantes_del_docente(db: Session, docente_id: str) -> set:
     return ids
 
 
+def _ids_visibles_para(db: Session, current_user: Usuario):
+    """Ids de alumno que el usuario actual puede leer.
+
+    Devuelve None cuando NO hay que acotar (admin) y un set (posiblemente
+    vacío) para docentes. Usado por listado, búsqueda, detalle y ficha para
+    que compartan UN SOLO criterio: nunca se lista un alumno que la ficha
+    rechazaría después con 403.
+    """
+    if current_user.rol == "admin":
+        return None
+    return _estudiantes_del_docente(db, str(current_user.id))
+
+
+def _acotar_a_mis_alumnos(query, visibles):
+    """Aplica el filtro por propiedad a una query sobre Alumno."""
+    if visibles is None:
+        return query
+    if not visibles:
+        # Sin relación con ningún alumno: nada que mostrar (IN vacío = falso)
+        return query.filter(Alumno.id.in_([]))
+    return query.filter(
+        or_(Alumno.id.in_(visibles), Alumno.usuario_id.in_(visibles))
+    )
+
+
 def _alumno_de_id(db: Session, id: str):
     """Resuelve un id de alumno a (uid, Alumno|None, Usuario|None).
 
@@ -259,7 +306,10 @@ async def ficha_alumno(
         docente_id = str(current_user.id)
 
         # Ownership: el docente solo ve alumnos con los que tiene relación real
-        if not es_admin and uid not in _estudiantes_del_docente(db, docente_id):
+        # (mismo criterio que el listado, la búsqueda y el detalle: nunca se
+        # muestra un alumno aquí que la ficha rechace con 403 ni viceversa)
+        visibles = _ids_visibles_para(db, current_user)
+        if visibles is not None and uid not in visibles:
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail="No tienes permiso para ver la ficha de este alumno"
@@ -656,7 +706,18 @@ async def alumnos_por_grupo(
     db: Session = Depends(get_db),
     current_user: Usuario = Depends(require_docente)
 ):
-    """Obtiene todos los alumnos de un grupo específico (autenticado)"""
+    """Obtiene todos los alumnos de un grupo específico (docente del grupo o admin)"""
+    # ✅ SEGURIDAD: los grupos tienen PII; un docente ajeno no debe leerlos
+    if current_user.rol != "admin":
+        grupo = db.query(Grupo).filter(Grupo.id == grupo_id).first()
+        if not grupo:
+            raise HTTPException(status_code=404, detail="Grupo no encontrado")
+        if str(grupo.docente_id) != str(current_user.id):
+            raise HTTPException(
+                status_code=403,
+                detail="No tienes permiso sobre este grupo",
+            )
+
     try:
         alumnos = db.query(Alumno).filter(Alumno.grupo_id == grupo_id).all()
         logger.info(f"✅ Encontrados {len(alumnos)} alumnos para grupo {grupo_id}")
@@ -681,6 +742,14 @@ async def alumnos_por_curso(
         curso = db.query(Curso).filter(Curso.id == curso_id).first()
         if not curso:
             raise HTTPException(status_code=404, detail="Curso no encontrado")
+
+        # ✅ SEGURIDAD: el listado expone DNI/email de los estudiantes del
+        # curso; solo su docente (o un admin) puede leerlo.
+        if current_user.rol != "admin" and str(curso.docente_id) != str(current_user.id):
+            raise HTTPException(
+                status_code=403,
+                detail="No tienes permiso sobre este curso",
+            )
 
         inscripciones = db.query(InscripcionCurso).filter(
             InscripcionCurso.curso_id == curso_id

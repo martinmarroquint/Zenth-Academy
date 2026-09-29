@@ -14,6 +14,7 @@ from app.models.alumno import Alumno
 from app.models.certificado import Certificado
 from app.models.curso import Curso, InscripcionCurso
 from app.models.examen import Examen
+from app.models.grupo import Grupo
 from app.models.resultado_examen import ResultadoExamen
 
 
@@ -342,3 +343,174 @@ def test_carga_masiva_solo_admin(client, estudiante_headers):
         headers=estudiante_headers,
     )
     assert resp.status_code == 403, resp.text
+
+
+# =====================================================
+# OWNERSHIP DEL DIRECTORIO (PII entre docentes)
+# El directorio expone DNI/email/teléfono: un docente solo puede
+# ver a SUS alumnos. Usa el mismo criterio que la ficha (403 vs vacío
+# nunca deben contradecirse).
+# =====================================================
+
+
+@pytest.mark.security
+@pytest.mark.integration
+def test_listado_docente_solo_sus_alumnos(
+    client, db, docente_user, docente_headers, estudiante_user, admin_headers
+):
+    curso = _crear_curso(db, docente_user)
+    db.add(
+        InscripcionCurso(
+            id=str(uuid.uuid4()),
+            curso_id=str(curso.id),
+            estudiante_id=str(estudiante_user.id),
+            estudiante_nombre="Ana Perez",
+        )
+    )
+    # Mi alumno: existe la fila de catálogo (la ficha lo resuelve por uid)
+    db.add(
+        Alumno(
+            id=str(estudiante_user.id),
+            usuario_id=str(estudiante_user.id),
+            nombres="Ana",
+            apellidos="Perez",
+            dni="12345678",
+        )
+    )
+    # Alumno ajeno: en el catálogo pero sin ninguna relación con mi docencia
+    ajeno = Alumno(
+        id=str(uuid.uuid4()),
+        nombres="Carlos",
+        apellidos="Rojas",
+        dni="87654321",
+    )
+    db.add(ajeno)
+    db.commit()
+
+    resp = client.get("/api/v1/alumnos/", headers=docente_headers)
+    assert resp.status_code == 200, resp.text
+    ids = {str(a["id"]) for a in resp.json()}
+    assert str(estudiante_user.id) in ids, ids
+    assert str(ajeno.id) not in ids, ids
+
+    # La ficha del mismo alumno ajeno tiene que dar 403: mismos criterios
+    ficha = client.get(
+        f"/api/v1/alumnos/{ajeno.id}/ficha", headers=docente_headers
+    )
+    assert ficha.status_code == 403, ficha.text
+
+    # El admin sí ve el catálogo completo
+    admin = client.get("/api/v1/alumnos/", headers=admin_headers)
+    assert admin.status_code == 200, admin.text
+    admin_ids = {str(a["id"]) for a in admin.json()}
+    assert str(ajeno.id) in admin_ids, admin_ids
+
+
+@pytest.mark.security
+@pytest.mark.integration
+def test_listado_docente_sin_alumnos_esta_vacio(client, docente_headers):
+    """Un docente sin alumnos no debe poder enumerar el catálogo."""
+    resp = client.get("/api/v1/alumnos/", headers=docente_headers)
+    assert resp.status_code == 200, resp.text
+    assert resp.json() == []
+
+
+@pytest.mark.security
+@pytest.mark.integration
+def test_busqueda_docente_solo_sus_alumnos(
+    client, db, docente_user, docente_headers, estudiante_user
+):
+    db.add(
+        Alumno(
+            id=str(estudiante_user.id),
+            usuario_id=str(estudiante_user.id),
+            nombres="Ana",
+            apellidos="Perez",
+            dni="12345678",
+        )
+    )
+    ajeno = Alumno(
+        id=str(uuid.uuid4()), nombres="Carlos", apellidos="Rojas", dni="87654321"
+    )
+    db.add(ajeno)
+    db.commit()
+
+    resp = client.get(
+        "/api/v1/alumnos/buscar", params={"q": "Rojas"}, headers=docente_headers
+    )
+    assert resp.status_code == 200, resp.text
+    assert resp.json() == []
+
+
+@pytest.mark.security
+@pytest.mark.integration
+def test_detalle_alumno_ajeno_es_403(
+    client, db, docente_user, estudiante_user, otro_docente_headers
+):
+    curso = _crear_curso(db, docente_user)
+    db.add(
+        InscripcionCurso(
+            id=str(uuid.uuid4()),
+            curso_id=str(curso.id),
+            estudiante_id=str(estudiante_user.id),
+            estudiante_nombre="Ana Perez",
+        )
+    )
+    db.add(
+        Alumno(
+            id=str(estudiante_user.id),
+            usuario_id=str(estudiante_user.id),
+            nombres="Ana",
+            apellidos="Perez",
+            dni="12345678",
+        )
+    )
+    db.commit()
+
+    resp = client.get(
+        f"/api/v1/alumnos/{estudiante_user.id}", headers=otro_docente_headers
+    )
+    assert resp.status_code == 403, resp.text
+
+
+@pytest.mark.security
+@pytest.mark.integration
+def test_alumnos_de_curso_ajeno_es_403(
+    client, db, docente_user, docente_headers, otro_docente_headers
+):
+    curso = _crear_curso(db, docente_user)
+
+    ajeno = client.get(
+        f"/api/v1/alumnos/curso/{curso.id}", headers=otro_docente_headers
+    )
+    assert ajeno.status_code == 403, ajeno.text
+
+    propietario = client.get(
+        f"/api/v1/alumnos/curso/{curso.id}", headers=docente_headers
+    )
+    assert propietario.status_code == 200, propietario.text
+
+
+@pytest.mark.security
+@pytest.mark.integration
+def test_alumnos_de_grupo_ajeno_es_403(
+    client, db, docente_user, docente_headers, otro_docente_headers
+):
+    grupo = Grupo(
+        id=str(uuid.uuid4()),
+        nombre="Grupo de prueba",
+        docente_id=str(docente_user.id),
+        alumnos=[],
+    )
+    db.add(grupo)
+    db.commit()
+
+    ajeno = client.get(
+        f"/api/v1/alumnos/grupo/{grupo.id}", headers=otro_docente_headers
+    )
+    assert ajeno.status_code == 403, ajeno.text
+
+    propietario = client.get(
+        f"/api/v1/alumnos/grupo/{grupo.id}", headers=docente_headers
+    )
+    assert propietario.status_code == 200, propietario.text

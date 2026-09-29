@@ -1505,15 +1505,16 @@ def _estudiante_puede_rendir_examen(db: Session, examen, estudiante_id):
 
     # Acceso real al curso: inscripción normal o acceso directo activo
     for curso in cursos_con_examen:
-        base = cast(Curso.id, String) == str(curso.id)
+        # Se filtra por la FK de la propia tabla: usar `Curso.id` aquí metía
+        # `cursos` en el FROM y generaba un producto cartesiano (SAWarning).
         inscrito = db.query(InscripcionCurso).filter(
-            base,
+            cast(InscripcionCurso.curso_id, String) == str(curso.id),
             cast(InscripcionCurso.estudiante_id, String) == str(estudiante_id),
         ).first()
         if inscrito:
             return True, None
         acceso = db.query(AccesoCurso).filter(
-            base,
+            cast(AccesoCurso.curso_id, String) == str(curso.id),
             cast(AccesoCurso.estudiante_id, String) == str(estudiante_id),
             AccesoCurso.activo == True,  # noqa: E712
         ).first()

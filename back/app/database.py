@@ -1,7 +1,6 @@
 # app/database.py - VERSIÓN CORREGIDA
 from sqlalchemy import create_engine, text
-from sqlalchemy.ext.declarative import declarative_base
-from sqlalchemy.orm import sessionmaker, Session
+from sqlalchemy.orm import declarative_base, sessionmaker, Session
 from sqlalchemy.ext.compiler import compiles
 from sqlalchemy.dialects.postgresql import UUID as _PG_UUID, JSONB as _PG_JSONB
 from typing import Generator, Tuple, Dict, Any

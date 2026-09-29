@@ -1420,6 +1420,13 @@ def _actualizar_progreso_por_examen(db, examen_id, alumno_id, calificacion):
             query = query.filter(cast(Curso.docente_id, String) == str(examen.docente_id))
         cursos = query.all()
 
+        # ✅ FIX: el mismo examen puede estar en varios cursos del mismo
+        # docente y el alumno estar inscrito en solo uno de ellos. Antes, si el
+        # PRIMER curso revisado no lo tenía inscrito se hacía `return` y la
+        # nota no se registraba en NINGÚN curso (y ni siquiera se seguía
+        # mirando el resto). Ahora cada curso se evalúa por separado.
+        inscrito_en_curso: dict = {}
+
         for curso in cursos:
             modulos = curso.modulos or []
             for modulo in modulos:
@@ -1434,12 +1441,15 @@ def _actualizar_progreso_por_examen(db, examen_id, alumno_id, calificacion):
                     if not leccion_id:
                         continue
 
-                    inscripcion = db.query(InscripcionCurso).filter(
-                        cast(InscripcionCurso.curso_id, String) == str(curso.id),
-                        cast(InscripcionCurso.estudiante_id, String) == str(alumno_id)
-                    ).first()
-                    if not inscripcion:
-                        return
+                    inscrito = inscrito_en_curso.get(curso.id)
+                    if inscrito is None:
+                        inscrito = db.query(InscripcionCurso).filter(
+                            cast(InscripcionCurso.curso_id, String) == str(curso.id),
+                            cast(InscripcionCurso.estudiante_id, String) == str(alumno_id)
+                        ).first() is not None
+                        inscrito_en_curso[curso.id] = inscrito
+                    if not inscrito:
+                        continue
 
                     # ✅ SEGURIDAD (MEDIA 7): respetar los gates de bloqueo del
                     # curso. Antes, rendir el examen de una lección bloqueada
@@ -1464,9 +1474,25 @@ def _actualizar_progreso_por_examen(db, examen_id, alumno_id, calificacion):
                             f"No se pudo verificar el bloqueo de la lección {leccion_id}: {e}"
                         )
 
-                    # ✅ FIX: usar el puntaje de aprobación real del examen (no hardcodeado).
+                    # ✅ FIX (armonización): la nota de la lección-examen usa la
+                    # MISMA regla que el resto del sistema (mejor intento
+                    # no-trampa de ESTE examen, ver _nota_confiable_desde_examen
+                    # de cursos.py). Antes se escribía el ÚLTIMO intento, así
+                    # que un reintento peor pisaba la nota y el CSV/planilla
+                    # (que sí calcula la mejor) mostraba otro número distinto.
                     puntaje_aprobacion = examen.puntaje_aprobacion or 60
-                    aprobado = (calificacion or 0) >= puntaje_aprobacion
+                    try:
+                        from app.api.cursos import _nota_confiable_desde_examen
+                        nota_leccion = _nota_confiable_desde_examen(
+                            db, leccion, str(alumno_id), examen_id=str(examen_id)
+                        )
+                    except Exception as e:
+                        logger.warning(f"No se pudo derivar la nota confiable del examen: {e}")
+                        nota_leccion = None
+                    if nota_leccion is None:
+                        nota_leccion = calificacion or 0
+
+                    aprobado = (nota_leccion or 0) >= puntaje_aprobacion
 
                     # ✅ Actualizar ProgresoLeccion (fuente de verdad del progreso)
                     progreso_lec = db.query(ProgresoLeccion).filter(
@@ -1485,7 +1511,7 @@ def _actualizar_progreso_por_examen(db, examen_id, alumno_id, calificacion):
                         )
                         db.add(progreso_lec)
 
-                    progreso_lec.nota = calificacion
+                    progreso_lec.nota = nota_leccion
                     progreso_lec.aprobado = aprobado
                     progreso_lec.intentos = (progreso_lec.intentos or 0) + 1
                     progreso_lec.fecha_ultimo_intento = datetime.now(timezone.utc)
@@ -1503,7 +1529,10 @@ def _actualizar_progreso_por_examen(db, examen_id, alumno_id, calificacion):
                         _actualizar_progreso_curso(db, str(curso.id), str(alumno_id))
                     except Exception as e:
                         logger.warning(f"No se pudo recalcular progreso del curso: {e}")
-                    return
+                    # ✅ FIX: seguimos con el resto de cursos que usen este
+                    # examen (antes un `return` dejaba el segundo curso con el
+                    # progreso desactualizado).
+                    continue
     except Exception as e:
         # No romper el guardado del resultado por un fallo en la sincronización
         logger.warning(f"_actualizar_progreso_por_examen falló: {e}")

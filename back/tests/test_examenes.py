@@ -12,6 +12,7 @@ import uuid
 
 import pytest
 
+from app.models.curso import Curso, InscripcionCurso, ProgresoLeccion
 from app.models.examen import Examen, Pregunta
 from app.models.resultado_examen import ResultadoExamen
 
@@ -95,6 +96,72 @@ def _iniciar_intento(client, examen, headers):
     resp = client.post(f"/api/v1/examenes/{examen.id}/intentos", headers=headers)
     assert resp.status_code == 200, resp.text
     return resp.json()["intento_id"]
+
+
+def _curso_con_examen(db, docente, examen_id, titulo):
+    """Curso con una única lección tipo 'examen' que apunta a examen_id."""
+    curso = Curso(
+        id=str(uuid.uuid4()),
+        titulo=titulo,
+        descripcion="Curso generado en tests",
+        categoria="general",
+        nivel="principiante",
+        docente_id=str(docente.id),
+        docente_nombre="Docente Test",
+        precio_tipo="gratis",
+        moneda="PEN",
+        estado="PUBLICADO",
+        modulos=[
+            {
+                "id": "m1",
+                "titulo": "Módulo 1",
+                "lecciones": [
+                    {
+                        "id": "l1",
+                        "titulo": "Examen",
+                        "tipo": "examen",
+                        "contenido": {"examen_id": str(examen_id)},
+                    }
+                ],
+            }
+        ],
+        tipo_bloqueo="ninguno",
+        bloqueo_config={},
+        estudiantes_count=0,
+        rating=0,
+        rating_count=0,
+        etiquetas=[],
+        requisitos=[],
+        objetivos=[],
+    )
+    db.add(curso)
+    db.commit()
+    db.refresh(curso)
+    return curso
+
+
+def _inscribir_estudiante(db, curso, estudiante, nombre="Alumno Test"):
+    db.add(
+        InscripcionCurso(
+            id=str(uuid.uuid4()),
+            curso_id=str(curso.id),
+            estudiante_id=str(estudiante.id),
+            estudiante_nombre=nombre,
+        )
+    )
+    db.commit()
+
+
+def _progreso_de(db, curso, estudiante, leccion_id="l1"):
+    return (
+        db.query(ProgresoLeccion)
+        .filter(
+            ProgresoLeccion.curso_id == str(curso.id),
+            ProgresoLeccion.estudiante_id == str(estudiante.id),
+            ProgresoLeccion.leccion_id == str(leccion_id),
+        )
+        .first()
+    )
 
 
 # =====================================================
@@ -678,3 +745,95 @@ def test_resultado_sin_alumno_id_usa_al_usuario_autenticado(
     )
     assert fila is not None, "no se guardó el resultado"
     assert fila.alumno_id == str(estudiante_user.id), fila.alumno_id
+
+
+# =============================================
+# 8. SINCRONIZACIÓN CON EL PROGRESO DEL CURSO
+# =============================================
+
+
+@pytest.mark.integration
+def test_nota_se_registra_si_hay_otro_curso_del_docente_sin_inscripcion(
+    client, db, docente_user, estudiante_user, estudiante_headers
+):
+    """Un mismo examen puede estar en varios cursos del docente y el alumno
+    estar inscrito en solo uno de ellos.
+
+    ✅ REGRESIÓN: antes, si el PRIMER curso revisado no tenía al alumno
+    inscrito se abortaba con `return` y la nota no se registraba en NINGUNO
+    (el alumno rendía el examen y su lección quedaba sin nota).
+    """
+    examen = _crear_examen(
+        db, docente_user, estado="PUBLICADO", preguntas=[_opcion_multiple()]
+    )
+    # Creado primero: es el que se evalúa antes en la query sin ORDER BY
+    _curso_con_examen(db, docente_user, examen.id, "Curso A (sin este alumno)")
+    curso_b = _curso_con_examen(db, docente_user, examen.id, "Curso B (sí inscrito)")
+    _inscribir_estudiante(db, curso_b, estudiante_user)
+    db.expire_all()
+
+    intento_id = _iniciar_intento(client, examen, estudiante_headers)
+    resp = client.post(
+        "/api/v1/examenes/resultados",
+        json=_payload_resultado(examen, estudiante_user.id, {"0": 1}, intento_id=intento_id),
+        headers=estudiante_headers,
+    )
+    assert resp.status_code == 201, resp.text
+
+    db.expire_all()
+    progreso = _progreso_de(db, curso_b, estudiante_user)
+    assert progreso is not None, "el examen no volcó la nota en el curso inscrito"
+    assert float(progreso.nota) == pytest.approx(100.0)
+    assert progreso.aprobado is True
+
+
+@pytest.mark.integration
+def test_reintento_peor_no_pisa_la_nota_de_la_leccion(
+    client, db, docente_user, estudiante_user, estudiante_headers
+):
+    """La nota de la lección-examen se guarda con la MISMA regla que la
+    planilla, la ficha y el CSV: mejor intento no-trampa.
+
+    ✅ REGRESIÓN: antes se escribía el ÚLTIMO intento, así que un reintento
+    peor dejaba la lección en 0 y aprobado=False mientras el CSV seguía
+    mostrando la mejor nota.
+    """
+    examen = _crear_examen(
+        db,
+        docente_user,
+        estado="PUBLICADO",
+        intentos_permitidos=5,
+        preguntas=[_opcion_multiple()],
+    )
+    curso = _curso_con_examen(db, docente_user, examen.id, "Curso con reintentos")
+    _inscribir_estudiante(db, curso, estudiante_user)
+    db.expire_all()
+
+    # Intento 1: correcto -> 100
+    intento = _iniciar_intento(client, examen, estudiante_headers)
+    primero = client.post(
+        "/api/v1/examenes/resultados",
+        json=_payload_resultado(examen, estudiante_user.id, {"0": 1}, intento_id=intento),
+        headers=estudiante_headers,
+    )
+    assert primero.status_code == 201, primero.text
+    assert primero.json()["calificacion"] == pytest.approx(100.0)
+
+    # Intento 2: incorrecto -> 0 (no debe pisar la nota de la lección)
+    intento2 = _iniciar_intento(client, examen, estudiante_headers)
+    segundo = client.post(
+        "/api/v1/examenes/resultados",
+        json=_payload_resultado(examen, estudiante_user.id, {"0": 0}, intento_id=intento2),
+        headers=estudiante_headers,
+    )
+    assert segundo.status_code == 201, segundo.text
+    assert segundo.json()["calificacion"] == pytest.approx(0.0)
+
+    db.expire_all()
+    progreso = _progreso_de(db, curso, estudiante_user)
+    assert progreso is not None
+    assert float(progreso.nota) == pytest.approx(100.0), (
+        f"la nota de la lección debe ser la MEJOR (100), no la última: {progreso.nota}"
+    )
+    assert progreso.aprobado is True
+    assert int(progreso.intentos or 0) == 2

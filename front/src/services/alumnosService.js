@@ -17,15 +17,6 @@ const alumnosService = {
     }
   },
 
-  obtener: async (id) => {
-    try {
-      return await api.get(`/alumnos/${id}`);
-    } catch (error) {
-      console.error('Error obteniendo alumno:', error);
-      throw error;
-    }
-  },
-
   // Ficha trazable del alumno: identidad + cursos + exámenes + certificados.
   // Acepta el id del catálogo (Alumno.id) o el de la cuenta (Usuario.id).
   ficha: async (id) => {
@@ -33,24 +24,6 @@ const alumnosService = {
       return await api.get(`/alumnos/${id}/ficha`);
     } catch (error) {
       console.error('Error obteniendo la ficha del alumno:', error);
-      throw error;
-    }
-  },
-
-  crear: async (data) => {
-    try {
-      return await api.post('/alumnos', data);
-    } catch (error) {
-      console.error('Error creando alumno:', error);
-      throw error;
-    }
-  },
-
-  actualizar: async (id, data) => {
-    try {
-      return await api.put(`/alumnos/${id}`, data);
-    } catch (error) {
-      console.error('Error actualizando alumno:', error);
       throw error;
     }
   },
@@ -77,45 +50,6 @@ const alumnosService = {
     }
   },
 
-  eliminarMasivo: async (ids) => {
-    try {
-      return await api.post('/alumnos/eliminar-masivo', { ids });
-    } catch (error) {
-      console.error('Error eliminando alumnos masivo:', error);
-      throw error;
-    }
-  },
-
-  // =============================================
-  // POR CONTEXTO
-  // =============================================
-  
-  obtenerPorGrupo: async (grupoId) => {
-    try {
-      return await api.get(`/alumnos/grupo/${grupoId}`);
-    } catch (error) {
-      console.error('Error obteniendo alumnos por grupo:', error);
-      throw error;
-    }
-  },
-
-  obtenerPorCurso: async (cursoId) => {
-    try {
-      return await api.get(`/alumnos/curso/${cursoId}`);
-    } catch (error) {
-      console.error('Error obteniendo alumnos por curso:', error);
-      throw error;
-    }
-  },
-
-  buscar: async (query) => {
-    try {
-      return await api.get(`/alumnos/buscar?q=${encodeURIComponent(query)}`);
-    } catch (error) {
-      console.error('Error buscando alumnos:', error);
-      throw error;
-    }
-  },
 };
 
 export default alumnosService;

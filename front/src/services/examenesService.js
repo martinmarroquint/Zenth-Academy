@@ -45,27 +45,6 @@ class ExamenesService {
   // 🚀 MÉTODOS OPTIMIZADOS PARA RENDIMIENTO
   // =============================================
 
-  listarExamenesPorGrupos(grupoIds, filtros = {}) {
-    if (!grupoIds || grupoIds.length === 0) {
-      return Promise.resolve({});
-    }
-    const params = new URLSearchParams();
-    grupoIds.forEach(id => params.append('grupo_ids', id));
-    if (filtros.estado) params.append('estado', filtros.estado);
-    if (filtros.busqueda) params.append('busqueda', filtros.busqueda);
-    return this.request(`/examenes/bulk?${params.toString()}`);
-  }
-
-  listarExamenesDelGrupo(grupoId, filtros = {}) {
-    const params = new URLSearchParams();
-    params.append('grupo_id', grupoId);
-    if (filtros.limit) params.append('limit', filtros.limit);
-    if (filtros.offset) params.append('offset', filtros.offset);
-    if (filtros.estado) params.append('estado', filtros.estado);
-    if (filtros.busqueda) params.append('busqueda', filtros.busqueda);
-    return this.request(`/examenes/grupo/${grupoId}?${params.toString()}`);
-  }
-
   obtenerResumen(grupoIds = null) {
     const params = new URLSearchParams();
     if (grupoIds && grupoIds.length > 0) {
@@ -83,94 +62,6 @@ class ExamenesService {
     return this.request(`/examenes/grupos${params}`);
   }
 
-  obtenerGrupo(id) {
-    return this.request(`/examenes/grupos/${id}`);
-  }
-
-  crearGrupo(data) {
-    return this.request('/examenes/grupos', { 
-      method: 'POST', 
-      body: JSON.stringify(data) 
-    });
-  }
-
-  actualizarGrupo(id, data) {
-    return this.request(`/examenes/grupos/${id}`, { 
-      method: 'PUT', 
-      body: JSON.stringify(data) 
-    });
-  }
-
-  eliminarGrupo(id) {
-    return this.request(`/examenes/grupos/${id}`, { 
-      method: 'DELETE' 
-    });
-  }
-
-  guardarAsistencia(grupoId, data) {
-    return this.request(`/examenes/grupos/${grupoId}/asistencia`, { 
-      method: 'POST', 
-      body: JSON.stringify(data) 
-    });
-  }
-
-  // =============================================
-  // RECURSOS DE GRUPO (CARPETA DOCENTE)
-  // =============================================
-  
-  listarRecursosGrupo(grupoId) {
-    return this.request(`/examenes/grupos/${grupoId}/recursos`);
-  }
-
-  agregarRecursoGrupo(grupoId, data) {
-    return this.request(`/examenes/grupos/${grupoId}/recursos`, { 
-      method: 'POST', 
-      body: JSON.stringify(data) 
-    });
-  }
-
-  eliminarRecursoGrupo(grupoId, recursoId) {
-    return this.request(`/examenes/grupos/${grupoId}/recursos/${recursoId}`, { 
-      method: 'DELETE' 
-    });
-  }
-
-  // =============================================
-  // SINCRONIZACIÓN CARPETA DOCENTE (QR)
-  // =============================================
-  
-  iniciarSesionCarpeta(sessionId) {
-    return this.request('/examenes/sincronizar/iniciar', {
-      method: 'POST',
-      body: JSON.stringify({ session_id: sessionId })
-    });
-  }
-
-  consultarEstadoCarpeta(sessionId) {
-    return this.request(`/examenes/sincronizar/estado/${sessionId}`);
-  }
-
-  escanearQRCarpeta(sessionId) {
-    return this.request(`/examenes/sincronizar/escanear/${sessionId}`);
-  }
-
-  vincularGrupoCarpeta(sessionId, grupoId) {
-    return this.request('/examenes/sincronizar/vincular', {
-      method: 'POST',
-      body: JSON.stringify({ session_id: sessionId, grupo_id: grupoId })
-    });
-  }
-
-  cerrarSesionCarpeta(sessionId) {
-    return this.request(`/examenes/sincronizar/cerrar/${sessionId}`, {
-      method: 'DELETE'
-    });
-  }
-
-  obtenerCarpetaSincronizada(sessionId) {
-    return this.consultarEstadoCarpeta(sessionId);
-  }
-
   // =============================================
   // HISTORIAL DE COMPARTICIONES
   // Router canónico: /historial (recursos unificados)
@@ -186,89 +77,6 @@ class ExamenesService {
     return this.request(`/historial/comparticiones${queryString ? '?' + queryString : ''}`);
   }
 
-  obtenerHistorial(comparticionId) {
-    return this.request(`/historial/comparticiones/${comparticionId}`);
-  }
-
-  crearHistorial(data) {
-    return this.request('/historial/comparticiones', {
-      method: 'POST',
-      body: JSON.stringify(data)
-    });
-  }
-
-  cerrarHistorial(comparticionId) {
-    return this.request(`/historial/comparticiones/${comparticionId}/cerrar`, {
-      method: 'PUT'
-    });
-  }
-
-  // =============================================
-  // COMPARTIR CON ALUMNOS ESPECÍFICOS
-  // =============================================
-  
-  compartirConAlumnos(data) {
-    return this.request('/examenes/compartir/alumnos', {
-      method: 'POST',
-      body: JSON.stringify(data)
-    });
-  }
-
-  obtenerAlumnosConectados(sessionId) {
-    return this.request(`/examenes/sincronizar/alumnos/${sessionId}`);
-  }
-
-  // =============================================
-  // ✅ ALUMNOS - CORREGIDO: Usa /alumnos (sin prefijo /examenes)
-  // El catálogo unificado de alumnos está en /alumnos
-  // =============================================
-  
-  listarAlumnos(busqueda = '') {
-    const params = busqueda ? `?busqueda=${encodeURIComponent(busqueda)}` : '';
-    // ✅ Cambiado: /examenes/alumnos -> /alumnos
-    return this.request(`/alumnos${params}`)
-      .catch(error => {
-        console.warn('⚠️ Error al listar alumnos:', error.message);
-        return [];
-      });
-  }
-
-  buscarAlumnos(q) {
-    if (!q || q.length < 2) {
-      return Promise.resolve([]);
-    }
-    // ✅ Cambiado: /examenes/alumnos/buscar -> /alumnos/buscar
-    return this.request(`/alumnos/buscar?q=${encodeURIComponent(q)}`)
-      .catch(error => {
-        console.warn('⚠️ Error al buscar alumnos:', error.message);
-        return [];
-      });
-  }
-
-  guardarAlumnos(data) {
-    // ✅ Cambiado: /examenes/alumnos -> /alumnos
-    return this.request('/alumnos', { 
-      method: 'POST', 
-      body: JSON.stringify(data) 
-    });
-  }
-
-  eliminarTodosAlumnos() {
-    // ✅ Cambiado: /examenes/alumnos -> /alumnos
-    return this.request('/alumnos', { 
-      method: 'DELETE' 
-    });
-  }
-
-  obtenerAlumnosPorGrupo(grupoId) {
-    // ✅ Cambiado: /examenes/alumnos/grupo -> /alumnos/grupo
-    return this.request(`/alumnos/grupo/${grupoId}`)
-      .catch(error => {
-        console.warn('⚠️ Error al obtener alumnos por grupo:', error.message);
-        return [];
-      });
-  }
-
   // =============================================
   // EXAMENES
   // =============================================
@@ -282,10 +90,6 @@ class ExamenesService {
     if (filtros.offset) params.append('offset', filtros.offset);
     const queryString = params.toString();
     return this.request(`/examenes/${queryString ? '?' + queryString : ''}`);
-  }
-
-  listarPublicados() {
-    return this.request('/examenes/publicados');
   }
 
   obtenerExamen(id) {
@@ -388,32 +192,20 @@ class ExamenesService {
     return this.request(`/examenes/resultados/${examenId}`);
   }
 
-  obtenerRevision(examenId, resultadoId) {
-    return this.request(`/examenes/resultados/${examenId}/revision/${resultadoId}`);
-  }
-
   limpiarResultados(examenId) {
     return this.request(`/examenes/resultados/${examenId}`, { 
       method: 'DELETE' 
     });
   }
 
-  reiniciarIntento(examenId, alumnoId) {
+  eliminarResultadoAlumno(examenId, alumnoId) {
     return this.request(`/examenes/resultados/${examenId}/${alumnoId}`, { 
       method: 'DELETE' 
     });
   }
 
-  eliminarResultadoAlumno(examenId, alumnoId) {
-    return this.reiniciarIntento(examenId, alumnoId);
-  }
-
   listarResultadosAlumno(alumnoId) {
     return this.request(`/examenes/resultados/alumno/${alumnoId}`);
-  }
-
-  obtenerMejorResultado(examenId, alumnoId) {
-    return this.request(`/examenes/resultados/${examenId}/mejor/${alumnoId}`);
   }
 
   // =============================================
@@ -520,15 +312,6 @@ class ExamenesService {
     
     // ✅ CORREGIDO: Agregar BOM UTF-8 para que Excel muestre caracteres español correctamente
     return '\uFEFF' + csvContent;
-  }
-
-  generarCodigoExamen() {
-    const ahora = new Date();
-    const anio = ahora.getFullYear();
-    const mes = String(ahora.getMonth() + 1).padStart(2, '0');
-    const dia = String(ahora.getDate()).padStart(2, '0');
-    const random = Math.floor(Math.random() * 9999) + 1;
-    return `EXA-${anio}${mes}${dia}-${String(random).padStart(4, '0')}`;
   }
 
   // =============================================

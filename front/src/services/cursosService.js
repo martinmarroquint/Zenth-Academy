@@ -78,15 +78,6 @@ const cursosService = {
     }
   },
 
-  eliminarImagen: async (cursoId) => {
-    try {
-      return await api.delete(`/cursos/${cursoId}/imagen`);
-    } catch (error) {
-      console.error('Error eliminando imagen:', error);
-      throw error;
-    }
-  },
-
   // =============================================
   // INSCRIPCIÓN Y PROGRESO
   // =============================================
@@ -96,15 +87,6 @@ const cursosService = {
       return await api.post(`/cursos/${cursoId}/inscribirse`);
     } catch (error) {
       console.error('Error inscribiendose al curso:', error);
-      throw error;
-    }
-  },
-
-  desinscribirme: async (cursoId) => {
-    try {
-      return await api.delete(`/cursos/${cursoId}/inscripcion`);
-    } catch (error) {
-      console.error('Error desinscribiendose del curso:', error);
       throw error;
     }
   },
@@ -157,21 +139,6 @@ const cursosService = {
       return await api.post(`/cursos/${cursoId}/lecciones/${leccionId}/completar`, body);
     } catch (error) {
       console.error('Error completando leccion:', error);
-      throw error;
-    }
-  },
-
-  obtenerLeccion: async (cursoId, leccionId) => {
-    try {
-      const curso = await cursosService.obtener(cursoId);
-      if (!curso?.modulos) return null;
-      for (const modulo of curso.modulos) {
-        const leccion = modulo.lecciones?.find(l => l.id === leccionId);
-        if (leccion) return { ...leccion, moduloId: modulo.id };
-      }
-      return null;
-    } catch (error) {
-      console.error('Error obteniendo leccion:', error);
       throw error;
     }
   },
@@ -242,33 +209,12 @@ const cursosService = {
   // ACCESOS (DOCENTE)
   // =============================================
 
-  listarAccesos: async (cursoId) => {
-    try {
-      return await api.get(`/cursos/${cursoId}/accesos`);
-    } catch (error) {
-      console.error('Error listando accesos:', error);
-      throw error;
-    }
-  },
-
   // Docente: lista de estudiantes del curso con progreso (vista unificada)
   listarEstudiantes: async (cursoId) => {
     try {
       return await api.get(`/cursos/${cursoId}/estudiantes`);
     } catch (error) {
       console.error('Error listando estudiantes del curso:', error);
-      throw error;
-    }
-  },
-
-  activarAccesoDirecto: async (cursoId, estudianteId, data = {}) => {
-    try {
-      return await api.post(`/cursos/${cursoId}/acceso`, {
-        estudiante_id: estudianteId,
-        ...data
-      });
-    } catch (error) {
-      console.error('Error activando acceso directo:', error);
       throw error;
     }
   },
@@ -320,15 +266,6 @@ const cursosService = {
     }
   },
 
-  verificarAcceso: async (cursoId, estudianteId) => {
-    try {
-      return await api.get(`/cursos/${cursoId}/tiene-acceso/${estudianteId}`);
-    } catch (error) {
-      console.error('Error verificando acceso:', error);
-      throw error;
-    }
-  },
-
   // =============================================
   // BLOQUEO Y EVALUACIONES
   // =============================================
@@ -347,33 +284,6 @@ const cursosService = {
       return await api.post(`/cursos/${cursoId}/lecciones/${leccionId}/progreso`, data);
     } catch (error) {
       console.error('Error actualizando progreso de leccion:', error);
-      throw error;
-    }
-  },
-
-  configurarEvaluacion: async (cursoId, leccionId, data) => {
-    try {
-      return await api.post(`/cursos/${cursoId}/lecciones/${leccionId}/evaluacion`, data);
-    } catch (error) {
-      console.error('Error configurando evaluacion:', error);
-      throw error;
-    }
-  },
-
-  obtenerEvaluacion: async (cursoId, leccionId) => {
-    try {
-      return await api.get(`/cursos/${cursoId}/lecciones/${leccionId}/evaluacion`);
-    } catch (error) {
-      console.error('Error obteniendo evaluacion:', error);
-      throw error;
-    }
-  },
-
-  eliminarEvaluacion: async (cursoId, leccionId) => {
-    try {
-      return await api.delete(`/cursos/${cursoId}/lecciones/${leccionId}/evaluacion`);
-    } catch (error) {
-      console.error('Error eliminando evaluacion:', error);
       throw error;
     }
   },

@@ -913,3 +913,176 @@ def test_acceso_directo_al_curso_permite_rendir_el_examen(
     )
     assert resp.status_code == 201, resp.text
     assert resp.json()["calificacion"] == pytest.approx(100.0)
+
+
+# =====================================================
+# 11. SEGURIDAD: EXÁMENES LEGACY (SIN DUEÑO)
+# =====================================================
+
+@pytest.mark.security
+@pytest.mark.integration
+def test_docente_ajeno_no_lista_examen_legacy(
+    client, db, otro_docente_headers
+):
+    """Un examen sin `docente_id` y sin relación con el docente no aparece
+    en su listado (antes lo veían todos los docentes)."""
+    examen = _crear_examen(db, None, titulo="Legacy sin dueno")
+
+    resp = client.get("/api/v1/examenes/", headers=otro_docente_headers)
+
+    assert resp.status_code == 200, resp.text
+    assert str(examen.id) not in [str(e["id"]) for e in resp.json()]
+
+
+@pytest.mark.security
+@pytest.mark.integration
+def test_docente_ajeno_no_edita_ni_borra_examen_legacy(
+    client, db, otro_docente_headers
+):
+    """El examen legacy ajeno no se puede editar ni borrar (403) y su dueño
+    sigue siendo NULL: nadie se lo apropia."""
+    examen = _crear_examen(db, None, titulo="Legacy sin dueno")
+
+    put = client.put(
+        f"/api/v1/examenes/{examen.id}",
+        json={"titulo": "Robado", "preguntas": []},
+        headers=otro_docente_headers,
+    )
+    assert put.status_code == 403, put.text
+
+    delete = client.delete(
+        f"/api/v1/examenes/{examen.id}", headers=otro_docente_headers
+    )
+    assert delete.status_code == 403, delete.text
+
+    db.expire_all()
+    examen_db = db.query(Examen).filter(Examen.id == str(examen.id)).first()
+    assert examen_db is not None, "el examen ajeno no debe borrarse"
+    assert examen_db.docente_id is None, "nadie debe apropiarse del legacy ajeno"
+    assert examen_db.titulo == "Legacy sin dueno"
+
+
+@pytest.mark.security
+@pytest.mark.integration
+def test_docente_ajeno_no_recibe_clave_de_examen_legacy_borrador(
+    client, db, otro_docente_headers
+):
+    """El docente ajeno no recibe la versión con respuestas de un examen
+    legacy en BORRADOR (antes `not docente_id` lo trataba como dueño)."""
+    examen = _crear_examen(
+        db, None, titulo="Legacy borrador", preguntas=[_opcion_multiple()]
+    )
+
+    resp = client.get(f"/api/v1/examenes/{examen.id}", headers=otro_docente_headers)
+
+    assert resp.status_code == 403, resp.text
+
+
+@pytest.mark.security
+@pytest.mark.integration
+def test_docente_gestiona_examen_legacy_de_su_curso(
+    client, db, docente_user, docente_headers, otro_docente_headers
+):
+    """Un examen sin dueño embebido en un curso propio SÍ es gestionable:
+    se ve en el listado, se puede editar y al editarlo queda con dueño."""
+    examen = _crear_examen(db, None, titulo="Legacy de mi curso")
+    _curso_con_examen(db, docente_user, examen.id, "Curso del dueno legitimo")
+    db.expire_all()
+
+    listado = client.get("/api/v1/examenes/", headers=docente_headers)
+    assert listado.status_code == 200, listado.text
+    assert str(examen.id) in [str(e["id"]) for e in listado.json()]
+
+    # El docente ajeno sigue sin verlo ni poder editarlo
+    ajeno_listado = client.get("/api/v1/examenes/", headers=otro_docente_headers)
+    assert str(examen.id) not in [str(e["id"]) for e in ajeno_listado.json()]
+    ajeno_put = client.put(
+        f"/api/v1/examenes/{examen.id}",
+        json={"titulo": "Robado", "preguntas": []},
+        headers=otro_docente_headers,
+    )
+    assert ajeno_put.status_code == 403, ajeno_put.text
+
+    propio = client.put(
+        f"/api/v1/examenes/{examen.id}",
+        json={"titulo": "Legacy actualizado", "preguntas": []},
+        headers=docente_headers,
+    )
+    assert propio.status_code == 200, propio.text
+    assert propio.json()["titulo"] == "Legacy actualizado"
+
+    db.expire_all()
+    examen_db = db.query(Examen).filter(Examen.id == str(examen.id)).first()
+    assert str(examen_db.docente_id) == str(docente_user.id)
+
+
+@pytest.mark.security
+@pytest.mark.integration
+def test_examen_legacy_de_mi_grupo_es_gestionable(
+    client, db, docente_user, docente_headers, otro_docente_headers
+):
+    """La pertenencia por grupo también legitima: un examen legacy asignado
+    a un grupo propio lo gestiona su docente."""
+    from app.models.grupo import Grupo
+
+    grupo = Grupo(
+        id=str(uuid.uuid4()),
+        nombre="Grupo del docente",
+        docente_id=str(docente_user.id),
+        alumnos=[],
+    )
+    db.add(grupo)
+    db.commit()
+
+    examen = _crear_examen(db, None, titulo="Legacy de mi grupo", grupo_id=str(grupo.id))
+    db.expire_all()
+
+    # Primero el ajeno (con el código viejo esta edición le robaba el dueño)
+    ajeno = client.put(
+        f"/api/v1/examenes/{examen.id}",
+        json={"titulo": "Robado", "preguntas": []},
+        headers=otro_docente_headers,
+    )
+    assert ajeno.status_code == 403, ajeno.text
+
+    db.expire_all()
+    assert (
+        db.query(Examen).filter(Examen.id == str(examen.id)).first().docente_id is None
+    ), "el legacy de mi grupo no debe quedar con dueño ajeno"
+
+    propio = client.put(
+        f"/api/v1/examenes/{examen.id}",
+        json={"titulo": "Legacy de grupo actualizado", "preguntas": []},
+        headers=docente_headers,
+    )
+    assert propio.status_code == 200, propio.text
+
+
+@pytest.mark.security
+@pytest.mark.integration
+def test_docente_ajeno_no_ve_resultados_de_examen_legacy(
+    client, db, docente_user, docente_headers, otro_docente_headers, estudiante_user
+):
+    """`/resultados/alumno/{id}` no expone resultados de exámenes legacy que
+    no le pertenecen al docente; el dueño legítimo sí los ve."""
+    examen = _crear_examen(db, None, titulo="Legacy con resultados")
+    _crear_resultado(db, examen, estudiante_user.id, 75.0)
+    db.expire_all()
+
+    ajeno = client.get(
+        f"/api/v1/examenes/resultados/alumno/{estudiante_user.id}",
+        headers=otro_docente_headers,
+    )
+    assert ajeno.status_code == 200, ajeno.text
+    assert ajeno.json() == []
+
+    # El docente dueño (examen embebido en su curso) sí lo ve
+    _curso_con_examen(db, docente_user, examen.id, "Curso con el legacy")
+    db.expire_all()
+
+    propio = client.get(
+        f"/api/v1/examenes/resultados/alumno/{estudiante_user.id}",
+        headers=docente_headers,
+    )
+    assert propio.status_code == 200, propio.text
+    assert [str(r["examen_id"]) for r in propio.json()] == [str(examen.id)]

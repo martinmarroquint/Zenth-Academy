@@ -2,7 +2,7 @@
 # VERSION COMPLETA - CON ENDPOINTS PARA EMBED EN CURSOS Y NUEVOS ROLES
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
-from sqlalchemy import or_, func, cast, String, false
+from sqlalchemy import and_, or_, func, cast, String, false
 from sqlalchemy.orm import Session, selectinload
 from typing import List, Optional
 import uuid
@@ -65,18 +65,78 @@ def generar_codigo():
     return f"EXA-{ahora.year}{str(ahora.month).zfill(2)}{str(ahora.day).zfill(2)}-{r.zfill(4)}"
 
 
-def _verificar_ownership_examen(examen: Examen, current_user: Usuario) -> None:
+def _examenes_legacy_legitimos(db: Session, usuario_id) -> set:
+    """Ids de exámenes SIN dueño (`docente_id` NULL) que sí pertenecen a este
+    docente: están embebidos en las lecciones de uno de SUS cursos o asignados
+    a uno de SUS grupos.
+
+    ✅ SEGURIDAD: antes cualquier docente podía ver, editar y borrar todos los
+    exámenes heredados sin dueño (y al editar uno se autoproclamaba dueño).
+    Hoy en BD no queda ninguno sin dueño; esto cierra el hueco de forma
+    permanente para los datos que se creen a futuro.
+    """
+    from app.models.curso import Curso
+
+    candidatos = {
+        str(eid)
+        for (eid,) in db.query(Examen.id).filter(Examen.docente_id.is_(None)).all()
+    }
+    if not candidatos:
+        return set()
+
+    legitimos = set()
+    for curso in db.query(Curso).filter(
+        cast(Curso.docente_id, String) == str(usuario_id)
+    ).all():
+        for modulo in curso.modulos or []:
+            for leccion in modulo.get("lecciones") or []:
+                contenido = leccion.get("contenido") or {}
+                if contenido.get("examen_id"):
+                    eid = str(contenido["examen_id"])
+                    if eid in candidatos:
+                        legitimos.add(eid)
+                for bloque in leccion.get("bloques") or []:
+                    if bloque.get("tipo") == "examen":
+                        eid = str((bloque.get("contenido") or {}).get("examen_id") or "")
+                        if eid in candidatos and eid not in legitimos:
+                            legitimos.add(eid)
+
+    pendientes = candidatos - legitimos
+    if pendientes:
+        mis_grupos = {
+            str(g.id)
+            for g in db.query(Grupo)
+            .filter(cast(Grupo.docente_id, String) == str(usuario_id))
+            .all()
+        }
+        if mis_grupos:
+            for examen in db.query(Examen).filter(Examen.id.in_(pendientes)).all():
+                if examen.grupo_id and str(examen.grupo_id) in mis_grupos:
+                    legitimos.add(str(examen.id))
+    return legitimos
+
+
+def _verificar_ownership_examen(db, examen: Examen, current_user: Usuario) -> None:
     """
     ✅ SEGURIDAD: Verifica que el docente sea dueño del examen.
     - Admin siempre puede.
-    - Si el examen es legacy (docente_id NULL), se permite para no romper datos existentes.
+    - Examen legacy (docente_id NULL): solo si realmente le pertenece (está
+      embebido en uno de sus cursos o asignado a uno de sus grupos).
     - En caso contrario, debe coincidir el docente_id.
     """
     if current_user.rol == 'admin':
         return
     if not examen.docente_id:
-        # Examen legacy sin dueño asignado: permitir (se asignará dueño al editarlo)
-        return
+        if str(examen.id) in _examenes_legacy_legitimos(db, current_user.id):
+            return
+        logger.warning(
+            f"Acceso denegado: docente {current_user.id} intentó gestionar "
+            f"examen legacy {examen.id} sin relación con él"
+        )
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="No tienes permiso para gestionar este examen"
+        )
     if str(examen.docente_id) != str(current_user.id):
         logger.warning(
             f"Acceso denegado: docente {current_user.id} intentó gestionar "
@@ -311,16 +371,24 @@ def _filtrar_examenes_por_rol(query, current_user: Usuario, db=None):
     """Aísla los exámenes según el rol.
 
     - admin: ve todos.
-    - docente: ve los suyos (+ legacy sin dueño).
+    - docente: ve los suyos (+ los legacy que le pertenezcan por curso/grupo).
     - estudiante: solo exámenes PUBLICADO de lecciones de SUS cursos
       (✅ BAJA 14: antes listaba todos los publicados de todos los docentes).
     """
     if current_user.rol == 'admin':
         return query
     if current_user.rol == 'docente':
-        return query.filter(
-            or_(Examen.docente_id == str(current_user.id), Examen.docente_id.is_(None))
-        )
+        condicion = Examen.docente_id == str(current_user.id)
+        if db is None:
+            # Sin sesión no se puede resolver la legitimidad de los legacy:
+            # se aísla estrictamente a los exámenes con dueño propio.
+            return query.filter(condicion)
+        legacy = _examenes_legacy_legitimos(db, current_user.id)
+        if legacy:
+            return query.filter(
+                or_(condicion, and_(Examen.docente_id.is_(None), Examen.id.in_(legacy)))
+            )
+        return query.filter(condicion)
     query = query.filter(Examen.estado == 'PUBLICADO')
     if db is not None:
         accesibles = _examenes_accesibles_estudiante(db, current_user.id)
@@ -1701,7 +1769,7 @@ def guardar_resultado(
     # Rendir con intento propio sigue permitido (rol dual / práctica), porque
     # `_resolver_tiempo_desde_intento` amarra el intento al usuario que lo inició.
     if current_user.rol == 'docente' and not data.intento_id:
-        _verificar_ownership_examen(examen, current_user)
+        _verificar_ownership_examen(db, examen, current_user)
     
     # ✅ SEGURIDAD (CRÍTICO): Un estudiante solo puede enviar resultados como él mismo.
     # Docentes/admins pueden registrar en nombre de un alumno (uso manual/testing).
@@ -1863,7 +1931,7 @@ def listar_resultados(
     # ✅ SEGURIDAD: cada docente solo ve los resultados de sus exámenes.
     examen = db.query(Examen).filter(Examen.id == examen_id).first()
     if examen:
-        _verificar_ownership_examen(examen, current_user)
+        _verificar_ownership_examen(db, examen, current_user)
     resultados = db.query(ResultadoExamen).filter(
         ResultadoExamen.examen_id == examen_id
     ).order_by(ResultadoExamen.entregado_en.desc()).all()
@@ -1894,9 +1962,17 @@ def listar_resultados_alumno(
         ResultadoExamen.alumno_id == alumno_id
     )
     if current_user.rol == 'docente':
-        examenes_propios = db.query(Examen.id).filter(
-            or_(Examen.docente_id == str(current_user.id), Examen.docente_id.is_(None))
-        )
+        condicion = Examen.docente_id == str(current_user.id)
+        legacy = _examenes_legacy_legitimos(db, current_user.id)
+        if legacy:
+            examenes_propios = db.query(Examen.id).filter(
+                or_(
+                    condicion,
+                    and_(Examen.docente_id.is_(None), Examen.id.in_(legacy)),
+                )
+            )
+        else:
+            examenes_propios = db.query(Examen.id).filter(condicion)
         query = query.filter(ResultadoExamen.examen_id.in_(examenes_propios))
     resultados = query.order_by(ResultadoExamen.entregado_en.desc()).all()
     # ✅ Enriquecer con campos calculados (agrupar por examen)
@@ -1925,7 +2001,7 @@ def obtener_mejor_resultado(
     # ✅ SEGURIDAD: los docentes solo consultan resultados de sus exámenes.
     examen = db.query(Examen).filter(Examen.id == examen_id).first()
     if current_user.rol in ('admin', 'docente') and examen:
-        _verificar_ownership_examen(examen, current_user)
+        _verificar_ownership_examen(db, examen, current_user)
     resultados = db.query(ResultadoExamen).filter(
         ResultadoExamen.examen_id == examen_id,
         ResultadoExamen.alumno_id == alumno_id
@@ -1953,7 +2029,7 @@ def limpiar_resultados(
     # ✅ SEGURIDAD: evitar que un docente borre resultados de otro.
     examen = db.query(Examen).filter(Examen.id == examen_id).first()
     if examen:
-        _verificar_ownership_examen(examen, current_user)
+        _verificar_ownership_examen(db, examen, current_user)
     db.query(ResultadoExamen).filter(ResultadoExamen.examen_id == examen_id).delete()
     db.commit()
     return {"mensaje": "Resultados eliminados", "ok": True}
@@ -1969,7 +2045,7 @@ def eliminar_resultado_alumno(
     # ✅ SEGURIDAD: evitar que un docente borre resultados de otro.
     examen = db.query(Examen).filter(Examen.id == examen_id).first()
     if examen:
-        _verificar_ownership_examen(examen, current_user)
+        _verificar_ownership_examen(db, examen, current_user)
     eliminados = db.query(ResultadoExamen).filter(
         ResultadoExamen.examen_id == examen_id,
         ResultadoExamen.alumno_id == alumno_id
@@ -1998,7 +2074,7 @@ def obtener_revision(
     if current_user.rol in ('admin', 'docente'):
         examen_rev = db.query(Examen).filter(Examen.id == examen_id).first()
         if examen_rev:
-            _verificar_ownership_examen(examen_rev, current_user)
+            _verificar_ownership_examen(db, examen_rev, current_user)
 
     # ✅ SEGURIDAD: Un estudiante solo puede revisar su propio resultado.
     # Docentes/admins pueden revisar cualquiera.
@@ -2405,7 +2481,7 @@ def actualizar_examen(
     if not examen:
         raise HTTPException(status_code=404, detail="Examen no encontrado")
     # ✅ SEGURIDAD: verificar ownership
-    _verificar_ownership_examen(examen, current_user)
+    _verificar_ownership_examen(db, examen, current_user)
     # Asignar dueño si es legacy sin dueño
     if not examen.docente_id and current_user.rol != 'admin':
         examen.docente_id = str(current_user.id)
@@ -2462,7 +2538,7 @@ def eliminar_examen(
     if not examen:
         raise HTTPException(status_code=404, detail="Examen no encontrado")
     # ✅ SEGURIDAD: verificar ownership
-    _verificar_ownership_examen(examen, current_user)
+    _verificar_ownership_examen(db, examen, current_user)
     db.delete(examen)
     db.commit()
     return {"mensaje": "Examen eliminado", "ok": True}
@@ -2479,7 +2555,7 @@ def cambiar_estado_examen(
     if not examen:
         raise HTTPException(status_code=404, detail="Examen no encontrado")
     # ✅ SEGURIDAD: verificar ownership
-    _verificar_ownership_examen(examen, current_user)
+    _verificar_ownership_examen(db, examen, current_user)
     examen.estado = estado
     examen.updated_at = datetime.now(timezone.utc)
     db.commit()
@@ -2743,9 +2819,12 @@ def obtener_examen(
     # docente ver el curso como alumno). Sin clave de respuestas en ningún caso.
     es_dueno = (
         current_user.rol == 'admin'
-        or not examen.docente_id
-        or str(examen.docente_id) == str(current_user.id)
+        or str(examen.docente_id or "") == str(current_user.id)
     )
+    if not es_dueno and not examen.docente_id and current_user.rol == 'docente':
+        # ✅ SEGURIDAD: el examen legacy (sin dueño) solo se muestra con
+        # respuestas si realmente le pertenece a este docente.
+        es_dueno = str(examen.id) in _examenes_legacy_legitimos(db, current_user.id)
     if es_dueno:
         return _serializar_examen(examen, incluir_respuestas=True)
     if examen.estado != 'PUBLICADO':
